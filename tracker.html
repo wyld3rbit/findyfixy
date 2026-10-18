@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LLM Production Sprint</title>
+<style>
+:root{--bg:#f7f7f5;--panel:#fff;--fg:#1c1c1c;--muted:#5c5c5c;--line:#e2e2de;--accent:#1F3A5F;--ok:#1e6b3a;--bar:#dfe6ee;--code:#f0f0ec}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141414;--panel:#1d1d1d;--fg:#ececec;--muted:#a8a8a8;--line:#333;--accent:#8fb3e0;--ok:#6fcf8f;--bar:#2a3442;--code:#262626}}
+:root[data-theme="dark"]{--bg:#141414;--panel:#1d1d1d;--fg:#ececec;--muted:#a8a8a8;--line:#333;--accent:#8fb3e0;--ok:#6fcf8f;--bar:#2a3442;--code:#262626}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.65 Verdana,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;letter-spacing:.01em;word-spacing:.08em}
+.wrap{max-width:760px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:15px;margin-bottom:20px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.tile .k{font-size:13px;color:var(--muted)}
+.tile .v{font-size:24px;font-variant-numeric:tabular-nums;margin-top:2px}
+.prog{height:8px;background:var(--bar);border-radius:4px;overflow:hidden;margin:4px 0 24px}
+.prog>div{height:100%;background:var(--accent)}
+h2.wk{font-size:18px;margin:28px 0 10px}
+.day{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:10px}
+.day.done{border-color:var(--ok)}
+.head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline}
+.num{font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
+.title{font-weight:600}
+.date{color:var(--muted);font-size:15px}
+.toggle{margin-left:auto;font:inherit;font-size:15px;color:var(--accent);background:none;border:1px solid var(--line);border-radius:6px;padding:3px 10px;cursor:pointer}
+.out{color:var(--muted);font-size:15px;margin:6px 0 10px}
+.lesson{border-top:1px solid var(--line);margin-top:12px;padding-top:4px}
+.lesson h2{font-size:18px;margin:22px 0 8px}
+.lesson h3{font-size:16px;margin:18px 0 6px}
+.lesson p,.lesson li{font-size:16px}
+.lesson ul,.lesson ol{padding-left:22px;margin:6px 0}
+.lesson li{padding:2px 0}
+.lesson code{font:14px/1.5 Menlo,Consolas,monospace;background:var(--code);padding:1px 5px;border-radius:4px;letter-spacing:0;word-spacing:0}
+.lesson pre{position:relative;background:var(--code);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto;margin:10px 0}
+.lesson pre code{background:none;padding:0}
+.start pre code{white-space:pre-wrap;word-break:break-word}
+.start pre{padding-right:70px}
+.copy{position:absolute;top:6px;right:6px;font:13px Verdana,sans-serif;color:var(--accent);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:2px 8px;cursor:pointer}
+.lesson table{border-collapse:collapse;width:100%;font-size:15px;margin:10px 0}
+.lesson th,.lesson td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+.checks h3{font-size:16px;margin:16px 0 4px}
+ul.ck{list-style:none;margin:0;padding:0}
+ul.ck li{display:flex;gap:10px;align-items:flex-start;padding:5px 0;font-size:16px}
+ul.ck li input{margin-top:6px;width:18px;height:18px}
+.foot{display:flex;gap:10px;align-items:center;margin-top:10px;font-size:15px;color:var(--muted)}
+.foot input{width:64px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.note{font-size:14px;color:var(--muted);margin-top:28px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>LLM Production Sprint</h1>
+<div class="sub" id="sub"></div>
+<div class="tiles" id="tiles"></div>
+<div class="prog"><div id="bar" style="width:0"></div></div>
+<div class="day" id="about"></div>
+<div id="days"></div>
+<div class="note" id="note"></div>
+</div>
+<script src="lessons.js"></script>
+<script>
+var DATA = {
+  updated: "2026-10-17",
+  plannedStart: "2026-10-17",
+  plannedEnd: "2026-10-29",
+  log: [
+    {date: "2026-10-17", entry: "Course and tracker created."},
+    {date: "2026-10-17", entry: "Start moved to tonight. Day 1 at 6:51pm PT. Larger, spaced type."},
+    {date: "2026-10-17", entry: "Lessons now open inside the tracker, with Copy buttons on code."},
+    {date: "2026-10-17", entry: "Stack made fully open source: local Qwen models, Colima, pytest injection suite. Show and tell added to Days 9 and 10."},
+    {date: "2026-10-17", entry: "Sized for a 16 GB Mac: Qwen2.5 1.5B and 7B. Start prompts for Claude Code on every day."},
+    {date: "2026-10-17", entry: "No new installs. Day 1 checks existing tools. All services run from compose files in code/. Product spec and production bars added."},
+    {date: "2026-10-17", entry: "Day 1: router graph built and run. 0 of 5 escalated. Small model wrote confidence on two scales (0 to 1 and 0 to 100). 3 of 4 checks done; drill open."}
+  ],
+  days: [
+    {n:1, week:1, date:"2026-10-17", title:"Setup and first graph", file:"d01.md", outcome:"Small-model-first router escalating to a larger local model", checks:["5 answers tagged with model used","At least 2 of 5 stayed on the small model","Can draw the graph from memory","Drill under 90s"], done:[0,1,2]},
+    {n:2, week:1, date:"2026-10-19", title:"Structured output and tools", file:"d02.md", outcome:"Schema-validated triage; direct API vs MCP cost measured", checks:["10 of 10 outputs parse","Token and latency table: direct vs MCP","Can state MCP overhead per call","Drill under 90s"], done:[]},
+    {n:3, week:1, date:"2026-10-20", title:"Memory I: ingestion", file:"d03.md", outcome:"200 incidents chunked, embedded, in pgvector", checks:["About 800 chunks stored","Second ingestion run writes 0","Top 5 includes a seeded near-duplicate","Drill under 90s"], done:[]},
+    {n:4, week:1, date:"2026-10-21", title:"Memory II: hybrid retrieval", file:"d04.md", outcome:"BM25 plus vector, RRF, rerank; recall@5 measured", checks:["Three-retriever table","Hybrid wins on exact-token queries","Can explain RRF in one minute","Drill under 90s"], done:[]},
+    {n:5, week:1, date:"2026-10-22", title:"Evaluation as a gate", file:"d05.md", outcome:"Golden set, RAGAS scores, CI gate", checks:["Baseline scores saved","pytest passes on main, fails without retrieval","Hand-checked 3 judge scores","Drill under 90s"], done:[]},
+    {n:6, week:2, date:"2026-10-23", title:"Observability", file:"d06.md", outcome:"Langfuse traces with cost, latency, scores", checks:["Full trace tree visible","Scores on traces","Three dashboard questions answered","Drill under 90s"], done:[]},
+    {n:7, week:2, date:"2026-10-26", title:"Security by design", file:"d07.md", outcome:"Action policy, credential broker, injection suite", checks:["0 of 20 attacks succeed","Wrong-audience or expired token refused","Injection suite runs in pytest","Drill under 90s"], done:[]},
+    {n:8, week:2, date:"2026-10-27", title:"Cost and context control", file:"d08.md", outcome:"Gateway budgets; cost per run down with quality held", checks:["Lever table: cost and faithfulness","Cost per run down at least 30%","Budget refusal works","Drill under 90s"], done:[]},
+    {n:9, week:2, date:"2026-10-28", title:"Deploy and operate", file:"d09.md", outcome:"API and demo screen in containers, approval gate, drift eval, shadow mode", checks:["compose up; demo screen returns a triage","Rollback pauses; Approve resumes it","One nightly report exists","Shadow runs tagged in Langfuse"], done:[]},
+    {n:10, week:2, date:"2026-10-29", title:"Capstone and show and tell", file:"d10.md", outcome:"make demo, 3-minute live demo, 6 slides, one-page ADR", checks:["Fresh clone runs with make setup and make demo","3-minute demo rehearsed, backup recorded","ADR on one page, every claim has a number","5 drills under 90s each"], done:[]}
+  ]
+};
+
+var LESSONS = window.LESSONS || {};
+var KEY = "llm-sprint-v1";
+function load(){ try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e){ return {}; } }
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+var state = load();
+if (!state.open) state.open = {};
+
+function isDone(d, i){ return d.done.indexOf(i) > -1 || !!state["c"+d.n+"_"+i]; }
+function dayDone(d){ return d.checks.every(function(_,i){ return isDone(d,i); }); }
+function fmt(iso){ var p = iso.split("-"); return new Date(Date.UTC(+p[0], +p[1]-1, +p[2])).toLocaleDateString("en-US",{timeZone:"UTC",weekday:"short",month:"short",day:"numeric"}); }
+function nextDay(){ for (var i=0;i<DATA.days.length;i++){ if(!dayDone(DATA.days[i])) return DATA.days[i]; } return null; }
+
+function lessonHTML(n, file){
+  return LESSONS[n] ? LESSONS[n] : '<p>Lesson text not loaded. Keep lessons.js next to this file, or open <a href="'+file+'">'+file+'</a>.</p>';
+}
+
+function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function startBlock(n){
+  var f = "d" + (n < 10 ? "0"+n : n) + ".md";
+  var start = "start day "+n+". Read "+f+" and CLAUDE.md. Give me the outcome in one sentence and a plan for the whole day: steps in order, files each step creates, packages with licenses, and how I verify each one. Wait for my approval. Then walk me through one step at a time, showing the plan for any step that writes code, and wait for me to say done. Build everything in code/. At the end, run the self-check with me, save my numbers to code/notes/day"+n+".md, then ask me the drill.";
+  var resume = "resume day "+n+". Check code/notes/ and git log to see where I stopped, tell me in one line, then continue one step at a time.";
+  return '<div class="lesson start"><h3>Start in Claude Code</h3>'
+    + '<p>1. In Terminal, go to this training folder (the one that holds CLAUDE.md). Then run:</p><pre><code>'+esc('claude')+'</code></pre>'
+    + '<p>2. Paste into Claude Code:</p><pre><code>'+esc(start)+'</code></pre>'
+    + '<p>Picking up after a break:</p><pre><code>'+esc(resume)+'</code></pre></div>';
+}
+
+function stats(){
+  var total=0, ticked=0, done=0;
+  DATA.days.forEach(function(d){
+    d.checks.forEach(function(_,i){ total++; if(isDone(d,i)) ticked++; });
+    if(dayDone(d)) done++;
+    var card = document.getElementById("day"+d.n);
+    if(card) card.classList.toggle("done", dayDone(d));
+  });
+  var nx = nextDay();
+  document.getElementById("sub").textContent = "Planned " + fmt(DATA.plannedStart) + " to " + fmt(DATA.plannedEnd) + ". Record updated " + fmt(DATA.updated) + ".";
+  var tiles = [["Days complete", done+" / "+DATA.days.length],["Checks", ticked+" / "+total],["Next", nx ? "Day "+nx.n : "Done"]];
+  document.getElementById("tiles").innerHTML = tiles.map(function(t){ return '<div class="tile"><div class="k">'+t[0]+'</div><div class="v">'+t[1]+'</div></div>'; }).join("");
+  document.getElementById("bar").style.width = (total ? Math.round(100*ticked/total) : 0) + "%";
+}
+
+function addCopyButtons(root){
+  root.querySelectorAll("pre").forEach(function(pre){
+    if(pre.querySelector(".copy")) return;
+    var b = document.createElement("button");
+    b.className = "copy"; b.type = "button"; b.textContent = "Copy";
+    b.addEventListener("click", function(){
+      var text = pre.querySelector("code") ? pre.querySelector("code").innerText : pre.innerText;
+      var ok = function(){ b.textContent = "Copied"; setTimeout(function(){ b.textContent = "Copy"; }, 1500); };
+      var fallback = function(){
+        var ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); ok(); } catch(e){} document.body.removeChild(ta);
+      };
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(ok, fallback); } else { fallback(); }
+    });
+    pre.appendChild(b);
+  });
+}
+
+function setOpen(key, open){
+  state.open[key] = open; save();
+  var body = document.getElementById("body-"+key), btn = document.getElementById("btn-"+key);
+  body.hidden = !open;
+  btn.textContent = open ? "Hide lesson" : "Show lesson";
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function render(){
+  var about = document.getElementById("about");
+  about.innerHTML = '<div class="head"><span class="title">About this course</span><button class="toggle" type="button" id="btn-about" data-t="about"></button></div><div class="lesson" id="body-about">'+lessonHTML(0,"00-plan.md")+'</div>';
+
+  var nx = nextDay();
+  if(nx && state.open["d"+nx.n] === undefined) state.open["d"+nx.n] = true;
+
+  var html = "", wk = 0;
+  DATA.days.forEach(function(d){
+    if(d.week !== wk){ wk = d.week; html += '<h2 class="wk">Week '+wk+(wk===1?": Build":": Ship")+'</h2>'; }
+    var key = "d"+d.n;
+    html += '<div class="day" id="day'+d.n+'"><div class="head"><span class="num">Day '+d.n+'</span><span class="title">'+d.title+'</span><span class="date">'+fmt(d.date)+'</span><button class="toggle" type="button" id="btn-'+key+'" data-t="'+key+'"></button></div>';
+    html += '<div class="out">'+d.outcome+'</div>';
+    html += startBlock(d.n);
+    html += '<div id="body-'+key+'"><div class="lesson">'+lessonHTML(d.n, d.file)+'</div></div>';
+    html += '<div class="checks"><h3>Self-check</h3><ul class="ck">';
+    d.checks.forEach(function(c,i){
+      var id = "c"+d.n+"_"+i;
+      html += '<li><input type="checkbox" id="'+id+'" data-k="'+id+'"'+(isDone(d,i)?' checked':'')+(d.done.indexOf(i)>-1?' disabled':'')+'><label for="'+id+'">'+c+'</label></li>';
+    });
+    html += '</ul></div></div>';
+  });
+  document.getElementById("days").innerHTML = html;
+
+  setOpen("about", !!state.open.about);
+  DATA.days.forEach(function(d){ setOpen("d"+d.n, !!state.open["d"+d.n]); });
+  addCopyButtons(document);
+  var last = DATA.log[DATA.log.length-1];
+  document.getElementById("note").textContent = "Ticks and open lessons save in this browser. Tell Claude what you finished to update the record. Last log: " + fmt(last.date) + ", " + last.entry;
+  stats();
+}
+
+document.addEventListener("click", function(e){
+  var t = e.target.closest("[data-t]");
+  if(t){ var k = t.dataset.t; setOpen(k, !state.open[k]); }
+});
+document.addEventListener("change", function(e){
+  var t = e.target;
+  if(t.dataset.k){ state[t.dataset.k] = t.checked; save(); stats(); }
+});
+render();
+</script>
+</body>
+</html>

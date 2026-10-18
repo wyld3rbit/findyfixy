@@ -1,0 +1,9 @@
+# Root .gitignore for the whole training folder.
+# code/.gitignore handles everything inside code/ (secrets, .venv, caches).
+
+# macOS: Finder metadata and the custom-icon file (its name ends in a carriage return)
+.DS_Store
+Icon?
+
+# Local agent state
+.claude/
