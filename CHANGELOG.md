@@ -9,6 +9,7 @@ Newest entry first. Written so another agent can resume the work.
 - Synthetic data only. Open-source licenses only. Pin versions and image tags.
 - Models: Qwen2.5 1.5B (small) and 7B (large) on Ollama. Names come from `.env`.
 - Plan before code: show the plan for each step and wait for approval.
+- Document all generated code for a learner at staff+ depth: a module docstring (what and why), docstrings on every function and class, and comments that explain trade-offs, failure modes and what changes at scale. Short sentences. No local paths or personal data in docs either.
 
 ## Day 1: setup and first graph (in progress)
 
