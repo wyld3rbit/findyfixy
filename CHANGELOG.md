@@ -25,6 +25,7 @@ Newest entry first. Written so another agent can resume the work.
 - `app/graph.py`: router graph per the lesson spec. Ran on the 5 lesson questions: 5 of 5 stayed on the small model, mean latency 2.9s. The large path is untested.
 - Removed the 0-to-1 range check on `confidence` (small model wrote 75 and crashed the run). The raw number is used as written. `main()` prints it.
 - `notes/day1.md`: results, caveats, self-check.
+- `docs/graph.md`: hand-drawn Mermaid diagram of the router graph. Routing wiring verified with stubbed models (low confidence runs `large`, high confidence stops at `small`).
 
 ### Changed from the lesson
 
