@@ -15,7 +15,8 @@ window.DATA = {
     {"date": "2026-10-17", "entry": "Schedule moved to every day: Day 2 on Sun 18 Oct, finish Mon 26 Oct."},
     {"date": "2026-10-17", "entry": "Day 1: escalation path verified (1.5B then 7B, 9.8s total). Routing tests with a fake model added. Drill and evidence line open."},
     {"date": "2026-10-17", "entry": "Hidden days collapse to one row with a progress count. Concept sections rewritten at staff+ technical depth; Day 10 gains a Concept section."},
-    {"date": "2026-10-17", "entry": "Progress data moved to progress.js. Claude Code now owns the tracker, lessons build and checks."}
+    {"date": "2026-10-17", "entry": "Progress data moved to progress.js. Claude Code now owns the tracker, lessons build and checks."},
+    {"date": "2026-10-17", "entry": "Day 1 code hardened: whole folder is one git repo with the code in code/ and notes in notes/, one root .gitignore, personal data scrubbed. 9 unit tests pass in 0.18s with Ollama off. Integration bank added (4 tests against real models, skipped unless Ollama is up); not yet run live."}
   ],
   "days": [
     {"n": 1, "week": 1, "date": "2026-10-17", "title": "Setup and first graph", "file": "d01.md",
