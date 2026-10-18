@@ -78,6 +78,8 @@ Everything that ships in the repo is open source. Python packages install into t
 | rank-bm25 | Keyword search | Apache-2.0 |
 | RAGAS | Answer-quality evals | Apache-2.0 |
 | pytest | Tests and CI gates, including the injection suite | MIT |
+| pip-audit | Known-vulnerability scan of Python dependencies | Apache-2.0 |
+| Grype | Vulnerability scan of container images | Apache-2.0 |
 | Langfuse | Tracing and dashboards (core; `/ee` features need a key, none used here) | MIT |
 | OpenTelemetry | Trace standard | Apache-2.0 |
 | LiteLLM proxy | Gateway, budgets, routing (open-source tier) | MIT |
@@ -92,8 +94,11 @@ Everything that ships in the repo is open source. Python packages install into t
 ## Install safety
 
 - `uv` writes a lockfile with hashes. Commit `uv.lock`.
+- A 7-day release cooldown (`exclude-newer` in `pyproject.toml`) keeps freshly published, possibly hijacked versions out.
+- `make audit` runs pip-audit against the lockfile and checks the environment for unexpected `.pth` startup hooks. It runs after every dependency change.
 - LiteLLM versions 1.82.7 and 1.82.8 on PyPI were compromised on 24 March 2026. Day 8 excludes them explicitly.
-- Pin container image tags. Do not run `latest` in the demo.
+- Container images are pinned by digest and scanned with Grype before first use. Never `latest`.
+- Model IDs are recorded after each pull.
 
 ## Hardware
 

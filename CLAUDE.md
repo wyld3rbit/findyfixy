@@ -38,6 +38,20 @@ He runs the course with you alone. Keep the record true without being asked.
 - Tell him in one line what you changed in the record.
 - His own browser ticks are a convenience stored in that browser. `progress.js` is the record.
 
+## Supply-chain security (every dependency change)
+
+Fresh releases are where hijacks land. The LiteLLM PyPI compromise in March 2026 was live for hours. Treat every new package and image as untrusted until checked.
+
+- **Release cooldown.** `code/pyproject.toml` carries `[tool.uv] exclude-newer = "<UTC timestamp>"`, about 7 days before today (run `date`). uv ignores anything published after it. Move it forward deliberately, never to today, and tell him in one line when you do. Add it the first time you touch `pyproject.toml` if it is missing.
+- **Before adding a package.** Exact name (no typosquats), OSI license, active maintainers, real download volume. Say all four in the plan.
+- **`make audit` after every change to `uv.lock`, and before every commit that touches dependencies.** Create it on first need. It runs two checks:
+  1. Known vulnerabilities, without installing anything: `uv export --frozen --format requirements-txt --no-emit-project -o .audit-req.txt`, then `uvx pip-audit --disable-pip --require-hashes -r .audit-req.txt`. Git-ignore `.audit-req.txt`. If flags have drifted, fix them and say what changed.
+  2. Startup hooks: list every `.pth` file in `code/.venv`. Allow only the known ones (uv or virtualenv shims, `distutils-precedence.pth`, this project's own editable install). Anything else: stop and show him its contents.
+- **On any finding, stop.** Show package, version, advisory ID and fixed version. Do not upgrade or remove without his approval.
+- **Container images.** Pin by digest: `image:tag@sha256:...`. Before first use, scan with Grype run as a container against the registry, not the Docker socket: `docker run --rm anchore/grype:<pinned tag> registry:<image>@sha256:<digest>`. Report critical and high findings. Do not use Trivy: reports tie the LiteLLM breach to a compromised Trivy in its CI.
+- **Models.** After `ollama pull`, record the model ID from `ollama list` in `notes/models.md`, so a silent swap is visible.
+- Never pipe a remote script into a shell (`curl ... | sh`).
+
 ## Machine
 
 16 GB Mac. Models are Qwen2.5 1.5B (small) and 7B (large). Container runtime at 6 GB, 8 GB on Langfuse days. Do not pull larger models.
