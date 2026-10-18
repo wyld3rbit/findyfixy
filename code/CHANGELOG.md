@@ -34,7 +34,18 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - Root `README.md` tells a new reader how to start. No license file yet: the owner chooses one.
 - Not done: pushing to GitHub, and choosing a license.
 
-## Day 1: setup and first graph (in progress)
+## Where we stopped (read this first when resuming)
+
+- Day 1 is built, tested and committed. Left open on purpose: the Day 1 drill (skipped) and the Day 1 evidence line (the new end-of-day step in `CLAUDE.md`).
+- Next: Day 2, structured output and tools (`d02.md`). From Day 2 on, `CLAUDE.md` says to start with the warm-up: the learner explains Day 1 from memory in 3 to 5 lines before any file is opened. Reply in one line: right, or the one thing missed.
+- Things to watch on Day 2:
+  - Self-reported confidence came back on mixed scales (0.95, 9.0, 100.0 from the 1.5B model; 0.95 from the 7B). Day 2's `Triage` schema and validate-retry should deal with this.
+  - Both models returned only an intro sentence in `answer` for question 1, with no list of checks. Cause not diagnosed. Check whether the `Triage` schema fixes it.
+  - `uv add mcp` and `langchain-mcp-adapters` are not in the bill of materials. Check licenses and tell the learner before adding.
+- Run commands from `code/`. Tests: `uv run pytest` (9 passed). Router: `uv run python -m app.graph`.
+- Preferences saved in Claude's memory and in `CLAUDE.md`: plan before code, short plain sentences, staff+ depth docs, idiomatic code, no personal data or absolute paths, no judging of drills unless asked, never suggest tracker log updates, ask before committing.
+
+## Day 1: setup and first graph (complete except drill and evidence line)
 
 ### Done
 
@@ -42,11 +53,11 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - Pulled `qwen2.5:1.5b` and `qwen2.5:7b`. Small model replies to a test prompt.
 - `git init`, `uv init`, `uv venv`. Project name `triage-copilot`.
 - Added packages: `langgraph` 1.2.16 (MIT), `langchain-ollama` 1.1.0 (MIT), `pydantic` 2.14.1 (MIT), `python-dotenv` 1.2.4 (BSD-3-Clause). Locked in `uv.lock`.
-- `.gitignore` covers `.env`, `.venv/`, `__pycache__/`.
+- `.gitignore`: the lesson's 3 lines at first. Now one root file, see "Git layout".
 
 - `.env` (git-ignored) holds `SMALL_MODEL` and `LARGE_MODEL`. No `.env.example`, per the lesson.
 
-- `app/graph.py`: router graph per the lesson spec. Ran on the 5 lesson questions: 5 of 5 stayed on the small model, mean latency 2.9s. The large path is untested.
+- `app/graph.py`: router graph per the lesson spec. Ran on the 5 lesson questions: 5 of 5 stayed on the small model, mean latency 2.9s. The large path was verified later with a forced escalation (see below).
 - Removed the 0-to-1 range check on `confidence` (small model wrote 75 and crashed the run). The raw number is used as written. `main()` prints it.
 - `notes/day1.md` (in the training folder, outside `code/`): results, caveats, self-check.
 - Large-model path verified with one forced escalation on a real question: small 2.6s, then large 7.2s, total 9.8s, final model `qwen2.5:7b`. Recorded in `notes/day1.md`.
@@ -79,6 +90,5 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 
 ### Next
 
-- First git commit (waiting on the user's choice of author identity).
-- Day 1 drill question.
+- Day 1 drill and evidence line, if wanted.
 - Day 2: structured output (`Triage` schema) and tools.

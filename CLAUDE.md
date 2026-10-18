@@ -40,6 +40,7 @@ Commands that only check or download (version checks, `ollama pull`, `docker com
 
 ## Rules
 
+- Explain theory plainly and technically, at staff+ depth: the mechanism, the trade-off, the failure mode, what changes at scale. No analogies or simplifications in place of the mechanism.
 - Short steps. Short sentences. One fact per line. He may be dyslexic: no walls of text, no dense paragraphs.
 - No em-dashes. Bottom line first. No filler.
 - Library drift is expected. When an import or signature fails, check the installed version, fix it, and tell him in one line what changed.

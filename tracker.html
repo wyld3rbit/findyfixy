@@ -26,6 +26,11 @@ h2.wk{font-size:18px;margin:28px 0 10px}
 .num{font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
 .title{font-weight:600}
 .date{color:var(--muted);font-size:15px}
+.head[data-t]{cursor:pointer}
+.day.collapsed{padding:8px 14px;margin-bottom:6px}
+.chip{margin-left:auto;font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.day.done .chip{color:var(--ok)}
+.chip + .toggle{margin-left:0}
 .toggle{margin-left:auto;font:inherit;font-size:15px;color:var(--accent);background:none;border:1px solid var(--line);border-radius:6px;padding:3px 10px;cursor:pointer}
 .out{color:var(--muted);font-size:15px;margin:6px 0 10px}
 .lesson{border-top:1px solid var(--line);margin-top:12px;padding-top:4px}
@@ -76,7 +81,9 @@ var DATA = {
     {date: "2026-10-17", entry: "Sized for a 16 GB Mac: Qwen2.5 1.5B and 7B. Start prompts for Claude Code on every day."},
     {date: "2026-10-17", entry: "No new installs. Day 1 checks existing tools. All services run from compose files in code/. Product spec and production bars added."},
     {date: "2026-10-17", entry: "Day 1: router graph built and run. 0 of 5 escalated. Small model wrote confidence on two scales (0 to 1 and 0 to 100). 3 of 4 checks done; drill open."},
-    {date: "2026-10-17", entry: "Schedule moved to every day: Day 2 on Sun 18 Oct, finish Mon 26 Oct."}
+    {date: "2026-10-17", entry: "Schedule moved to every day: Day 2 on Sun 18 Oct, finish Mon 26 Oct."},
+    {date: "2026-10-17", entry: "Day 1: escalation path verified (1.5B then 7B, 9.8s total). Routing tests with a fake model added. Drill and evidence line open."},
+    {date: "2026-10-17", entry: "Hidden days collapse to one row with a progress count. Concept sections rewritten at staff+ technical depth; Day 10 gains a Concept section."}
   ],
   days: [
     {n:1, week:1, date:"2026-10-17", title:"Setup and first graph", file:"d01.md", outcome:"Small-model-first router escalating to a larger local model", checks:["5 answers tagged with model used","At least 2 of 5 stayed on the small model","Can draw the graph from memory","Drill under 90s"], done:[0,1,2]},
@@ -126,6 +133,8 @@ function stats(){
     if(dayDone(d)) done++;
     var card = document.getElementById("day"+d.n);
     if(card) card.classList.toggle("done", dayDone(d));
+    var chip = document.getElementById("chip-"+d.n);
+    if(chip){ var c = d.checks.filter(function(_,i){ return isDone(d,i); }).length; chip.textContent = dayDone(d) ? "Done" : c+" / "+d.checks.length; }
   });
   var nx = nextDay();
   document.getElementById("sub").textContent = "Planned " + fmt(DATA.plannedStart) + " to " + fmt(DATA.plannedEnd) + ". Record updated " + fmt(DATA.updated) + ".";
@@ -156,8 +165,10 @@ function setOpen(key, open){
   state.open[key] = open; save();
   var body = document.getElementById("body-"+key), btn = document.getElementById("btn-"+key);
   body.hidden = !open;
-  btn.textContent = open ? "Hide lesson" : "Show lesson";
+  btn.textContent = open ? "Hide" : "Show";
   btn.setAttribute("aria-expanded", open ? "true" : "false");
+  var card = body.closest(".day");
+  if(card) card.classList.toggle("collapsed", !open);
 }
 
 function render(){
@@ -171,16 +182,17 @@ function render(){
   DATA.days.forEach(function(d){
     if(d.week !== wk){ wk = d.week; html += '<h2 class="wk">Week '+wk+(wk===1?": Build":": Ship")+'</h2>'; }
     var key = "d"+d.n;
-    html += '<div class="day" id="day'+d.n+'"><div class="head"><span class="num">Day '+d.n+'</span><span class="title">'+d.title+'</span><span class="date">'+fmt(d.date)+'</span><button class="toggle" type="button" id="btn-'+key+'" data-t="'+key+'"></button></div>';
+    html += '<div class="day" id="day'+d.n+'"><div class="head" data-t="'+key+'"><span class="num">Day '+d.n+'</span><span class="title">'+d.title+'</span><span class="date">'+fmt(d.date)+'</span><span class="chip" id="chip-'+d.n+'"></span><button class="toggle" type="button" id="btn-'+key+'"></button></div>';
+    html += '<div id="body-'+key+'">';
     html += '<div class="out">'+d.outcome+'</div>';
     html += startBlock(d.n);
-    html += '<div id="body-'+key+'"><div class="lesson">'+lessonHTML(d.n, d.file)+'</div></div>';
+    html += '<div class="lesson">'+lessonHTML(d.n, d.file)+'</div>';
     html += '<div class="checks"><h3>Self-check</h3><ul class="ck">';
     d.checks.forEach(function(c,i){
       var id = "c"+d.n+"_"+i;
       html += '<li><input type="checkbox" id="'+id+'" data-k="'+id+'"'+(isDone(d,i)?' checked':'')+(d.done.indexOf(i)>-1?' disabled':'')+'><label for="'+id+'">'+c+'</label></li>';
     });
-    html += '</ul></div></div>';
+    html += '</ul></div></div></div>';
   });
   document.getElementById("days").innerHTML = html;
 
