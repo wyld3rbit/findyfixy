@@ -42,7 +42,7 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
   - Self-reported confidence came back on mixed scales (0.95, 9.0, 100.0 from the 1.5B model; 0.95 from the 7B). Day 2's `Triage` schema and validate-retry should deal with this.
   - Both models returned only an intro sentence in `answer` for question 1, with no list of checks. Cause not diagnosed. Check whether the `Triage` schema fixes it.
   - `uv add mcp` and `langchain-mcp-adapters` are not in the bill of materials. Check licenses and tell the learner before adding.
-- Run commands from `code/`. Tests: `uv run pytest` (9 passed, 4 integration deselected). Integration: `uv run pytest -m integration` (needs Ollama up; never yet run live). Router: `uv run python -m app.graph`.
+- Run commands from `code/`. Tests: `uv run pytest` (9 passed, 4 integration deselected). Integration: `uv run pytest -m integration` (needs Ollama up; passed live once, 4 of 4). Router: `uv run python -m app.graph`.
 - Preferences saved in Claude's memory and in `CLAUDE.md`: plan before code, short plain sentences, staff+ depth docs, idiomatic code, no personal data or absolute paths, no judging of drills unless asked, never suggest tracker log updates, ask before committing.
 
 ## Day 1: setup and first graph (complete except drill and evidence line)
@@ -65,7 +65,10 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 
 - Integration test bank: `code/tests/integration/` (`conftest.py`, `test_ollama.py`), 4 tests that call real Ollama models. Marked `integration` and deselected by default, so `uv run pytest` stays fast and offline (9 passed, 4 deselected). Run with `uv run pytest -m integration`. They skip, with a specific reason, if env names are unset, the server is unreachable, or a model is not pulled. They assert structure only, never answer text or confidence values. A `deadline` fixture (SIGALRM, Unix only) bounds each call.
   - Verified with Ollama OFF: default run, skip on unreachable, skip on unset model names. Verified with a stub server: skip on a missing model, and the fixture lets tests run when both models are listed. Verified the deadline fixture on its own.
-  - NOT yet verified against a live Ollama: the four tests have never passed end to end. Run `uv run pytest -m integration` once Ollama is up and record the result here.
+  - Live run, Ollama 0.40.6 with both models pulled: 4 passed in 33.04s. Per test: small model 1.70s, large model 4.62s, forced escalation 10.83s, full five-question run 15.62s. The server for this run was started by Claude with `ollama serve` as a background task, then stopped so the learner could run their own.
+  - Timings are one run. Load time for the 7B model is included in whichever test called it first, so do not read them as steady-state latency.
+
+- Test output: added `pytest-sugar` 1.1.1 (BSD, OSI-approved) and its dependency `termcolor` 3.3.0 (MIT), dev group only. In a terminal, pytest shows a green check for a pass, a red cross for a failure, `s` for a skip, and a progress bar. In a pipe (CI, captured output) it stays plain. `--force-sugar` shows the icons anyway; `-p no:sugar` turns the plugin off. The suite is unchanged: 9 passed, 4 skipped without Ollama.
 
 ### Changed from the lesson
 
