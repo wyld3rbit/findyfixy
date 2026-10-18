@@ -29,6 +29,7 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 
 - One git repo, rooted at the training folder (the one that holds `CLAUDE.md`). The code is in `code/`. There is no inner repo.
 - The four earlier commits were merged in under `code/`, so `git log` keeps the history.
+- One `.gitignore`, at the training root. Its patterns have no leading slash, so they match at any depth and cover `code/` too. The separate `code/.gitignore` was removed. Keep it to one file.
 - Daily notes live in `notes/` at the training root, not in `code/`. Moved with `git mv`, so history follows.
 - Root `README.md` tells a new reader how to start. No license file yet: the owner chooses one.
 - Not done: pushing to GitHub, and choosing a license.

@@ -1,8 +1,49 @@
-# Root .gitignore for the whole training folder.
-# code/.gitignore handles everything inside code/ (secrets, .venv, caches).
+# The only .gitignore for the whole training repo.
+# Patterns without a leading slash match at any depth, so they cover code/ too.
 
-# macOS: Finder metadata and the custom-icon file (its name ends in a carriage return)
+# Secrets. .env.example (if added) stays visible.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Test and lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Runtime output
+*.log
+logs/
+.cache/
+*.sqlite
+*.db
+
+# Generated reports (eval and drift)
+reports/
+
+# Recordings
+*.mov
+*.mp4
+
+# Editors and OS
 .DS_Store
+.idea/
+.vscode/
+*.swp
+# Finder custom-icon file (its name ends in a carriage return)
 Icon?
 
 # Local agent state
