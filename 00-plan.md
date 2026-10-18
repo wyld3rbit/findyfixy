@@ -42,7 +42,7 @@ Built to production standards, measured on your machine:
 - **Read in the tracker.** Open `tracker.html` in a browser. Each day opens in place: concept, lab, drill, then the self-check you tick.
 - **Build in Claude Code.** In a terminal, `cd` into this folder, run `claude`, and say "start day 1". It follows `CLAUDE.md`: one step at a time, code in `code/`. It runs on your Mac, so it reaches your local Ollama and containers.
 - **Concept, then build, then explain.** You read why a component exists, build it, measure it, then say it aloud as a leader would. The number you measured is what makes the answer credible.
-- **Progress.** Ticks save in that browser. Tell me what you finished and I update the record.
+- **Progress.** Claude Code keeps the record in `progress.js` as you pass each check, and logs every session. Your browser ticks are a convenience on top.
 - **Exit bar for each day:** the self-check passes and you can answer the drill in under 90 seconds without notes.
 
 ## The arc

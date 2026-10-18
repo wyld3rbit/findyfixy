@@ -68,7 +68,7 @@ window.LESSONS[0] = [
   "<li><strong>Read in the tracker.</strong> Open <code>tracker.html</code> in a browser. Each day opens in place: concept, lab, drill, then the self-check you tick.</li>",
   "<li><strong>Build in Claude Code.</strong> In a terminal, <code>cd</code> into this folder, run <code>claude</code>, and say \"start day 1\". It follows <code>CLAUDE.md</code>: one step at a time, code in <code>code/</code>. It runs on your Mac, so it reaches your local Ollama and containers.</li>",
   "<li><strong>Concept, then build, then explain.</strong> You read why a component exists, build it, measure it, then say it aloud as a leader would. The number you measured is what makes the answer credible.</li>",
-  "<li><strong>Progress.</strong> Ticks save in that browser. Tell me what you finished and I update the record.</li>",
+  "<li><strong>Progress.</strong> Claude Code keeps the record in <code>progress.js</code> as you pass each check, and logs every session. Your browser ticks are a convenience on top.</li>",
   "<li><strong>Exit bar for each day:</strong> the self-check passes and you can answer the drill in under 90 seconds without notes.</li>",
   "</ul>",
   "<h2>The arc</h2>",

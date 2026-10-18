@@ -20,3 +20,11 @@ dev = [
 # import path. Without this, `import app` fails inside tests.
 pythonpath = ["."]
 testpaths = ["tests"]
+# Tests that call real models are deselected by default. They need a running
+# Ollama and are slow and non-deterministic. Run them with:
+#   uv run pytest -m integration
+# A -m on the command line overrides this one (the last -m wins).
+addopts = "-m 'not integration'"
+markers = [
+    "integration: calls real Ollama models (run with `pytest -m integration`)",
+]

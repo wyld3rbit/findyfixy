@@ -42,7 +42,7 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
   - Self-reported confidence came back on mixed scales (0.95, 9.0, 100.0 from the 1.5B model; 0.95 from the 7B). Day 2's `Triage` schema and validate-retry should deal with this.
   - Both models returned only an intro sentence in `answer` for question 1, with no list of checks. Cause not diagnosed. Check whether the `Triage` schema fixes it.
   - `uv add mcp` and `langchain-mcp-adapters` are not in the bill of materials. Check licenses and tell the learner before adding.
-- Run commands from `code/`. Tests: `uv run pytest` (9 passed). Router: `uv run python -m app.graph`.
+- Run commands from `code/`. Tests: `uv run pytest` (9 passed, 4 integration deselected). Integration: `uv run pytest -m integration` (needs Ollama up; never yet run live). Router: `uv run python -m app.graph`.
 - Preferences saved in Claude's memory and in `CLAUDE.md`: plan before code, short plain sentences, staff+ depth docs, idiomatic code, no personal data or absolute paths, no judging of drills unless asked, never suggest tracker log updates, ask before committing.
 
 ## Day 1: setup and first graph (complete except drill and evidence line)
@@ -62,6 +62,10 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - `notes/day1.md` (in the training folder, outside `code/`): results, caveats, self-check.
 - Large-model path verified with one forced escalation on a real question: small 2.6s, then large 7.2s, total 9.8s, final model `qwen2.5:7b`. Recorded in `notes/day1.md`.
 - `docs/graph.md`: hand-drawn Mermaid diagram of the router graph. Routing wiring verified with stubbed models (low confidence runs `large`, high confidence stops at `small`).
+
+- Integration test bank: `code/tests/integration/` (`conftest.py`, `test_ollama.py`), 4 tests that call real Ollama models. Marked `integration` and deselected by default, so `uv run pytest` stays fast and offline (9 passed, 4 deselected). Run with `uv run pytest -m integration`. They skip, with a specific reason, if env names are unset, the server is unreachable, or a model is not pulled. They assert structure only, never answer text or confidence values. A `deadline` fixture (SIGALRM, Unix only) bounds each call.
+  - Verified with Ollama OFF: default run, skip on unreachable, skip on unset model names. Verified with a stub server: skip on a missing model, and the fixture lets tests run when both models are listed. Verified the deadline fixture on its own.
+  - NOT yet verified against a live Ollama: the four tests have never passed end to end. Run `uv run pytest -m integration` once Ollama is up and record the result here.
 
 ### Changed from the lesson
 
