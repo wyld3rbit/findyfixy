@@ -9,3 +9,14 @@ dependencies = [
     "pydantic>=2.14.1",
     "python-dotenv>=1.2.4",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+# The project is not an installable package, so put the repo root on the
+# import path. Without this, `import app` fails inside tests.
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -37,6 +37,14 @@ Newest entry first. Written so another agent can resume the work.
 - `uv init` copied a name and email from git config into `pyproject.toml`. Removed.
 - Skipped the lesson's `cd` line, which holds a full local path.
 
+### Refactor: injected model function (staff+ idiom)
+
+- `app/graph.py`: graph is now built by `build_graph(ask, *, small_model, large_model, threshold)`. No work at import time. The real call is `ollama_ask`. `route` returns `Literal["large", "__end__"]`, so LangGraph draws all edges. The module-level `app` variable is gone; `uv run python -m app.graph` still works.
+- Departs from the lesson skeleton (module-level graph, lambda router) on purpose. Behavior is unchanged.
+- Added `pytest` 9.1.1 (MIT), dev group only. `tests/test_routing.py`: 9 cases, no Ollama needed. Mutation-checked: changing `>=` to `>`, or dropping the `Literal` annotation, makes a test fail.
+- `pyproject.toml`: `pythonpath = ["."]` so tests can import `app`.
+- Not done yet (deferred): config object and env-driven threshold (Day 8), timeout and retry (Day 2), lint, format and type-check tooling (needs license check for ruff and pyright).
+
 ### Decisions for later days (from a read of d02 to d10)
 
 - Day 3: pin the exact `pgvector/pgvector` tag (lesson uses floating `pg16`). Bind port 5432 to `127.0.0.1`.
@@ -44,7 +52,6 @@ Newest entry first. Written so another agent can resume the work.
 - Day 9: generate the launchd or cron file at setup time and git-ignore it. Commit a template only. No absolute paths in the repo.
 - Day 10: fresh clone has no `.env`. Add a committed `.env.example` and have `make setup` copy it.
 - Day 6: check licenses of Redis and MinIO in the Langfuse stack before use. Not in the bill of materials.
-- Graph drawing: `route()` has no return type, so `draw_mermaid()` omits the `small -> large` edge. Optional fix: `-> Literal["large", "__end__"]`.
 
 ### Next
 

@@ -33,8 +33,8 @@ Run command: `uv run python -m app.graph`. The first run crashed on question 2 (
 
 ## Not verified
 
-- The large-model path did not run, so escalation is untested end to end.
-- `draw_mermaid()` omits the `small -> large` edge because `route()` has no return type. The real graph has it.
+- The large-model path has not run against a real model, so escalation is untested end to end. Routing is tested with a fake model function (`uv run pytest`).
+- Fixed after the first commit: LangGraph's drawing omitted the `small -> large` edge because `route()` had no `Literal` return type. Now annotated and covered by a test.
 
 ## Self-check
 

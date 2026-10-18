@@ -2,7 +2,7 @@
 
 What it does
     1. The small model (1.5B) answers the question and rates its own confidence.
-    2. If confidence is at or above THRESHOLD, that answer is final.
+    2. If confidence is at or above the threshold, that answer is final.
     3. If not, the large model (7B) answers instead. That answer is final.
 
 Why this shape
@@ -18,6 +18,18 @@ Why a graph, and not an if statement
     Day 4 adds a retrieval node before `small`. Day 7 adds a policy node.
     With a graph, those are new nodes. With an if statement, they are a rewrite.
 
+Why the graph is built by a function that takes `ask`
+    `build_graph` does not know how a model is called. The caller passes in
+    `ask`, a function (model name, question) -> Answer. Production passes
+    `ollama_ask`. Tests pass a fake that returns a chosen confidence.
+    This is dependency injection. It buys three things:
+      - Routing can be tested in milliseconds with no model and no network.
+      - Day 8 can swap in a gateway client without touching the graph.
+      - Importing this module does nothing. No client is built, no graph is
+        compiled, no environment is read until `main()` or a test asks.
+    The alternative, patching a module-level function in tests, couples tests
+    to private names and breaks silently when the code is renamed.
+
 Known weaknesses (read these before trusting the numbers)
     - Confidence is self-reported. The model grades its own work. Small
       models do this badly. In the Day 1 run, all 5 questions stayed on the
@@ -27,22 +39,20 @@ Known weaknesses (read these before trusting the numbers)
     - No retry and no timeout. If Ollama is down or the model returns bad
       JSON, the run raises. Day 2 adds validate-retry-escalate.
 
-Run it:  uv run python -m app.graph
+Run it:   uv run python -m app.graph
+Test it:  uv run pytest
 """
 
 import os
 import time
-from typing import TypedDict
+from collections.abc import Callable
+from typing import Literal, TypedDict
 
 from dotenv import load_dotenv
 from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
-
-# Reads SMALL_MODEL and LARGE_MODEL from .env into the process environment.
-# By default it does not override variables that are already set. That lets
-# CI or a container set them without editing .env.
-load_dotenv()
 
 # The routing policy in one number. Treat it as a product decision, not a
 # constant of nature: it trades cost against quality. Day 8 tunes it
@@ -99,67 +109,85 @@ class Answer(BaseModel):
     )
 
 
-def _ask(model_env: str, question: str) -> tuple[str, Answer]:
-    """Call one model and return (model name, parsed Answer).
+# The one seam between the graph and the outside world: (model name, question)
+# in, a parsed Answer out. Anything with this shape can drive the graph.
+Ask = Callable[[str, str], Answer]
 
-    `model_env` is the NAME of an environment variable, not a model name.
-    Model names live in .env so they can be swapped without a code change
-    (Day 8 points these at a gateway). `os.environ[...]` raises KeyError if
-    the variable is missing. That is on purpose: a missing model name should
-    stop the run loudly, not fall back to a silent default.
+
+def ollama_ask(model: str, question: str) -> Answer:
+    """The real `ask`: call one Ollama model and return a parsed Answer.
 
     We build the client on every call. That is cheap because it is only a
     thin HTTP client. The expensive part is Ollama loading model weights into
     memory. On a 16 GB Mac, switching from the 1.5B to the 7B model can add a
     load delay, so an escalated run pays for a model swap on top of two calls.
+
+    Fails when: Ollama is not running (connection error), the model is not
+    pulled (404), or the reply does not parse into `Answer` (an
+    OutputParserException). Nothing here retries. See the module docstring.
     """
-    name = os.environ[model_env]
-    llm = ChatOllama(model=name).with_structured_output(Answer)
-    return name, llm.invoke(question)
+    llm = ChatOllama(model=model).with_structured_output(Answer)
+    return llm.invoke(question)
 
 
-def small_node(state: S) -> S:
-    """Cheap first pass. Always runs first. Sets the answer and the confidence."""
-    name, out = _ask("SMALL_MODEL", state["question"])
-    return {"answer": out.answer, "confidence": out.confidence, "model_used": name}
+def build_graph(
+    ask: Ask,
+    *,
+    small_model: str,
+    large_model: str,
+    threshold: float = THRESHOLD,
+) -> CompiledStateGraph:
+    """Wire the router and return a compiled graph, ready for `.invoke()`.
 
+    Nothing runs here. Compiling validates the wiring (every edge points at a
+    real node) and returns a runnable. A model is called only on `.invoke()`.
 
-def large_node(state: S) -> S:
-    """Expensive fallback. Runs only when `route` sends the run here.
-
-    It overwrites `answer`, `confidence` and `model_used`. The small answer is
-    discarded, not kept for comparison. If you wanted to audit how often the
-    large model disagrees with the small one, you would keep both. Day 6
-    traces capture the small answer anyway.
+    Model names are plain arguments, not environment lookups. Reading the
+    environment is the caller's job (`main` does it). That keeps this function
+    pure and keeps a missing variable from surfacing deep inside a graph run.
     """
-    name, out = _ask("LARGE_MODEL", state["question"])
-    return {"answer": out.answer, "confidence": out.confidence, "model_used": name}
 
+    def make_node(model: str) -> Callable[[S], S]:
+        """Build a node that asks `model` and writes the result into state.
 
-def route(state: S) -> str:
-    """The routing policy. Returns the name of the next node, or END.
+        `small` and `large` differ only in which model they call. One factory
+        means they cannot drift apart. The node returns a partial state
+        update; LangGraph merges it. See `S` for the merge rule.
+        """
 
-    This is a pure function of the state: no model call, no network, no
-    clock. That makes it deterministic and testable without a model. We
-    tested the wiring by swapping `_ask` for a fake that returns a chosen
-    confidence, then checking which nodes ran.
+        def node(state: S) -> S:
+            out = ask(model, state["question"])
+            return {
+                "answer": out.answer,
+                "confidence": out.confidence,
+                "model_used": model,
+            }
 
-    Drawing caveat: the return type is `str`, so LangGraph cannot tell which
-    nodes this can reach. Its own diagram omits the `small -> large` edge.
-    Runtime routing is unaffected. A `Literal["large", "__end__"]` return
-    type would fix the diagram. See docs/graph.md.
-    """
-    return END if state["confidence"] >= THRESHOLD else "large"
+        return node
 
+    def route(state: S) -> Literal["large", "__end__"]:
+        """The routing policy. Returns the name of the next node, or END.
 
-# Build the graph. Nodes are the steps. Edges decide what runs next.
-g = StateGraph(S)
-g.add_node("small", small_node)
-g.add_node("large", large_node)
-g.set_entry_point("small")  # every run starts at the cheap model
-g.add_conditional_edges("small", route)  # the decision point
-g.add_edge("large", END)  # a plain edge: after `large`, always stop
-app = g.compile()  # validates the wiring and returns a runnable
+        This is a pure function of the state: no model call, no network, no
+        clock. That makes it deterministic and testable on its own.
+
+        The return annotation is load-bearing. LangGraph reads it to learn
+        where this edge can go. With a bare `str` it cannot, and its diagram
+        drops the `small -> large` edge. Runtime routing would still work,
+        because routing uses the returned value. The annotation exists for
+        tooling and for the reader. `tests/test_routing.py` pins it.
+
+        The comparison is `>=`, so exactly 0.7 stays on the small model.
+        """
+        return END if state["confidence"] >= threshold else "large"
+
+    g = StateGraph(S)
+    g.add_node("small", make_node(small_model))
+    g.add_node("large", make_node(large_model))
+    g.set_entry_point("small")  # every run starts at the cheap model
+    g.add_conditional_edges("small", route)  # the decision point
+    g.add_edge("large", END)  # a plain edge: after `large`, always stop
+    return g.compile()
 
 
 def main() -> None:
@@ -171,10 +199,22 @@ def main() -> None:
     Five samples is too few for a p95. It is enough to see the shape.
     Escalation rate (runs that reach `large`, divided by total runs) is the
     number to watch. Count it from the `model:` lines.
+
+    This is the only place that reads `.env` and the environment.
+    `os.environ[...]` raises KeyError if a name is missing. That is on
+    purpose: a missing model name should stop the run loudly, not fall back
+    to a silent default. `load_dotenv()` does not override variables that are
+    already set, so CI or a container can set them without editing `.env`.
     """
+    load_dotenv()
+    graph = build_graph(
+        ollama_ask,
+        small_model=os.environ["SMALL_MODEL"],
+        large_model=os.environ["LARGE_MODEL"],
+    )
     for q in QUESTIONS:
         start = time.perf_counter()
-        result = app.invoke({"question": q})
+        result = graph.invoke({"question": q})
         latency = time.perf_counter() - start
         print(f"Q: {q}")
         print(f"A: {result['answer']}")
