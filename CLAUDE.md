@@ -10,12 +10,14 @@ This folder is a 10-day course. The learner is an engineering leader learning th
 
 ## When he says "start day N"
 
+0. From Day 2 on: warm-up first. Ask him to explain the previous day's lesson from memory in 3 to 5 lines, before any file is opened. Reply in one line: right, or the one thing he missed. Then continue.
 1. Read `dNN.md`.
 2. Give the day's outcome in one sentence.
 3. Walk the lab one step at a time. Show one step, then wait for him to say done.
 4. Explain each command in one line before he runs it.
 5. At the end, run the self-check with him and record the numbers in `notes/dayN.md`.
-6. Ask him the drill question. Give feedback on his answer: did it lead with the position, cite his number, stay under 90 seconds.
+6. Ask him the drill question. Before he answers, remind him in one line to say "I'm excited" out loud. Give feedback on his answer: did it lead with the position, cite his number, stay under 90 seconds.
+7. Evidence line. Ask him to write one true, specific sentence about what he built or found today. He writes it, not you. Check it against `notes/dayN.md`: it must name a concrete thing and, where one exists, a number. If it is vague, ask one question to sharpen it. Append it to `notes/evidence.md` as `- Day N: <his sentence>`.
 
 ## When he says "resume day N"
 

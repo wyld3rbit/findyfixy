@@ -1,10 +1,10 @@
 # LLM Production Sprint
 
-Two weeks. 20 hours. 10 sessions of about 2 hours. Sat 17 Oct to Thu 29 Oct 2026.
+10 days in a row. 10 sessions of about 2 hours. Sat 17 Oct to Mon 26 Oct 2026.
 
 ## What you get out of it
 
-1. **Every tool on your resume, defended hands-on.** LangGraph, Ollama, hybrid-search memory, RAGAS, Langfuse, direct APIs over MCP, a token-exchange credential broker. You will have built each one and measured it.
+1. **Every tool in the stack, built hands-on.** LangGraph, Ollama, hybrid-search memory, RAGAS, Langfuse, direct APIs over MCP, a token-exchange credential broker. You will have built each one and measured it.
 2. **A working repo.** A small autonomous incident-triage agent, end to end: design, memory, evals, guardrails, tracing, cost control, deploy. Portfolio-ready.
 3. **A show and tell.** One command starts the whole stack. A demo screen, a 3-minute script and 6 slides, built on Day 10.
 4. **VP-level talking points.** Each day ends with one interview drill. You answer as "what I hold a team to", backed by a number you produced.
@@ -102,15 +102,3 @@ Built for your 16 GB Mac. The 7B model takes about 5 GB, the container runtime 6
 ## Library drift
 
 These libraries ship fast. If an import or signature in a lab fails, tell Claude Code to fix it against the installed version. That is part of the job you are training for.
-
-## Map to your resume
-
-| Resume claim | Day |
-|---|---|
-| LangGraph orchestrated small-model-first inference across Ollama and Claude | 1, 8 (Claude as the optional large model) |
-| Hybrid-search memory recalled prior incidents | 3, 4 |
-| RAGAS gated answer quality | 5, 9 |
-| Langfuse traced every run | 6 |
-| Direct APIs over MCP and a token-exchange credential broker held cost and access in check | 2, 7, 8 |
-| Automated evaluation, drift detection, regression monitoring, human-on-the-loop promotion | 5, 9 |
-| AI-era SDLC maturity framework, harness guardrails | 10 |

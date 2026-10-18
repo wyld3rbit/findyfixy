@@ -49,6 +49,7 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - `app/graph.py`: router graph per the lesson spec. Ran on the 5 lesson questions: 5 of 5 stayed on the small model, mean latency 2.9s. The large path is untested.
 - Removed the 0-to-1 range check on `confidence` (small model wrote 75 and crashed the run). The raw number is used as written. `main()` prints it.
 - `notes/day1.md` (in the training folder, outside `code/`): results, caveats, self-check.
+- Large-model path verified with one forced escalation on a real question: small 2.6s, then large 7.2s, total 9.8s, final model `qwen2.5:7b`. Recorded in `notes/day1.md`.
 - `docs/graph.md`: hand-drawn Mermaid diagram of the router graph. Routing wiring verified with stubbed models (low confidence runs `large`, high confidence stops at `small`).
 
 ### Changed from the lesson

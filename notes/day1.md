@@ -33,8 +33,22 @@ Run command: `uv run python -m app.graph`. The first run crashed on question 2 (
 
 ## Not verified
 
-- The large-model path has not run against a real model, so escalation is untested end to end. Routing is tested with a fake model function (`uv run pytest`).
+- Routing is tested with a fake model function (`uv run pytest`). The large-model path was then checked against real models; see "Escalation check" below.
 - Fixed after the first commit: LangGraph's drawing omitted the `small -> large` edge because `route()` had no `Literal` return type. Now annotated and covered by a test.
+
+## Escalation check
+
+All 5 normal runs stayed on the small model, so the large path had not run. To test it, I forced escalation on question 1 by setting the threshold impossibly high. No files changed.
+
+| Step | Model | Time | Confidence written |
+|---|---|---|---|
+| 1 | qwen2.5:1.5b | 2.6s | 95.0 |
+| 2 | qwen2.5:7b | 7.2s | 0.95 |
+
+- Total 9.8s. Final `model_used` was `qwen2.5:7b`. The graph passed the question from `small` to `large` and returned the large answer.
+- The escalated run took about 3.8 times as long as the small model alone. The 7.2s includes loading the 7B model. How much of it is load time was not measured.
+- The 1.5B model wrote 95.0 and the 7B wrote 0.95 for the same question. Only the larger model followed "0 to 1".
+- Both models returned only an intro sentence in `answer` for this question, with no list of checks. Cause not diagnosed. Check again on Day 2 with the `Triage` schema.
 
 ## Self-check
 
