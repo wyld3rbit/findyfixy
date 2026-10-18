@@ -41,9 +41,9 @@ CLAUDE.md          how Claude Code works with you on this course
 00-plan.md         the plan, the arc, the bill of materials
 d01.md ... d10.md  one lesson per day
 tracker.html       reading and progress page (uses lessons.js)
+notes/             your numbers for each day (notes/day1.md, ...)
 code/              the product you build. Run its commands from here.
   CHANGELOG.md     what is done, what differs from the lessons, what is open
-  notes/           your numbers for each day
 ```
 
 ## Notes

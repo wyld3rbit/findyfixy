@@ -109,8 +109,8 @@ function lessonHTML(n, file){
 function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 function startBlock(n){
   var f = "d" + (n < 10 ? "0"+n : n) + ".md";
-  var start = "start day "+n+". Read "+f+" and CLAUDE.md. Give me the outcome in one sentence and a plan for the whole day: steps in order, files each step creates, packages with licenses, and how I verify each one. Wait for my approval. Then walk me through one step at a time, showing the plan for any step that writes code, and wait for me to say done. Build everything in code/. At the end, run the self-check with me, save my numbers to code/notes/day"+n+".md, then ask me the drill.";
-  var resume = "resume day "+n+". Check code/notes/ and git log to see where I stopped, tell me in one line, then continue one step at a time.";
+  var start = "start day "+n+". Read "+f+" and CLAUDE.md. Give me the outcome in one sentence and a plan for the whole day: steps in order, files each step creates, packages with licenses, and how I verify each one. Wait for my approval. Then walk me through one step at a time, showing the plan for any step that writes code, and wait for me to say done. Build everything in code/. At the end, run the self-check with me, save my numbers to notes/day"+n+".md, then ask me the drill.";
+  var resume = "resume day "+n+". Check notes/ and git log to see where I stopped, tell me in one line, then continue one step at a time.";
   return '<div class="lesson start"><h3>Start in Claude Code</h3>'
     + '<p>1. In Terminal, go to this training folder (the one that holds CLAUDE.md). Then run:</p><pre><code>'+esc('claude')+'</code></pre>'
     + '<p>2. Paste into Claude Code:</p><pre><code>'+esc(start)+'</code></pre>'

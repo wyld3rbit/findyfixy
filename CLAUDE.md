@@ -14,12 +14,12 @@ This folder is a 10-day course. The learner is an engineering leader learning th
 2. Give the day's outcome in one sentence.
 3. Walk the lab one step at a time. Show one step, then wait for him to say done.
 4. Explain each command in one line before he runs it.
-5. At the end, run the self-check with him and record the numbers in `code/notes/dayN.md`.
+5. At the end, run the self-check with him and record the numbers in `notes/dayN.md`.
 6. Ask him the drill question. Give feedback on his answer: did it lead with the position, cite his number, stay under 90 seconds.
 
 ## When he says "resume day N"
 
-Check `code/notes/` and `git log`, tell him in one line where he stopped, then continue one step at a time.
+Check `notes/` and `git log`, tell him in one line where he stopped, then continue one step at a time.
 
 ## Machine
 

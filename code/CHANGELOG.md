@@ -29,6 +29,7 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 
 - One git repo, rooted at the training folder (the one that holds `CLAUDE.md`). The code is in `code/`. There is no inner repo.
 - The four earlier commits were merged in under `code/`, so `git log` keeps the history.
+- Daily notes live in `notes/` at the training root, not in `code/`. Moved with `git mv`, so history follows.
 - Root `README.md` tells a new reader how to start. No license file yet: the owner chooses one.
 - Not done: pushing to GitHub, and choosing a license.
 
@@ -46,7 +47,7 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 
 - `app/graph.py`: router graph per the lesson spec. Ran on the 5 lesson questions: 5 of 5 stayed on the small model, mean latency 2.9s. The large path is untested.
 - Removed the 0-to-1 range check on `confidence` (small model wrote 75 and crashed the run). The raw number is used as written. `main()` prints it.
-- `notes/day1.md`: results, caveats, self-check.
+- `notes/day1.md` (in the training folder, outside `code/`): results, caveats, self-check.
 - `docs/graph.md`: hand-drawn Mermaid diagram of the router graph. Routing wiring verified with stubbed models (low confidence runs `large`, high confidence stops at `small`).
 
 ### Changed from the lesson
