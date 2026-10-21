@@ -26,6 +26,9 @@ exclude-newer-package = { certifi = "2026-10-21T00:00:00Z" }
 # needed. A never-true marker removes them from the install (about 4.4 MB, most
 # of it `cryptography`) while the lock still records them. If an MCP feature
 # ever raises ImportError for one of these, delete its line here.
+# An override also cancels a package you add yourself: `uv add pyjwt` succeeds,
+# then `import jwt` fails. Day 7 needs pyjwt and Day 9 needs a server such as
+# uvicorn, so delete those lines FIRST. tests/test_dependencies.py fails if not.
 override-dependencies = [
   "uvicorn ; sys_platform == 'never'",
   "python-multipart ; sys_platform == 'never'",

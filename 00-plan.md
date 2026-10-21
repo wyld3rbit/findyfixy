@@ -84,6 +84,7 @@ Everything that ships in the repo is open source. Python packages install into t
 | OpenTelemetry | Trace standard | Apache-2.0 |
 | LiteLLM proxy | Gateway, budgets, routing (open-source tier) | MIT |
 | MCP Python SDK | Tool protocol | MIT |
+| langchain-mcp-adapters | Connects MCP tools to LangChain and LangGraph | MIT |
 | FastAPI, PyJWT | API, credential broker | MIT |
 | Streamlit | Demo screen | Apache-2.0 |
 
@@ -94,7 +95,7 @@ Everything that ships in the repo is open source. Python packages install into t
 ## Install safety
 
 - `uv` writes a lockfile with hashes. Commit `uv.lock`.
-- A 7-day release cooldown (`exclude-newer` in `pyproject.toml`) keeps freshly published, possibly hijacked versions out.
+- A release cooldown (`exclude-newer` in `pyproject.toml`) keeps freshly published, possibly hijacked versions out. It is a fixed date that moves forward deliberately, never to today, and it cannot be older than the packages already locked. A security fix newer than the date gets a documented per-package exception.
 - `make audit` runs pip-audit against the lockfile and checks the environment for unexpected `.pth` startup hooks. It runs after every dependency change.
 - LiteLLM versions 1.82.7 and 1.82.8 on PyPI were compromised on 24 March 2026. Day 8 excludes them explicitly.
 - Container images are pinned by digest and scanned with Grype before first use. Never `latest`.

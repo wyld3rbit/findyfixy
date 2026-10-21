@@ -94,6 +94,7 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - Day 9: generate the launchd or cron file at setup time and git-ignore it. Commit a template only. No absolute paths in the repo.
 - Day 10: fresh clone has no `.env`. Add a committed `.env.example` and have `make setup` copy it.
 - Day 6: check licenses of Redis and MinIO in the Langfuse stack before use. Not in the bill of materials.
+- Day 7 and Day 9: delete the matching lines from `override-dependencies` in `pyproject.toml` before adding `pyjwt` (Day 7, credential broker) or a server such as `uvicorn` (Day 9, API). The overrides, added on Day 2 to skip `mcp`'s unused HTTP and OAuth extras, also cancel a package added directly: tested in a scratch project, `uv add pyjwt` and `uv add uvicorn` both succeeded and the import then failed. `tests/test_dependencies.py` fails if a direct dependency is also overridden. Deleting the `pyjwt` line brings `cryptography`, `cffi` and `pycparser` back (about 4.2 MB).
 
 ### Day 2, step 1: Triage schema and validate-retry
 
@@ -247,6 +248,16 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - Check run on the real 1.5B model, 3 runs each (mine, not for notes/day2.md; very small, and per-call timing varied from 1.57s to 3.54s): input tokens 499 in both modes, the same as the direct path. Median time: persistent session 0.67s, per call 1.76s, so about 1.1s per call for starting the server again each time.
 - Both mode runs, like the direct run, show the model sending `hours=1` for a 24 hour question and answering wrongly.
 - Open for the lesson: the learner's 10-run tables for direct, session and per-call; the self-check; the drill; the evidence line.
+
+### Lesson review: do the finished lessons match what we did? (by request)
+
+- Reviewed `d01.md`, `d02.md` and `00-plan.md` against the code, `notes/` and this changelog. Edited only where a statement was false or incomplete for what was built. No teaching content, concepts, drills, self-checks or schedule were changed. `lessons.js` rebuilt, `tools/check.py` OK. Originals are in git history.
+- `d01.md` step 3: the setup commands now match what was done. `git init` once at the training folder root (one repo) and not inside `code/`. `uv init --python 3.13`, with the reason (`sentence-transformers` and `ragas` do not resolve on the newer default). The `src/`, build backend, script entry and author block that `uv init` 0.13 creates are to be deleted (the author block copied a name and email from git config). One root `.gitignore` that grows, replacing the 3-line `printf`; `data/` is not ignored.
+- `d01.md` step 4: do not clamp `confidence` (the model wrote 0.95, 9, 75 and 100), and the router is built by `build_graph(ask, ...)` with `route` annotated `-> Literal["large", "__end__"]`, because LangGraph reads the annotation to draw the edge.
+- `d02.md` lab 1: Pydantic validates the raw text in our code with Ollama's `format=`, so the retry carries Pydantic's own error text; worst case 2 calls per model. Lab 2: `uv add mcp langchain-mcp-adapters`; tools run as their own step before Triage because `format=` returns no tool calls (tested); the MCP schema is built from the direct tool's fields; adapter tools are async-only so `ainvoke`; the adapter's default is a new session per call, and both that and a persistent session are measured. Lab 3: three paths, a warm-up excluded, a fixed question, and the three commands.
+- `00-plan.md`: `langchain-mcp-adapters` (MIT) added to the bill of materials, and the "7-day release cooldown" line now says what is true: a fixed date that moves forward deliberately, never to today, and cannot be older than the packages already locked, with a documented per-package exception for a security fix.
+- Found while checking: the dependency overrides cancel a package added directly (see Decisions for later days, Day 7 and Day 9). New `tests/test_dependencies.py` (2 tests) guards it; adding `pyjwt` directly with the override still present fails it. Comment added in `pyproject.toml`. Default run: 240 passed.
+- Not edited, and why: results (the 0 of 5 escalation, the measured times) belong in `notes/`, not in the lessons. The lessons for Days 3 to 10 were not reviewed; they have not been done yet.
 
 ### Next
 
