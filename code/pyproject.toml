@@ -4,10 +4,33 @@ version = "0.1.0"
 description = "Incident triage agent: small-model-first routing with LangGraph and Ollama"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "langchain-mcp-adapters>=0.3.2",
     "langchain-ollama>=1.1.0",
     "langgraph>=1.2.16",
+    "mcp>=1.30.0,<2",
     "pydantic>=2.14.1",
     "python-dotenv>=1.2.4",
+]
+
+[tool.uv]
+# Release cooldown: ignore anything published after this date, because fresh
+# releases are where hijacks land. The Day 1 lock already holds packages first
+# uploaded on 2026-10-15 and 16, so a strict 7-day window (2026-10-13) cannot be
+# applied retroactively. Move this date forward deliberately, never to today.
+exclude-newer = "2026-10-17T00:00:00Z"
+# Documented exception: certifi 2026.10.19 fixes PYSEC-2026-4320. Without this
+# line the cutoff above would downgrade it to the vulnerable 2026.7.22.
+exclude-newer-package = { certifi = "2026-10-21T00:00:00Z" }
+# `mcp` lists these as hard requirements, but only its HTTP serving and OAuth
+# features import them. This project talks to MCP over stdio, so they are not
+# needed. A never-true marker removes them from the install (about 4.4 MB, most
+# of it `cryptography`) while the lock still records them. If an MCP feature
+# ever raises ImportError for one of these, delete its line here.
+override-dependencies = [
+  "uvicorn ; sys_platform == 'never'",
+  "python-multipart ; sys_platform == 'never'",
+  "pyjwt ; sys_platform == 'never'",
+  "click ; sys_platform == 'never'",
 ]
 
 [dependency-groups]

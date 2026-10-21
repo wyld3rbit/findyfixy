@@ -48,3 +48,6 @@ Icon?
 
 # Local agent state
 .claude/
+
+# Scratch file written by `make audit`.
+.audit-req.txt
