@@ -194,3 +194,65 @@ def test_the_server_stops_even_when_the_caller_raises():
     with pytest.raises(BaseException):
         run(go())
     assert server_count() == before
+
+
+# ---- per-call mode: the adapter's default -----------------------------------
+
+
+def test_per_call_tools_work_and_give_the_same_answer_as_a_persistent_session():
+    from app.mcp_client import per_call_tools
+
+    async def persistent():
+        async with persistent_tools() as tools:
+            return content_text(await tools[0].ainvoke({"service": "auth", "hours": 24}))
+
+    async def per_call():
+        async with per_call_tools() as tools:
+            return content_text(await tools[0].ainvoke({"service": "auth", "hours": 24}))
+
+    assert run(per_call()) == run(persistent()) == get_recent_deploys(
+        "auth", 24, path=DEFAULT_DEPLOYS_PATH
+    )
+
+
+def test_per_call_tools_leave_no_server_process_behind():
+    from app.mcp_client import per_call_tools
+
+    before = server_count()
+
+    async def go():
+        async with per_call_tools() as tools:
+            for hours in (1, 24, 48):                       # three calls, three sessions
+                await tools[0].ainvoke({"service": "auth", "hours": hours})
+            assert server_count() == before                  # nothing is held between calls
+
+    run(go())
+    assert server_count() == before
+
+
+def test_per_call_errors_still_come_back_as_a_message(tmp_path):
+    from app.mcp_client import per_call_tools
+
+    async def go():
+        async with per_call_tools() as tools:
+            model = ScriptedModel(
+                AIMessage(content="", tool_calls=[call({"service": "auth", "hours": 0})]),
+                AIMessage(content="could not look it up"),
+            )
+            final = await build_investigator(model, tools).ainvoke(
+                {"messages": [HumanMessage("q")]}
+            )
+            return final["messages"]
+
+    inv = analyse(run(go()))
+    assert inv.calls[0].error and inv.calls[0].result.startswith("Error")
+
+
+def test_the_benchmark_knows_both_modes_and_rejects_others():
+    from app.mcp_run import LABELS, MODES, OPENERS, main
+
+    assert MODES == ("session", "per-call") and set(OPENERS) == set(LABELS) == set(MODES)
+    with pytest.raises(SystemExit):
+        main(["nonsense"])
+    with pytest.raises(SystemExit):
+        main([])

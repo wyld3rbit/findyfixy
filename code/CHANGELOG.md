@@ -240,6 +240,14 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - Tests: `tests/test_stress.py` (14), 8 console tests (stress wiring, 422s, config, Live default, icon, favicon). Mutations: vague prompt removes nothing (2 failed), small context forgets the window (1), a typo runs unstressed (4), the console ignores the stress (2), no favicon route (1). Default run: 234 passed.
 - Not committed yet: the live-pacing fix, `served_by` tool-step events, and this. Not yet run in a browser: a live run with a stress selected.
 
+### Day 2, step 5b finished: per-call MCP mode (the adapter's default)
+
+- `app/mcp_client.py`: `per_call_tools()` holds no session, so every tool call opens a new one (over stdio, a new server process each time). `app/mcp_run.py`: `uv run python -m app.mcp_run {session|per-call} [runs]`; the header says which transport ran, and in per-call mode the spawn is inside every run's time.
+- Tests: 4 more in `tests/test_mcp.py` (same answer as a persistent session, no server process left behind and none held between calls, errors still come back as a message, the benchmark knows both modes and rejects others). Mutation: per-call quietly holding a persistent session (1 failed). Default run: 238 passed.
+- Check run on the real 1.5B model, 3 runs each (mine, not for notes/day2.md; very small, and per-call timing varied from 1.57s to 3.54s): input tokens 499 in both modes, the same as the direct path. Median time: persistent session 0.67s, per call 1.76s, so about 1.1s per call for starting the server again each time.
+- Both mode runs, like the direct run, show the model sending `hours=1` for a 24 hour question and answering wrongly.
+- Open for the lesson: the learner's 10-run tables for direct, session and per-call; the self-check; the drill; the evidence line.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

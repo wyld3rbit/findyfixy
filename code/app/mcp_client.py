@@ -6,12 +6,14 @@ What it does
     stays open for the whole `async with` block, so every tool call reuses it.
     The process is stopped when the block ends, even on an error.
 
-Why a persistent session
-    The adapter's default is a new session per tool call. Over stdio that
-    starts the server process again on every call, which is a large, constant
-    cost that most real clients avoid. This module measures the realistic
-    best case first. A per-call mode can be added next to it to show the cost
-    of the default.
+Two ways to hold the connection
+    `persistent_tools()` opens ONE session and keeps it for the whole block:
+    the realistic best case, a client that connects once.
+    `per_call_tools()` is the adapter's DEFAULT: no session is held, and each
+    tool call opens a new one. Over stdio that starts the server process again
+    on every call. It is a large, constant cost per call, and it is what a
+    team gets by following the adapter's basic example. Measuring both shows
+    the cost of the default and what a persistent session buys back.
 
 Why the tools are async-only
     `langchain-mcp-adapters` builds each tool with a coroutine and no sync
@@ -47,6 +49,19 @@ def server_connection() -> dict:
         "args": ["-m", "app.mcp_server"],
         "cwd": str(PROJECT_ROOT),
     }
+
+
+@asynccontextmanager
+async def per_call_tools() -> AsyncIterator[list[BaseTool]]:
+    """The adapter's default: each tool call starts and stops its own session.
+
+    Listing the tools opens one session (one server process) once. After that
+    every call spawns a fresh server, runs, and shuts it down. Nothing is held
+    between calls, so there is nothing to clean up on exit, and a long-running
+    client pays the spawn cost on every call.
+    """
+    client = MultiServerMCPClient({SERVER_NAME: server_connection()})
+    yield await client.get_tools()
 
 
 @asynccontextmanager

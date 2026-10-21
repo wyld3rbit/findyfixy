@@ -20,7 +20,9 @@ window.DATA = {
     {"date": "2026-10-17", "entry": "Integration bank ran live against Ollama 0.40.6: 4 of 4 passed in 33.0s (small 1.7s, large 4.6s, forced escalation 10.8s, five-question run 15.6s)."},
     {"date": "2026-10-17", "entry": "Tracker gained a slide-in session log (Log button, top right). Day 2 not started."},
     {"date": "2026-10-20", "entry": "Day 2 in progress: Triage schema with validate-retry-escalate, and a direct-bound deploy tool. 40 fast tests and 6 live tests pass. Live run: 5 of 5 valid, 0 of 5 escalated. MCP step planned; waiting on a cooldown decision. No self-check items done yet."},
-    {"date": "2026-10-20", "entry": "Day 2 in progress. Built a live console (FindyFixy) that runs the real graph and streams its events, an 8-incident realistic bank, and the direct tool-call loop. 131 fast tests pass. Assistant check runs, not the learner's: 0 of 8 incidents escalated, severity matched the key 3 of 8, and the 1.5B model called the deploy tool with the wrong window (hours 1, not 24) in 2 of 2 runs. certifi upgraded to 2026.10.19 for PYSEC-2026-4320. No self-check item ticked: the learner's own 10-run table is still to do."}
+    {"date": "2026-10-20", "entry": "Day 2 in progress. Built a live console (FindyFixy) that runs the real graph and streams its events, an 8-incident realistic bank, and the direct tool-call loop. 131 fast tests pass. Assistant check runs, not the learner's: 0 of 8 incidents escalated, severity matched the key 3 of 8, and the 1.5B model called the deploy tool with the wrong window (hours 1, not 24) in 2 of 2 runs. certifi upgraded to 2026.10.19 for PYSEC-2026-4320. No self-check item ticked: the learner's own 10-run table is still to do."},
+    {"date": "2026-10-20", "entry": "Day 2 measured. Same tool, same model, same ToolNode loop, 10 runs each: direct median 0.57s, MCP with a persistent session 0.57s, MCP with a new session per call 1.14s (+0.57s, +100%). Input tokens 499 on all three, so 0 tokens of MCP overhead with one tool. The model sent a 1 hour window for a 24 hour question in 30 of 30 runs and answered wrongly every time. Console hunt: 10 of 10 replies parsed. Self-check 3 of 4 ticked; drill answered in time but without a number, so not ticked. Evidence line recorded."},
+    {"date": "2026-10-20", "entry": "Day 2 drill ticked at the learner's request. The answer was not timed and gave no number; the learner judged it complete. Day 2 closed at 4 of 4."}
   ],
   "days": [
     {"n": 1, "week": 1, "date": "2026-10-17", "title": "Setup and first graph", "file": "d01.md",
@@ -30,7 +32,7 @@ window.DATA = {
     {"n": 2, "week": 1, "date": "2026-10-18", "title": "Structured output and tools", "file": "d02.md",
      "outcome": "Schema-validated triage; direct API vs MCP cost measured",
      "checks": ["10 of 10 outputs parse", "Token and latency table: direct vs MCP", "Can state MCP overhead per call", "Drill under 90s"],
-     "done": []},
+     "done": [0, 1, 2, 3]},
     {"n": 3, "week": 1, "date": "2026-10-19", "title": "Memory I: ingestion", "file": "d03.md",
      "outcome": "200 incidents chunked, embedded, in pgvector",
      "checks": ["About 800 chunks stored", "Second ingestion run writes 0", "Top 5 includes a seeded near-duplicate", "Drill under 90s"],

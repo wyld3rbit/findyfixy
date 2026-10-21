@@ -10,6 +10,10 @@ Modes
     session   One server process and one MCP session for the whole run. Startup
               is timed once and printed separately. This is the realistic best
               case: a client that connects once and keeps the connection.
+    per-call  The adapter's default: every tool call opens a new session, so
+              over stdio it starts a new server process each time. Each run's
+              time therefore includes the spawn. The one-off figure printed
+              first is just the initial tool listing.
 
 What the numbers can and cannot say
     - The model, the prompt, the loop and the tool logic are identical to the
@@ -23,11 +27,12 @@ What the numbers can and cannot say
       come from the transport, not the wording. With one tool it will be small.
       MCP's token cost grows with the number of tools exposed.
     - Startup (spawn, initialize, list tools) is not in the per-run time in
-      `session` mode. It is a one-off, printed on its own line.
+      `session` mode. It is a one-off, printed on its own line. In `per-call`
+      mode the spawn IS in every run, which is the point of the mode.
     - Ten runs of this model repeated almost exactly on the direct path, so
       expect little spread here too.
 
-Run it:   uv run python -m app.mcp_run session [runs]
+Run it:   uv run python -m app.mcp_run {session|per-call} [runs]
 Test it:  uv run pytest
 """
 
@@ -50,9 +55,16 @@ from app.direct_run import (
     summarise,
 )
 from app.investigate import build_investigator
-from app.mcp_client import persistent_tools
+from app.mcp_client import per_call_tools, persistent_tools
 
-MODES = ("session",)
+MODES = ("session", "per-call")
+
+# What each mode is called in the printed header, and how its tools are opened.
+OPENERS = {"session": persistent_tools, "per-call": per_call_tools}
+LABELS = {
+    "session": "one persistent session",
+    "per-call": "a new session (a new server process) for every tool call",
+}
 
 
 async def arun_once(
@@ -71,17 +83,17 @@ async def arun_once(
     return stats_from(final["messages"], clock() - start)
 
 
-async def run_session(runs: int, model_name: str) -> None:
-    """Warm up, then run `runs` measured runs on one persistent MCP session."""
+async def run_mode(mode: str, runs: int, model_name: str) -> None:
+    """Warm up, then run `runs` measured runs over the chosen MCP transport."""
     from langchain_ollama import ChatOllama
 
     t0 = time.perf_counter()
-    async with persistent_tools() as tools:
+    async with OPENERS[mode]() as tools:
         startup = time.perf_counter() - t0
         investigator = build_investigator(
             ChatOllama(model=model_name).bind_tools(tools), tools
         )
-        print(f"model: {model_name}   transport: MCP over stdio, one persistent session")
+        print(f"model: {model_name}   transport: MCP over stdio, {LABELS[mode]}")
         print(f"task: {TASK}")
         print(f"server startup (spawn, initialize, list tools): {startup:.2f}s, once")
         print(HEADER)
@@ -110,7 +122,7 @@ def main(argv: list[str] | None = None) -> None:
     if not args or args[0] not in MODES:
         sys.exit(f"usage: python -m app.mcp_run {{{'|'.join(MODES)}}} [runs]")
     runs = int(args[1]) if len(args) > 1 else DEFAULT_RUNS
-    asyncio.run(run_session(runs, os.environ["SMALL_MODEL"]))
+    asyncio.run(run_mode(args[0], runs, os.environ["SMALL_MODEL"]))
 
 
 if __name__ == "__main__":
