@@ -60,7 +60,7 @@ from langchain_core.messages import HumanMessage
 
 from app.events import Emit, no_emit
 from app.investigate import analyse, format_evidence, investigation_prompt
-from app.triage import Ask, Triage, TriageError, ask_validated
+from app.triage import Ask, Reply, Triage, TriageError, ask_validated
 
 # The routing policy in one number. Treat it as a product decision, not a
 # constant of nature: it trades cost against quality. Day 8 tunes it
@@ -117,7 +117,11 @@ def ollama_ask(model: str, prompt: str) -> str:
     pulled (404). Nothing here retries and there is no timeout.
     """
     llm = ChatOllama(model=model, format=Triage.model_json_schema())
-    return llm.invoke(prompt).content
+    message = llm.invoke(prompt)
+    # Ollama names the model that served the request in its response. Keep it
+    # next to the text, so a log can show what ACTUALLY answered, not only what
+    # we asked for. Absent metadata gives None (unknown), never a guess.
+    return Reply(message.content, served_by=message.response_metadata.get("model"))
 
 
 def build_graph(
@@ -174,6 +178,7 @@ def build_graph(
             input_tokens=inv.input_tokens,
             output_tokens=inv.output_tokens,
             hit_turn_cap=inv.hit_turn_cap,
+            served_by=list(inv.served_by),
         )
         return {"evidence": format_evidence(inv.calls)}
 

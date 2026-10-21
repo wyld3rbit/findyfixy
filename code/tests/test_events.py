@@ -102,3 +102,9 @@ def test_timestamps_never_go_backwards():
     events = run({"s": [reply(0.3)], "l": [reply(0.9)]})
     times = [e.t for e in events]
     assert times == sorted(times)
+
+
+def test_model_reply_events_say_unknown_when_the_server_reports_no_model():
+    events = run({"s": [reply(0.9)]})
+    got = next(e for e in events if e.kind == "model_reply")
+    assert got.data["served_by"] is None and got.data["mismatch"] is False

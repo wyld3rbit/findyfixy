@@ -62,8 +62,32 @@ class Triage(BaseModel):
     )
 
 
+class Reply(str):
+    """Reply text that also remembers which model the server says produced it.
+
+    It IS a `str`, so parsing, slicing, `len` and every fake `ask` that returns
+    a plain string keep working unchanged. Only code that wants the extra field
+    reads `served_by`. `None` means the transport did not report one (a fake, an
+    injected reply, a server that omits it): unknown, which is not the same as
+    "matches".
+
+    Why it exists: the event log used to record the model we ASKED for. If the
+    two ever differed (a wrong name, an alias, a fallback) the log would hide
+    it. Ollama's response names the model that served it, and this carries that
+    name next to the text.
+    """
+
+    served_by: str | None
+
+    def __new__(cls, text: str, served_by: str | None = None) -> "Reply":
+        obj = super().__new__(cls, text)
+        obj.served_by = served_by
+        return obj
+
+
 # The one seam to the outside world: (model name, prompt) in, raw reply text
-# out. Production passes `ollama_ask` (graph.py). Tests pass a fake.
+# out (a `Reply` when the server reports which model answered). Production
+# passes `ollama_ask` (graph.py). Tests pass a fake.
 Ask = Callable[[str, str], str]
 
 PROMPT = (
@@ -157,7 +181,16 @@ def ask_validated(
         attempts += 1
         emit("model_request", model=model, attempt=attempts, prompt=prompt)
         reply = ask(model, prompt)
-        emit("model_reply", model=model, attempt=attempts, reply=reply)
+        served_by = getattr(reply, "served_by", None)
+        emit(
+            "model_reply",
+            model=model,
+            attempt=attempts,
+            reply=reply,
+            served_by=served_by,
+            # Only a reported, different name is a mismatch. Unknown is not one.
+            mismatch=served_by is not None and served_by != model,
+        )
         try:
             triage = parse_triage(reply)
         except ValidationError as err:

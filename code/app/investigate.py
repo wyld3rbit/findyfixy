@@ -138,6 +138,7 @@ class Investigation:
     calls: tuple[ToolCallRecord, ...]
     hit_turn_cap: bool
     answer: str
+    served_by: tuple[str, ...] = ()
 
 
 def build_investigator(
@@ -235,6 +236,13 @@ def analyse(messages: list[BaseMessage]) -> Investigation:
                 )
             )
     last = replies[-1] if replies else None
+    # Which model(s) the server says answered, in first-seen order. Empty when
+    # the transport reported none.
+    served: list[str] = []
+    for reply in replies:
+        name = (reply.response_metadata or {}).get("model")
+        if name and name not in served:
+            served.append(name)
     return Investigation(
         input_tokens=_sum_tokens(replies, "input_tokens"),
         output_tokens=_sum_tokens(replies, "output_tokens"),
@@ -242,6 +250,7 @@ def analyse(messages: list[BaseMessage]) -> Investigation:
         calls=tuple(calls),
         hit_turn_cap=bool(last and last.tool_calls),
         answer="" if last is None or last.tool_calls else str(last.content),
+        served_by=tuple(served),
     )
 
 

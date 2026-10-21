@@ -407,7 +407,7 @@ function summarize(ev) {
     case "tool_call": return `${d.name}(${Object.entries(d.args).map(([k, v]) => k + "=" + v).join(", ")})`;
     case "tool_result": return d.error ? `ERROR ${clip(d.result, 80)}` : clip(d.result, 90);
     case "model_request": return `${d.model}, attempt ${d.attempt}`;
-    case "model_reply": return `${d.model}, attempt ${d.attempt}, ${d.reply.length} chars`;
+    case "model_reply": return `${d.model}, attempt ${d.attempt}, ${d.reply.length} chars, ${servedText(d)}`;
     case "validation": return d.ok ? `attempt ${d.attempt} valid` : `attempt ${d.attempt} INVALID`;
     case "fault_injected": return `INJECTED: ${d.model} reply replaced, ${d.field} = ${d.value}`;
     case "retry": return `re-asking ${d.model}, attempt ${d.attempt}`;
@@ -432,6 +432,7 @@ function addLog(ev) {
   if (ev.kind === "run_failed" || (ev.kind === "validation" && !ev.data.ok) || (ev.kind === "tool_result" && ev.data.error)) k.classList.add("bad");
   if (ev.kind === "run_finished" || (ev.kind === "validation" && ev.data.ok)) k.classList.add("ok");
   if (ev.kind === "fault_injected") k.classList.add("warn");
+  if (ev.kind === "model_reply" && ev.data.mismatch) k.classList.add("bad");
   if (ev.kind === "hunt_finished") k.classList.add(ev.data.reason === "found" ? "bad" : "ok");
   const s = document.createElement("span"); s.textContent = summarize(ev);
   const pre = document.createElement("pre"); pre.textContent = JSON.stringify(ev.data, null, 2);
@@ -466,7 +467,7 @@ function showResult(rows) {
 // ---- animation: one async step per event ---------------------------------
 // `view` tracks which node is "current", so a validation event knows whether
 // to light the Validate box (small model) or just flag the large node.
-const view = { node: null, forced: false, tools: false, toolStep: null };
+const view = { node: null, forced: false, tools: false, toolStep: null, served: {}, hasMismatch: false };
 
 // Compact text for a tool call's arguments, and for what came back.
 function argsText(args) { return clip(Object.values(args).join(", "), 22); }
@@ -477,6 +478,20 @@ function resultText(d) {
     if (Array.isArray(v)) return `${v.length} deploy${v.length === 1 ? "" : "s"}`;
   } catch (_) { /* not JSON: show it clipped */ }
   return clip(d.result, 22);
+}
+// What the server says answered. Unknown is shown as unknown, never as a match.
+function servedText(d) {
+  if (d.served_by == null) return "served by: not reported";
+  return d.mismatch ? `MISMATCH: asked ${d.model}, served by ${d.served_by}` : `served by ${d.served_by}`;
+}
+function servedSummary() {
+  const parts = [];
+  if (view.toolStep) {
+    const s = view.toolStep.served_by || [];
+    parts.push(`investigate: ${s.length ? s.join(", ") : "not reported"}`);
+  }
+  for (const [node, name] of Object.entries(view.served)) parts.push(`${node}: ${name == null ? "not reported" : name}`);
+  return parts.join(" | ") || "not reported";
 }
 function tokensText(d) {
   return d.input_tokens == null ? "tokens unknown" : `${d.input_tokens} in / ${d.output_tokens} out tokens`;
@@ -491,6 +506,8 @@ async function animate(ev) {
       view.forced = d.forced;
       view.tools = d.tools;
       view.toolStep = null;
+      view.served = {};
+      view.hasMismatch = false;
       mark("q", "active");
       if (!d.tools) {
         // No tool step: show the bypass, and dim the boxes that stay idle.
@@ -531,7 +548,9 @@ async function animate(ev) {
       setBadge(view.node, "reply INJECTED");
       break;
     case "model_reply":
+      view.served[view.node] = d.served_by;
       mark(view.node, "active");
+      if (d.mismatch) { view.hasMismatch = true; mark(view.node, "bad"); setBadge(view.node, "MODEL MISMATCH"); break; }
       if ($("b_" + view.node).textContent === "reply INJECTED") break;
       setBadge(view.node, `replied, attempt ${d.attempt}`);
       break;
@@ -582,6 +601,7 @@ async function animate(ev) {
         ["Component", d.triage.component, ""],
         ["Next action", d.triage.next_action, ""],
         ["Confidence", String(d.triage.confidence), ""],
+        ["Served by", servedSummary(), view.hasMismatch ? "bad" : ""],
         ...(view.toolStep ? [["Tool step", `${view.toolStep.calls} call(s), ${view.toolStep.turns} turn(s), ${tokensText(view.toolStep)}`, ""]] : []),
       ]);
       break;

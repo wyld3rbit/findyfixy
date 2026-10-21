@@ -198,3 +198,47 @@ def test_without_an_investigator_the_graph_is_the_old_router():
     assert "investigate" not in nodes
     out = graph.invoke({"question": "q"})
     assert "evidence" not in out
+
+
+# ---- ollama_ask reports the model Ollama says answered ----------------------
+
+
+def test_ollama_ask_keeps_the_model_name_ollama_reports(monkeypatch):
+    import app.graph as g
+
+    class FakeChat:
+        def __init__(self, model, format):
+            self.model = model
+
+        def invoke(self, prompt):
+            return AIMessage(content=reply(0.9), response_metadata={"model": "reported-name"})
+
+    monkeypatch.setattr(g, "ChatOllama", FakeChat)
+    out = g.ollama_ask("asked-name", "prompt")
+    assert out == reply(0.9) and out.served_by == "reported-name"
+
+
+def test_ollama_ask_without_metadata_gives_unknown_not_the_asked_name(monkeypatch):
+    import app.graph as g
+
+    class FakeChat:
+        def __init__(self, model, format):
+            pass
+
+        def invoke(self, prompt):
+            return AIMessage(content=reply(0.9))  # no response_metadata
+
+    monkeypatch.setattr(g, "ChatOllama", FakeChat)
+    assert g.ollama_ask("asked-name", "prompt").served_by is None
+
+
+def test_the_tool_step_reports_which_model_the_server_says_answered(tool):
+    def named(content="", calls=None):
+        return AIMessage(content=content, tool_calls=calls or [],
+                         response_metadata={"model": "tool-model"})
+
+    tm = ToolModel(named(calls=[lookup(24)]), named("done"))
+    graph, _, events = make(tool, tm, {"s": [reply(0.9)]})
+    graph.invoke({"question": "q"})
+    exited = next(e for e in events if e.kind == "node_exited")
+    assert exited.data["served_by"] == ["tool-model"]  # once, not once per turn

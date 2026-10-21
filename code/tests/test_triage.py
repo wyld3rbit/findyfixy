@@ -133,3 +133,45 @@ def test_no_evidence_leaves_the_prompt_exactly_as_before():
 
     assert build_prompt("q") == build_prompt("q", "")
     assert "Tool results" not in build_prompt("q")
+
+
+# ---- which model the server says answered -----------------------------------
+
+
+def run_with(reply_obj):
+    """Run ask_validated once with `reply_obj` as the reply. Return the events."""
+    events: list = []
+
+    def emit(kind, /, **data):
+        events.append((kind, data))
+
+    ask_validated(lambda m, p: reply_obj, "qwen2.5:7b", "q", emit=emit)
+    return [d for k, d in events if k == "model_reply"][0]
+
+
+def test_a_reply_is_still_a_string_to_everything_that_reads_it():
+    from app.triage import Reply
+
+    r = Reply(GOOD, served_by="qwen2.5:7b")
+    assert isinstance(r, str) and r == GOOD and len(r) == len(GOOD)
+    assert parse_triage(r).severity == "sev3"
+    assert r[:5] == GOOD[:5] and r.served_by == "qwen2.5:7b"
+
+
+def test_the_served_model_is_recorded_and_a_match_is_not_flagged():
+    from app.triage import Reply
+
+    d = run_with(Reply(GOOD, served_by="qwen2.5:7b"))
+    assert d["served_by"] == "qwen2.5:7b" and d["mismatch"] is False
+
+
+def test_a_different_served_model_is_flagged_as_a_mismatch():
+    from app.triage import Reply
+
+    d = run_with(Reply(GOOD, served_by="qwen2.5:1.5b"))
+    assert d["served_by"] == "qwen2.5:1.5b" and d["mismatch"] is True
+
+
+def test_an_unreported_model_is_unknown_not_a_match_and_not_a_mismatch():
+    d = run_with(GOOD)  # a plain string: a fake, an injected reply
+    assert d["served_by"] is None and d["mismatch"] is False

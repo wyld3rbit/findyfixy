@@ -622,3 +622,34 @@ def test_page_has_the_tool_step_nodes_and_marks_empty_results_as_a_warning(serve
         assert needle in html
     # An empty lookup is legal but suspicious (wrong window), so not green.
     assert '"warn"' in html and ".node.warn" in html
+
+
+def test_streamed_model_replies_carry_the_served_by_field(monkeypatch):
+    import app.console as console
+    from app.triage import Reply
+
+    monkeypatch.setattr(console, "ollama_ask", lambda m, p: Reply(console._reply(0.9), served_by=m))
+    hub = RunHub(live_models=("s", "l"), sleep=lambda s: None, fake_delay=0)
+    srv = serve(hub, port=0)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    try:
+        post_run(port, {"mode": "live", "question": "q"})
+        replies = [e["data"] for e in stream(port) if e["kind"] == "model_reply"]
+        assert replies and replies[0]["served_by"] == "s" and replies[0]["mismatch"] is False
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_fake_mode_says_the_served_model_is_not_reported(server):
+    _, port = server
+    replies = [e["data"] for e in run_fake(port, "stay_small") if e["kind"] == "model_reply"]
+    assert replies[0]["served_by"] is None
+
+
+def test_page_shows_and_flags_the_served_model(server):
+    _, port = server
+    html = call(port, "GET", "/")[1].decode()
+    for needle in ("served by", "MISMATCH", "Served by", "not reported"):
+        assert needle in html
