@@ -58,15 +58,26 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import parse_qs, urlparse
 
+from langgraph.graph.state import CompiledStateGraph
+from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field, ValidationError
 
 from app.events import Emit, Event, make_emit
 from app.incidents import DEFAULT_PATH, Incident, load_incidents
+from app.investigate import build_investigator
+from app.tools import make_deploys_tool
 from app.graph import QUESTIONS, THRESHOLD, build_graph, ollama_ask
 from app.triage import Ask, TriageError
 
 Mode = Literal["live", "fake"]
-Scenario = Literal["stay_small", "retry_then_small", "escalate", "large_fails"]
+Scenario = Literal[
+    "stay_small",
+    "retry_then_small",
+    "escalate",
+    "large_fails",
+    "tool_lookup",
+    "tool_wrong_window",
+]
 
 # The page lives next to the docs. Resolved from this file, never from the
 # current directory, so the server works from any clone.
@@ -112,7 +123,40 @@ SCENARIOS: dict[str, dict[str, list[str]]] = {
         "small": [_reply(75), _reply(75)],
         "large": ["not json", "still not json"],
     },
+    # Scenarios with the tool step. The tool and the ToolNode are the real
+    # ones, reading data/deploys.json. Only the tool-calling model is scripted.
+    "tool_lookup": {"small": [_reply(0.9)], "large": []},
+    "tool_wrong_window": {"small": [_reply(0.9)], "large": []},
 }
+
+# The look-back window the scripted tool model asks for, per scenario.
+# `tool_wrong_window` mirrors what the real 1.5B model did on a 24 hour
+# question: it sent a legal but wrong 1 hour window, so the tool returns [].
+TOOL_HOURS: dict[str, int] = {"tool_lookup": 24, "tool_wrong_window": 1}
+
+
+class _ScriptedToolModel:
+    """A tool-calling model that asks for one deploy lookup, then finishes.
+
+    It reports no token usage on purpose: invented numbers would look real.
+    The page then shows the token fields as unknown.
+    """
+
+    def __init__(self, hours: int) -> None:
+        self._hours = hours
+        self._asked = False
+
+    def invoke(self, messages: list) -> AIMessage:
+        if self._asked:
+            return AIMessage(content="done")
+        self._asked = True
+        call = {
+            "name": "get_recent_deploys",
+            "args": {"service": "auth", "hours": self._hours},
+            "id": "fake-1",
+            "type": "tool_call",
+        }
+        return AIMessage(content="", tool_calls=[call])
 
 FAKE_QUESTION = "Fake run: replies are scripted, no model is called."
 
@@ -169,6 +213,8 @@ class RunRequest(BaseModel):
     # Live mode only. Replace the small model's FIRST reply with an illegal
     # one (confidence 75), so validation rejects it and the retry runs for real.
     force_retry: bool = False
+    # Live mode only. Run the tool step (look up deploys) before triage.
+    use_tools: bool = False
     # Live mode only. Repeat real runs until a reply fails validation, or until
     # this many runs have been made. None means a single run.
     hunt_max: int | None = Field(default=None, ge=1, le=HUNT_LIMIT)
@@ -228,12 +274,14 @@ class RunHub:
         *,
         live_models: tuple[str, str] | None,
         incidents: list[Incident] | None = None,
+        investigator: CompiledStateGraph | None = None,
         sleep: Callable[[float], None] = time.sleep,
         fake_delay: float = 0.6,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         self._live_models = live_models
         self.incidents = incidents or []
+        self._investigator = investigator
         self._sleep = sleep
         self._fake_delay = fake_delay
         self._clock = clock
@@ -243,6 +291,11 @@ class RunHub:
         self._run_id = 0
         self._stop = threading.Event()
         self._terminal: tuple[str, ...] = _RUN_TERMINAL
+
+    @property
+    def tools_available(self) -> bool:
+        """True when a real tool step was configured (live mode only)."""
+        return self._investigator is not None
 
     @property
     def live_available(self) -> bool:
@@ -264,6 +317,11 @@ class RunHub:
             ask: Ask = ollama_ask
             question = req.question.strip()
             forced = req.force_escalation
+            investigator = None
+            if req.use_tools:
+                if self._investigator is None:
+                    raise NotConfigured("the tool step is not configured")
+                investigator = self._investigator
             if req.hunt_max is not None and (forced or req.force_retry):
                 raise ValueError("hunt cannot be combined with a forced fault")
         else:
@@ -275,6 +333,12 @@ class RunHub:
             ask = fake_ask(req.scenario, self._sleep, self._fake_delay)
             question = (req.question or "").strip() or FAKE_QUESTION
             forced = False  # fake scenarios already script their own routing
+            investigator = None
+            if req.scenario in TOOL_HOURS:
+                investigator = build_investigator(
+                    _ScriptedToolModel(TOOL_HOURS[req.scenario]),
+                    make_deploys_tool(),
+                )
 
         with self._cond:
             if self._running:
@@ -292,6 +356,7 @@ class RunHub:
                 run_id, ask, small, large, question, req.mode, forced,
                 req.hunt_max, req.force_retry,
             ),
+            kwargs={"investigator": investigator},
             daemon=True,
         ).start()
         return run_id
@@ -321,6 +386,8 @@ class RunHub:
         forced: bool,
         hunt_max: int | None,
         force_retry: bool,
+        *,
+        investigator: CompiledStateGraph | None = None,
     ) -> None:
         """The run thread. Always ends with exactly one terminal event.
 
@@ -341,7 +408,8 @@ class RunHub:
 
         def once(q: str) -> str:
             return self._run_once(
-                emit, ask, small, large, q, mode, forced, run_id, threshold
+                emit, ask, small, large, q, mode, forced, run_id, threshold,
+                investigator,
             )
 
         try:
@@ -365,6 +433,7 @@ class RunHub:
         forced: bool,
         run_id: int,
         threshold: float,
+        investigator: CompiledStateGraph | None = None,
     ) -> Literal["finished", "failed", "error"]:
         """One graph run. Returns how it ended, after emitting its event.
 
@@ -374,10 +443,16 @@ class RunHub:
         second means stop and say so.
         """
         emit("run_started", run=run_id, mode=mode, question=question,
-             small_model=small, large_model=large, threshold=threshold, forced=forced)
+             small_model=small, large_model=large, threshold=threshold, forced=forced,
+             tools=investigator is not None)
         try:
             graph = build_graph(
-                ask, small_model=small, large_model=large, threshold=threshold, emit=emit
+                ask,
+                small_model=small,
+                large_model=large,
+                threshold=threshold,
+                emit=emit,
+                investigator=investigator,
             )
             result = graph.invoke({"question": question})
             emit(
@@ -518,6 +593,7 @@ def make_handler(hub: RunHub, page: Path) -> type[BaseHTTPRequestHandler]:
                             for i in hub.incidents
                         ],
                         "scenarios": list(SCENARIOS),
+                        "tools_available": hub.tools_available,
                         "live_available": hub.live_available,
                         "threshold": THRESHOLD,
                         "hunt_default": HUNT_DEFAULT,
@@ -619,9 +695,18 @@ def main() -> None:
 
     load_dotenv()
     small, large = os.environ.get("SMALL_MODEL"), os.environ.get("LARGE_MODEL")
+    investigator = None
+    if small and large:
+        from langchain_ollama import ChatOllama
+
+        tool = make_deploys_tool()
+        investigator = build_investigator(
+            ChatOllama(model=small).bind_tools([tool]), tool
+        )
     hub = RunHub(
         live_models=(small, large) if small and large else None,
         incidents=load_incidents(DEFAULT_PATH),
+        investigator=investigator,
     )
     server = serve(hub)
     port = server.server_address[1]

@@ -90,6 +90,10 @@
   svg { width: 100%; min-width: 720px; height: auto; display: block; }
   .edge { fill: none; stroke: var(--line); stroke-width: 2; }
   .edge.dashed { stroke-dasharray: 5 5; }
+  .edge.faint { opacity: 0; transition: opacity .2s; }
+  .edge.tool { stroke-dasharray: 5 5; stroke: var(--warn); }
+  .node.skipped rect { opacity: .4; }
+  .node.skipped .t, .node.skipped .s { opacity: .5; }
   .edge-label { fill: var(--muted); font-size: 11px; text-anchor: middle; }
   .node rect, .node polygon { fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
   .node .t { fill: var(--text); font-size: 14px; font-weight: 600; text-anchor: middle; }
@@ -103,6 +107,8 @@
   .node.calling rect { animation: pulse 1s ease-in-out infinite; }
   .node.ok rect, .node.ok polygon { stroke: var(--ok); }
   .node.bad rect, .node.bad polygon { stroke: var(--bad); }
+  .node.warn rect { stroke: var(--warn); }
+  .node.warn .badge { fill: var(--warn); }
   .node.ok .badge { fill: var(--ok); }
   .node.bad .badge { fill: var(--bad); }
   @keyframes pulse { 50% { fill: #1a3a5e; } }
@@ -178,6 +184,7 @@
     </div>
     <div id="live-extra" hidden>
       <div class="options">
+        <label class="check" title="Run the tool step first: the model may look up recent deploys, and the result goes into the triage prompt. Adds a model call to every run."><input type="checkbox" id="usetools" checked> Tool step</label>
         <label class="check" title="Both models run for real. Only the route is overridden, so the large model answers."><input type="checkbox" id="force"> Force escalation</label>
         <label class="check" title="The small model's first reply is replaced with an illegal one (confidence 75). The retry then runs for real."><input type="checkbox" id="retry"> Force retry</label>
         <label class="check" title="Repeat real runs until a reply fails validation, up to the max."><input type="checkbox" id="hunt"> Hunt for a bad value, max</label>
@@ -196,94 +203,103 @@
   <section class="panel" aria-label="Architecture schematic">
     <div class="schematic">
     <svg viewBox="0 50 940 420" role="img" aria-labelledby="svgtitle">
-      <title id="svgtitle">Request flows from the question to the small model, then validation, then a route that either ends or escalates to the large model, and finally a triage record.</title>
+      <title id="svgtitle">The question goes to an investigate step that may look up deploys with a tool, then to the small model, then validation, then a route that either ends or escalates to the large model, and finally a triage record.</title>
 
       <!-- edges -->
-      <path id="e_q_small" class="edge" d="M150,260 L180,260"/>
-      <path id="e_small_val" class="edge" d="M320,260 L350,260"/>
-      <path id="e_val_route" class="edge" d="M490,260 L520,260"/>
-      <path id="e_retry" class="edge" d="M420,292 C420,352 250,352 250,292"/>
-      <path id="e_route_rec" class="edge" d="M650,260 L790,260"/>
-      <path id="e_route_large" class="edge" d="M585,305 L585,388"/>
-      <path id="e_large_rec" class="edge" d="M655,420 C860,420 860,330 860,292"/>
-      <path class="edge dashed" d="M250,126 L250,228" style="stroke:var(--warn)"/>
-      <text class="edge-label" x="335" y="366">retry with the error text (once)</text>
-      <text class="edge-label" x="720" y="250">confident (&#8805; threshold)</text>
-      <text class="edge-label" x="660" y="352">low confidence or invalid</text>
+      <path id="e_q_inv" class="edge" d="M120,260 L142,260"/>
+      <path id="e_inv_small" class="edge" d="M272,260 L294,260"/>
+      <path id="e_q_small" class="edge dashed faint" d="M65,292 C65,338 330,338 330,292"/>
+      <path id="e_small_val" class="edge" d="M424,260 L446,260"/>
+      <path id="e_val_route" class="edge" d="M576,260 L598,260"/>
+      <path id="e_retry" class="edge" d="M511,292 C511,352 359,352 359,292"/>
+      <path id="e_route_rec" class="edge" d="M718,260 L780,260"/>
+      <path id="e_route_large" class="edge" d="M658,305 L658,388"/>
+      <path id="e_large_rec" class="edge" d="M723,420 C845,420 845,330 845,292"/>
+      <path id="e_inv_tool" class="edge tool" d="M207,228 L207,126"/>
+      <path id="e_tool_inv" class="edge" d="M207,126 L207,228" style="stroke:none"/>
+      <text class="edge-label" x="435" y="366">retry with the error text (once)</text>
+      <text class="edge-label" x="749" y="250">confident</text>
+      <text class="edge-label" x="745" y="352">low confidence or invalid</text>
+      <text id="l_bypass" class="edge-label" x="198" y="356" style="opacity:0">tool step off</text>
 
       <!-- built nodes -->
       <g class="node" id="n_q" data-status="built">
-        <rect x="10" y="228" width="140" height="64" rx="8"/>
-        <text class="t" x="80" y="256">Question</text>
-        <text class="s" x="80" y="274">incident report</text>
+        <rect x="10" y="228" width="110" height="64" rx="8"/>
+        <text class="t" x="65" y="256">Question</text>
+        <text class="s" x="65" y="274">incident report</text>
+      </g>
+      <g class="node" id="n_inv" data-status="built">
+        <rect x="142" y="228" width="130" height="64" rx="8"/>
+        <text class="t" x="207" y="254">Investigate</text>
+        <text class="s" x="207" y="271">tool-calling model</text>
+        <text class="badge" x="207" y="286" id="b_inv"> </text>
       </g>
       <g class="node" id="n_small" data-status="built">
-        <rect x="180" y="228" width="140" height="64" rx="8"/>
-        <text class="t" x="250" y="254">Small model</text>
-        <text class="s" x="250" y="271">Qwen2.5 1.5B</text>
-        <text class="badge" x="250" y="286" id="b_small"> </text>
+        <rect x="294" y="228" width="130" height="64" rx="8"/>
+        <text class="t" x="359" y="254">Small model</text>
+        <text class="s" x="359" y="271">Qwen2.5 1.5B</text>
+        <text class="badge" x="359" y="286" id="b_small"> </text>
       </g>
       <g class="node" id="n_val" data-status="built">
-        <rect x="350" y="228" width="140" height="64" rx="8"/>
-        <text class="t" x="420" y="254">Validate</text>
-        <text class="s" x="420" y="271">Pydantic, 1 retry</text>
-        <text class="badge" x="420" y="286" id="b_val"> </text>
+        <rect x="446" y="228" width="130" height="64" rx="8"/>
+        <text class="t" x="511" y="254">Validate</text>
+        <text class="s" x="511" y="271">Pydantic, 1 retry</text>
+        <text class="badge" x="511" y="286" id="b_val"> </text>
       </g>
       <g class="node" id="n_route" data-status="built">
-        <polygon points="585,215 650,260 585,305 520,260"/>
-        <text class="t" x="585" y="258">Route</text>
-        <text class="badge" x="585" y="274" id="b_route"> </text>
+        <polygon points="658,215 718,260 658,305 598,260"/>
+        <text class="t" x="658" y="258">Route</text>
+        <text class="badge" x="658" y="274" id="b_route"> </text>
       </g>
       <g class="node" id="n_large" data-status="built">
-        <rect x="515" y="388" width="140" height="64" rx="8"/>
-        <text class="t" x="585" y="414">Large model</text>
-        <text class="s" x="585" y="431">Qwen2.5 7B, validated</text>
-        <text class="badge" x="585" y="446" id="b_large"> </text>
+        <rect x="593" y="388" width="130" height="64" rx="8"/>
+        <text class="t" x="658" y="414">Large model</text>
+        <text class="s" x="658" y="431">Qwen2.5 7B, validated</text>
+        <text class="badge" x="658" y="446" id="b_large"> </text>
       </g>
       <g class="node" id="n_rec" data-status="built">
-        <rect x="790" y="228" width="140" height="64" rx="8"/>
-        <text class="t" x="860" y="254">Triage record</text>
-        <text class="s" x="860" y="271">severity, component</text>
-        <text class="badge" x="860" y="286" id="b_rec"> </text>
+        <rect x="780" y="228" width="130" height="64" rx="8"/>
+        <text class="t" x="845" y="254">Triage record</text>
+        <text class="s" x="845" y="271">severity, component</text>
+        <text class="badge" x="845" y="286" id="b_rec"> </text>
       </g>
-
-      <!-- built, not wired -->
-      <g class="node" data-status="unwired">
-        <rect x="180" y="70" width="140" height="56" rx="8"/>
-        <text class="t" x="250" y="94">Deploy tool</text>
-        <text class="s" x="250" y="112">built, not wired</text>
+      <g class="node" id="n_tool" data-status="built">
+        <rect x="142" y="62" width="130" height="64" rx="8"/>
+        <text class="t" x="207" y="86">Deploy tool</text>
+        <text class="s" x="207" y="103">get_recent_deploys</text>
+        <text class="badge" x="207" y="119" id="b_tool"> </text>
       </g>
 
       <!-- planned nodes: one edit per build day flips data-status to built -->
       <g class="node" data-status="planned">
-        <rect x="10" y="70" width="140" height="56" rx="8"/>
-        <text class="t" x="80" y="94">Retrieval</text>
-        <text class="s" x="80" y="112">Day 3-4, pgvector</text>
+        <rect x="10" y="70" width="110" height="56" rx="8"/>
+        <text class="t" x="65" y="94">Retrieval</text>
+        <text class="s" x="65" y="112">Day 3-4</text>
       </g>
       <g class="node" data-status="planned">
-        <rect x="350" y="70" width="140" height="56" rx="8"/>
-        <text class="t" x="420" y="94">Tracing</text>
-        <text class="s" x="420" y="112">Day 6, Langfuse</text>
+        <rect x="294" y="70" width="130" height="56" rx="8"/>
+        <text class="t" x="359" y="94">Tracing</text>
+        <text class="s" x="359" y="112">Day 6, Langfuse</text>
       </g>
       <g class="node" data-status="planned">
-        <rect x="520" y="70" width="140" height="56" rx="8"/>
-        <text class="t" x="590" y="94">Policy</text>
-        <text class="s" x="590" y="112">Day 7, guardrails</text>
+        <rect x="446" y="70" width="130" height="56" rx="8"/>
+        <text class="t" x="511" y="94">Policy</text>
+        <text class="s" x="511" y="112">Day 7, guardrails</text>
       </g>
       <g class="node" data-status="planned">
-        <rect x="690" y="70" width="140" height="56" rx="8"/>
-        <text class="t" x="760" y="94">Gateway</text>
-        <text class="s" x="760" y="112">Day 8, routing</text>
+        <rect x="598" y="70" width="130" height="56" rx="8"/>
+        <text class="t" x="663" y="94">Gateway</text>
+        <text class="s" x="663" y="112">Day 8, routing</text>
       </g>
       <g class="node" data-status="planned">
-        <rect x="10" y="396" width="140" height="56" rx="8"/>
-        <text class="t" x="80" y="420">Evals</text>
-        <text class="s" x="80" y="438">Day 5, golden set</text>
+        <rect x="10" y="396" width="130" height="56" rx="8"/>
+        <text class="t" x="75" y="420">Evals</text>
+        <text class="s" x="75" y="438">Day 5, golden set</text>
       </g>
       <g class="node" data-status="planned">
-        <rect x="790" y="396" width="140" height="56" rx="8"/>
-        <text class="t" x="860" y="420">Human review</text>
-        <text class="s" x="860" y="438">Day 9, approval</text>
+        <rect x="780" y="396" width="130" height="56" rx="8"/>
+        <text class="t" x="845" y="420">Human review</text>
+        <text class="s" x="845" y="438">Day 9, approval</text>
       </g>
 
       <circle id="dot" r="7" cx="0" cy="0"/>
@@ -291,7 +307,6 @@
     </div>
     <div class="legend">
       <span class="l-built">built</span>
-      <span class="l-unwired">built, not wired into the graph</span>
       <span class="l-planned">planned (day shown)</span>
     </div>
   </section>
@@ -344,14 +359,17 @@ function nodeEl(id) { return $("n_" + id); }
 function setBadge(id, text) { $("b_" + id).textContent = text || " "; }
 
 function resetVisuals() {
-  document.querySelectorAll(".node").forEach((n) => n.classList.remove("active", "calling", "ok", "bad"));
-  ["small", "val", "route", "large", "rec"].forEach((id) => setBadge(id, ""));
+  document.querySelectorAll(".node").forEach((n) => n.classList.remove("active", "calling", "ok", "bad", "warn"));
+  ["inv", "tool", "small", "val", "route", "large", "rec"].forEach((id) => setBadge(id, ""));
+  document.querySelectorAll(".node").forEach((n) => n.classList.remove("skipped"));
+  $("e_q_small").style.opacity = 0;
+  $("l_bypass").style.opacity = 0;
   $("dot").classList.remove("on");
 }
 
 function mark(id, ...cls) {
   const el = nodeEl(id);
-  el.classList.remove("calling", "ok", "bad", "active");
+  el.classList.remove("calling", "ok", "bad", "warn", "active");
   cls.forEach((c) => el.classList.add(c));
 }
 
@@ -384,13 +402,17 @@ function summarize(ev) {
   const d = ev.data;
   switch (ev.kind) {
     case "run_started": return `${d.mode} run, small=${d.small_model}, large=${d.large_model}, ${d.forced ? "ESCALATION FORCED" : "threshold " + d.threshold}`;
-    case "node_entered": return `${d.node} (${d.model})`;
+    case "node_entered": return d.model ? `${d.node} (${d.model})` : d.node;
+    case "tool_call": return `${d.name}(${Object.entries(d.args).map(([k, v]) => k + "=" + v).join(", ")})`;
+    case "tool_result": return d.error ? `ERROR ${clip(d.result, 80)}` : clip(d.result, 90);
     case "model_request": return `${d.model}, attempt ${d.attempt}`;
     case "model_reply": return `${d.model}, attempt ${d.attempt}, ${d.reply.length} chars`;
     case "validation": return d.ok ? `attempt ${d.attempt} valid` : `attempt ${d.attempt} INVALID`;
     case "fault_injected": return `INJECTED: ${d.model} reply replaced, ${d.field} = ${d.value}`;
     case "retry": return `re-asking ${d.model}, attempt ${d.attempt}`;
-    case "node_exited": return d.triage ? `${d.node} produced a record` : `${d.node} produced no valid record`;
+    case "node_exited":
+      if (d.node === "investigate") return `${d.calls} tool call(s), ${d.turns} turn(s), ${tokensText(d)}${d.hit_turn_cap ? ", HIT TURN CAP" : ""}`;
+      return d.triage ? `${d.node} produced a record` : `${d.node} produced no valid record`;
     case "route": return `confidence ${d.confidence === null ? "none" : d.confidence} vs ${d.threshold} -> ${d.target === "__end__" ? "done" : d.target}${d.threshold > 1 ? " (forced)" : ""}`;
     case "run_finished": return `final: ${d.model_used} model`;
     case "run_failed": return `${d.error_type}`;
@@ -406,7 +428,7 @@ function addLog(ev) {
   const li = document.createElement("li");
   const t = document.createElement("span"); t.className = "t"; t.textContent = ev.t.toFixed(2) + "s";
   const k = document.createElement("span"); k.className = "k"; k.textContent = ev.kind;
-  if (ev.kind === "run_failed" || (ev.kind === "validation" && !ev.data.ok)) k.classList.add("bad");
+  if (ev.kind === "run_failed" || (ev.kind === "validation" && !ev.data.ok) || (ev.kind === "tool_result" && ev.data.error)) k.classList.add("bad");
   if (ev.kind === "run_finished" || (ev.kind === "validation" && ev.data.ok)) k.classList.add("ok");
   if (ev.kind === "fault_injected") k.classList.add("warn");
   if (ev.kind === "hunt_finished") k.classList.add(ev.data.reason === "found" ? "bad" : "ok");
@@ -443,7 +465,21 @@ function showResult(rows) {
 // ---- animation: one async step per event ---------------------------------
 // `view` tracks which node is "current", so a validation event knows whether
 // to light the Validate box (small model) or just flag the large node.
-const view = { node: null, forced: false };
+const view = { node: null, forced: false, tools: false, toolStep: null };
+
+// Compact text for a tool call's arguments, and for what came back.
+function argsText(args) { return clip(Object.values(args).join(", "), 22); }
+function resultText(d) {
+  if (d.error) return "error";
+  try {
+    const v = JSON.parse(d.result);
+    if (Array.isArray(v)) return `${v.length} deploy${v.length === 1 ? "" : "s"}`;
+  } catch (_) { /* not JSON: show it clipped */ }
+  return clip(d.result, 22);
+}
+function tokensText(d) {
+  return d.input_tokens == null ? "tokens unknown" : `${d.input_tokens} in / ${d.output_tokens} out tokens`;
+}
 
 async function animate(ev) {
   const d = ev.data;
@@ -452,13 +488,39 @@ async function animate(ev) {
       resetVisuals();
       view.node = null;
       view.forced = d.forced;
+      view.tools = d.tools;
+      view.toolStep = null;
       mark("q", "active");
+      if (!d.tools) {
+        // No tool step: show the bypass, and dim the boxes that stay idle.
+        nodeEl("inv").classList.add("skipped");
+        nodeEl("tool").classList.add("skipped");
+        $("e_q_small").style.opacity = 1;
+        $("l_bypass").style.opacity = 1;
+      }
       showResult([["Status", "running", ""], ["Question", clip(d.question, 160), ""]]);
       break;
     case "node_entered":
+      if (d.node === "investigate") {
+        await travel("e_q_inv");
+        mark("inv", "calling");
+        setBadge("inv", "asking the model");
+        break;
+      }
       view.node = d.node;
-      if (d.node === "small") await travel("e_q_small");
+      if (d.node === "small") await travel(view.tools ? "e_inv_small" : "e_q_small");
       mark(d.node, "active");
+      break;
+    case "tool_call":
+      await travel("e_inv_tool");
+      mark("tool", "active");
+      setBadge("tool", argsText(d.args));
+      break;
+    case "tool_result":
+      await travel("e_tool_inv");
+      // An empty list is legal but suspicious: the window may be wrong. Amber, not green.
+      mark("tool", d.error ? "bad" : (d.result.trim() === "[]" ? "warn" : "ok"));
+      setBadge("tool", resultText(d));
       break;
     case "model_request":
       mark(view.node, "calling");
@@ -492,6 +554,11 @@ async function animate(ev) {
       }
       break;
     case "node_exited":
+      if (d.node === "investigate") {
+        view.toolStep = d;
+        mark("inv", d.hit_turn_cap ? "bad" : "ok");
+        setBadge("inv", d.calls ? `${d.calls} call${d.calls === 1 ? "" : "s"}, ${d.turns} turns` : "no lookup");
+      }
       break;
     case "route": {
       if (view.node === "small") await travel("e_val_route");
@@ -514,6 +581,7 @@ async function animate(ev) {
         ["Component", d.triage.component, ""],
         ["Next action", d.triage.next_action, ""],
         ["Confidence", String(d.triage.confidence), ""],
+        ...(view.toolStep ? [["Tool step", `${view.toolStep.calls} call(s), ${view.toolStep.turns} turn(s), ${tokensText(view.toolStep)}`, ""]] : []),
       ]);
       break;
     }
@@ -604,6 +672,7 @@ async function startRun() {
     body.question = $("custom").value.trim() || $("question").value;
     body.force_escalation = $("force").checked;
     body.force_retry = $("retry").checked;
+    body.use_tools = $("usetools").checked;
     if ($("hunt").checked) body.hunt_max = Math.max(1, Math.min(50, Number($("huntmax").value) || 20));
   }
   say("");
@@ -677,6 +746,11 @@ async function init() {
   syncMode();
   try {
     const cfg = await (await fetch("/config")).json();
+    if (!cfg.tools_available) {
+      $("usetools").checked = false;
+      $("usetools").disabled = true;
+      $("usetools").parentElement.title = "Set SMALL_MODEL and LARGE_MODEL in .env and restart the console.";
+    }
     for (const s of cfg.scenarios) $("scenario").append(new Option(s.replaceAll("_", " "), s));
     banks.lesson = cfg.questions.map((q) => ({ label: q, text: q }));
     banks.incidents = cfg.incidents.map((i) => ({ label: i.title, text: i.text }));

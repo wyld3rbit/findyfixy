@@ -503,3 +503,122 @@ def test_force_retry_conflicts_are_422(monkeypatch, body):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+# ---- tool step in the console ------------------------------------------------
+
+
+def run_fake(port, scenario):
+    post_run(port, {"mode": "fake", "scenario": scenario})
+    return stream(port)
+
+
+def test_fake_tool_lookup_streams_the_tool_step_before_small(server):
+    _, port = server
+    events = run_fake(port, "tool_lookup")
+    assert events[0]["data"]["tools"] is True
+    entered = [e["data"]["node"] for e in events if e["kind"] == "node_entered"]
+    assert entered == ["investigate", "small"]
+    call = next(e for e in events if e["kind"] == "tool_call")
+    assert call["data"]["args"] == {"service": "auth", "hours": 24}
+    result = next(e for e in events if e["kind"] == "tool_result")
+    assert "2.14.1" in result["data"]["result"] and not result["data"]["error"]
+    assert events[-1]["kind"] == "run_finished"
+
+
+def test_fake_wrong_window_shows_a_legal_but_empty_lookup(server):
+    _, port = server
+    events = run_fake(port, "tool_wrong_window")
+    call = next(e for e in events if e["kind"] == "tool_call")
+    result = next(e for e in events if e["kind"] == "tool_result")
+    assert call["data"]["args"]["hours"] == 1
+    assert result["data"]["result"] == "[]" and not result["data"]["error"]
+
+
+def test_scripted_tool_model_reports_no_token_numbers(server):
+    # Invented token counts would look real. The step must report them unknown.
+    _, port = server
+    exited = next(
+        e for e in run_fake(port, "tool_lookup")
+        if e["kind"] == "node_exited" and e["data"]["node"] == "investigate"
+    )
+    assert exited["data"]["input_tokens"] is None
+
+
+def test_other_fake_scenarios_have_no_tool_step(server):
+    _, port = server
+    events = run_fake(port, "stay_small")
+    assert events[0]["data"]["tools"] is False
+    assert "tool_call" not in [e["kind"] for e in events]
+
+
+def live_hub_with_tools(monkeypatch, with_investigator=True):
+    import app.console as console
+    from app.investigate import build_investigator
+    from app.tools import make_deploys_tool
+
+    monkeypatch.setattr(console, "ollama_ask", lambda m, p: console._reply(0.9))
+    investigator = None
+    if with_investigator:
+        investigator = build_investigator(
+            console._ScriptedToolModel(24), make_deploys_tool()
+        )
+    hub = RunHub(
+        live_models=("s", "l"), investigator=investigator,
+        sleep=lambda s: None, fake_delay=0,
+    )
+    srv = serve(hub, port=0)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def test_live_use_tools_runs_the_tool_step(monkeypatch):
+    srv = live_hub_with_tools(monkeypatch)
+    port = srv.server_address[1]
+    try:
+        post_run(port, {"mode": "live", "question": "q", "use_tools": True})
+        entered = [e["data"]["node"] for e in stream(port) if e["kind"] == "node_entered"]
+        assert entered == ["investigate", "small"]
+        post_run_when_free(port, {"mode": "live", "question": "q"})
+        entered = [e["data"]["node"] for e in stream(port) if e["kind"] == "node_entered"]
+        assert entered == ["small"]  # without the box ticked, no tool step
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def post_run_when_free(port, body):
+    for _ in range(50):
+        status, _ = post_run(port, body)
+        if status != 409:
+            return status
+        time.sleep(0.02)
+    raise AssertionError("run never freed up")
+
+
+def test_live_use_tools_without_a_configured_tool_step_is_503(monkeypatch):
+    srv = live_hub_with_tools(monkeypatch, with_investigator=False)
+    try:
+        status, _ = post_run(
+            srv.server_address[1], {"mode": "live", "question": "q", "use_tools": True}
+        )
+        assert status == 503
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_config_says_whether_the_tool_step_is_available(server, monkeypatch):
+    _, port = server
+    cfg = json.loads(call(port, "GET", "/config")[1])
+    assert cfg["tools_available"] is False
+    assert {"tool_lookup", "tool_wrong_window"} <= set(cfg["scenarios"])
+
+
+def test_page_has_the_tool_step_nodes_and_marks_empty_results_as_a_warning(server):
+    _, port = server
+    html = call(port, "GET", "/")[1].decode()
+    for needle in ('id="n_inv"', 'id="n_tool"', 'id="e_inv_tool"', 'id="usetools"'):
+        assert needle in html
+    # An empty lookup is legal but suspicious (wrong window), so not green.
+    assert '"warn"' in html and ".node.warn" in html
