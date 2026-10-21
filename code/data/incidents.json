@@ -1,0 +1,105 @@
+[
+  {
+    "id": "noisy-unrelated",
+    "title": "Billing API slow, loud but unrelated warnings",
+    "trap": "Hundreds of repeated notifications warnings have run for days and are not the fault.",
+    "expected": {
+      "severity": "sev2",
+      "components": [
+        "billing"
+      ]
+    },
+    "text": "PAGE: billing-api p95 latency 4.8s (SLO 800ms) since 09:41 UTC. Checkout success down to 91%.\n\n2026-10-14T09:38:55Z notifications-7c9 WARN template cache miss key=welcome_email_v2 (fallback used)\n2026-10-14T09:39:12Z notifications-7c9 WARN template cache miss key=welcome_email_v2 (fallback used)\n2026-10-14T09:40:03Z notifications-4fd WARN template cache miss key=welcome_email_v2 (fallback used)\n2026-10-14T09:41:20Z billing-api-2b1 INFO POST /v1/charges 200 412ms\n2026-10-14T09:41:44Z billing-api-2b1 WARN POST /v1/charges 200 2210ms\n2026-10-14T09:42:09Z billing-api-8e4 WARN POST /v1/charges 200 3875ms\n2026-10-14T09:42:31Z notifications-4fd WARN template cache miss key=welcome_email_v2 (fallback used)\n2026-10-14T09:43:02Z billing-api-8e4 ERROR POST /v1/charges 503 timeout waiting for connection from pool (max=20, in_use=20, waiting=37)\n2026-10-14T09:43:02Z billing-api-2b1 ERROR POST /v1/charges 503 timeout waiting for connection from pool (max=20, in_use=20, waiting=41)\n2026-10-14T09:43:30Z notifications-7c9 WARN template cache miss key=welcome_email_v2 (fallback used)\n2026-10-14T09:44:11Z billing-api-8e4 WARN slow query 3.9s: SELECT * FROM ledger_entries WHERE account_id=$1 ORDER BY created_at DESC\n2026-10-14T09:44:12Z billing-api-2b1 WARN slow query 4.2s: SELECT * FROM ledger_entries WHERE account_id=$1 ORDER BY created_at DESC\n2026-10-14T09:45:00Z notifications-4fd WARN template cache miss key=welcome_email_v2 (fallback used)\n2026-10-14T09:45:21Z billing-api-8e4 ERROR POST /v1/charges 503 timeout waiting for connection from pool (max=20, in_use=20, waiting=52)\n2026-10-14T09:46:40Z gateway-1a0 WARN upstream billing-api responded 503 (3 of last 10)\n2026-10-14T09:47:05Z notifications-7c9 WARN template cache miss key=welcome_email_v2 (fallback used)\n\nmetrics: db-billing cpu 38%, connections 20/20 (pool), active queries 19, longest 41s\nmetrics: notifications warn rate 220/min (same as the last 6 days)\ndeploys (24h): none for billing, gateway, auth. notifications 1.9.3 six days ago."
+  },
+  {
+    "id": "upstream-root-cause",
+    "title": "Gateway 502s, fault is two hops away",
+    "trap": "Gateway is the loudest symptom. The cause is session cache eviction, which slows auth.",
+    "expected": {
+      "severity": "sev1",
+      "components": [
+        "auth",
+        "session-cache"
+      ]
+    },
+    "text": "ALERT gateway 502 rate 18% for 6 min. Logins failing for web and mobile.\n\n2026-10-15T13:02:10Z gateway-0c2 ERROR upstream_status=502 route=/v1/session upstream=auth:8443 duration=5000ms\n2026-10-15T13:02:10Z gateway-5d7 ERROR upstream_status=502 route=/v1/session upstream=auth:8443 duration=5001ms\n2026-10-15T13:02:11Z gateway-0c2 WARN circuit half-open upstream=auth\n2026-10-15T13:02:14Z gateway-5d7 ERROR upstream_status=502 route=/v1/orders upstream=billing:8443 duration=120ms\n2026-10-15T13:02:20Z auth-3fa WARN token introspection slow: 4.7s (p50 over last hour 60ms)\n2026-10-15T13:02:20Z auth-3fa INFO session lookup miss sid=7c1e... falling back to database\n2026-10-15T13:02:21Z auth-9b8 INFO session lookup miss sid=2d90... falling back to database\n2026-10-15T13:02:21Z auth-9b8 INFO session lookup miss sid=a41f... falling back to database\n2026-10-15T13:02:23Z auth-3fa WARN db pool wait 3.1s (max=40, in_use=40)\n2026-10-15T13:02:30Z gateway-0c2 ERROR upstream_status=502 route=/v1/session upstream=auth:8443 duration=5000ms\n2026-10-15T13:02:41Z billing-6ee INFO GET /v1/invoices 200 88ms\n2026-10-15T13:02:55Z gateway-5d7 INFO health check ok upstream=billing\n2026-10-15T13:02:58Z gateway-5d7 INFO health check FAIL upstream=auth (timeout)\n\nmetrics: session-cache (redis) used_memory 15.98GB / maxmemory 16GB, evicted_keys 91k/min (was 0), hit rate 31% (was 99%)\nmetrics: session-cache clients 412, ops/sec 38k\nmetrics: auth db cpu 77%\nchange log: 12:40 UTC feature flag 'long_lived_sessions' enabled for 100% (was 5%)\ndeploys (24h): none"
+  },
+  {
+    "id": "deploy-red-herring",
+    "title": "Verification SMS failures right after a deploy",
+    "trap": "A deploy landed 7 min after the errors began. The provider was already failing.",
+    "expected": {
+      "severity": "sev2",
+      "components": [
+        "notifications",
+        "carrier-provider"
+      ]
+    },
+    "text": "ALERT voice-verification: SMS challenge success 62% (normally 99%). Started about 14:02 UTC.\n\n2026-10-16T14:02:18Z notifications-1de INFO sms send ok provider=carrier-a to=+1555010**** ms=210\n2026-10-16T14:02:41Z notifications-1de WARN sms send failed provider=carrier-b status=503 body='service unavailable' retry=1\n2026-10-16T14:02:43Z notifications-1de WARN sms send failed provider=carrier-b status=503 body='service unavailable' retry=2\n2026-10-16T14:02:49Z notifications-1de ERROR sms send gave up provider=carrier-b after 3 attempts\n2026-10-16T14:03:30Z notifications-77a ERROR sms send gave up provider=carrier-b after 3 attempts\n2026-10-16T14:04:02Z voice-verification-5c3 WARN challenge delivery failed ch=sms attempt=1 reason=send_failed\n2026-10-16T14:05:19Z voice-verification-5c3 WARN challenge delivery failed ch=sms attempt=1 reason=send_failed\n2026-10-16T14:06:00Z notifications-1de INFO sms send ok provider=carrier-a to=+1555010**** ms=190\n2026-10-16T14:09:12Z deploy voice-verification 3.2.0 rolling out (changes: logging format, dependency bumps)\n2026-10-16T14:09:58Z voice-verification-b02 INFO started version=3.2.0\n2026-10-16T14:10:30Z voice-verification-b02 WARN challenge delivery failed ch=sms attempt=1 reason=send_failed\n2026-10-16T14:11:44Z notifications-77a WARN sms send failed provider=carrier-b status=503 body='service unavailable' retry=1\n2026-10-16T14:12:02Z voice-verification-5c3 INFO challenge delivery ok ch=sms attempt=1\n\nmetrics: sms failures by provider (14:00-14:15): carrier-a 0.4%, carrier-b 71%\nmetrics: voice-verification http 5xx 0.2% (flat across the deploy)\nstatus page (external): carrier-b 'investigating degraded SMS delivery' posted 14:06 UTC"
+  },
+  {
+    "id": "internal-only-impact",
+    "title": "Admin report page returning 500s",
+    "trap": "Looks alarming, but no customer traffic is affected. It is a low severity.",
+    "expected": {
+      "severity": "sev3",
+      "components": [
+        "billing",
+        "admin-console"
+      ]
+    },
+    "text": "TICKET from finance-ops: 'Month-end revenue report page shows Internal Server Error since 07:15 UTC.'\n\n2026-10-17T07:15:02Z admin-console-a3 INFO GET /reports/revenue user=fin-ops-ana (role=finance) start\n2026-10-17T07:15:03Z admin-console-a3 ERROR report_job revenue_monthly failed: 401 Unauthorized from billing-reports:8443\n2026-10-17T07:15:03Z admin-console-a3 ERROR GET /reports/revenue 500 38ms\n2026-10-17T07:15:40Z admin-console-a3 ERROR report_job revenue_monthly failed: 401 Unauthorized from billing-reports:8443\n2026-10-17T07:16:10Z billing-reports-2f1 WARN auth failed client=svc-admin-console reason=token_expired exp=2026-10-17T00:00:00Z\n2026-10-17T07:16:11Z billing-reports-2f1 WARN auth failed client=svc-admin-console reason=token_expired exp=2026-10-17T00:00:00Z\n2026-10-17T07:18:05Z admin-console-a3 INFO GET /users 200 90ms\n2026-10-17T07:18:30Z admin-console-a3 INFO GET /audit 200 140ms\n2026-10-17T07:20:00Z billing-api-8e4 INFO POST /v1/charges 200 190ms\n2026-10-17T07:20:01Z billing-api-2b1 INFO POST /v1/charges 200 205ms\n2026-10-17T07:21:15Z gateway-1a0 INFO window=5m requests=48210 5xx=3 (0.006%)\n\nmetrics: customer-facing success rate 99.99% (unchanged)\nmetrics: admin-console users online 4, all internal\nnotes: service token for svc-admin-console is rotated every 90 days; last rotation 2026-07-19"
+  },
+  {
+    "id": "cascade-three-services",
+    "title": "Login, billing and gateway all degrade within minutes",
+    "trap": "Three services alert in sequence. Timestamps show which one started it.",
+    "expected": {
+      "severity": "sev1",
+      "components": [
+        "auth"
+      ]
+    },
+    "text": "INCIDENT: gateway 504s, billing timeouts, login failures. Alerts fired in the order shown below.\n\n2026-10-18T16:21:05Z deploy auth 2.14.2 complete (changes: add per-user permission lookup on token refresh)\n2026-10-18T16:23:40Z auth-3fa INFO token refresh uid=88123 permissions=14 queries=15 ms=140\n2026-10-18T16:26:10Z auth-9b8 INFO token refresh uid=70418 permissions=22 queries=23 ms=260\n2026-10-18T16:29:55Z db-auth cpu 71%\n2026-10-18T16:31:02Z auth-3fa WARN token refresh uid=55102 permissions=31 queries=32 ms=1900\n2026-10-18T16:33:20Z ALERT db-auth cpu 96%, queries/sec 12x baseline\n2026-10-18T16:34:41Z auth-3fa ERROR token refresh timeout after 5000ms\n2026-10-18T16:35:10Z billing-api-2b1 WARN auth introspection slow 3.2s, retrying\n2026-10-18T16:35:50Z billing-api-8e4 ERROR POST /v1/charges 504 upstream auth timeout\n2026-10-18T16:36:30Z ALERT billing-api error rate 22%\n2026-10-18T16:37:05Z gateway-0c2 ERROR upstream_status=504 route=/v1/session upstream=auth duration=5000ms\n2026-10-18T16:37:12Z gateway-5d7 ERROR upstream_status=504 route=/v1/charges upstream=billing duration=5000ms\n2026-10-18T16:37:40Z ALERT gateway 504 rate 31%\n2026-10-18T16:38:02Z notifications-1de INFO queue depth 140 (normal)\n\nmetrics: auth requests/sec flat; db-auth queries/sec 12x; billing and gateway cpu normal\ndeploys (24h): auth 2.14.2 at 16:21 UTC. billing, gateway: none."
+  },
+  {
+    "id": "clock-skew",
+    "title": "Some logins fail with 'token not yet valid'",
+    "trap": "Failures follow one node, not one service version. The cause is the host clock.",
+    "expected": {
+      "severity": "sev2",
+      "components": [
+        "auth",
+        "node-17",
+        "ntp"
+      ]
+    },
+    "text": "SUPPORT: about 1 in 6 users get 'session invalid' right after signing in. Retry usually works.\n\n2026-10-19T08:10:02Z auth-3fa (node-04) INFO issued token sub=88123 iat=1760861402 nbf=1760861402\n2026-10-19T08:10:02Z auth-9b8 (node-17) ERROR token rejected sub=88123 reason=nbf_in_future now=1760861162 nbf=1760861402\n2026-10-19T08:10:09Z auth-3fa (node-04) INFO issued token sub=70418 iat=1760861409 nbf=1760861409\n2026-10-19T08:10:10Z auth-9b8 (node-17) ERROR token rejected sub=70418 reason=nbf_in_future now=1760861170 nbf=1760861409\n2026-10-19T08:10:11Z auth-c12 (node-04) INFO token accepted sub=70418\n2026-10-19T08:11:30Z auth-9b8 (node-17) ERROR token rejected sub=55102 reason=nbf_in_future now=1760861250 nbf=1760861490\n2026-10-19T08:12:00Z auth-ee0 (node-09) INFO token accepted sub=19004\n2026-10-19T08:12:44Z auth-9b8 (node-17) ERROR token rejected sub=31877 reason=nbf_in_future now=1760861324 nbf=1760861564\n2026-10-19T08:13:02Z gateway-1a0 INFO retry after 401 route=/v1/session attempt=2 ok\n2026-10-19T08:14:20Z auth-3fa (node-04) INFO health ok\n\nmetrics: token rejections by node: node-17 212, node-04 0, node-09 0, others 0\nmetrics: node-17 chrony offset -240.1s (other nodes within 5ms); chronyd last sync 2026-10-17T22:50Z\nmetrics: auth cpu 22%, db-auth cpu 25%\ndeploys (24h): none"
+  },
+  {
+    "id": "silent-corruption",
+    "title": "Finance reports zero-value invoices for some customers",
+    "trap": "There are no error lines. Everything logs as success. The data is wrong.",
+    "expected": {
+      "severity": "sev2",
+      "components": [
+        "billing"
+      ]
+    },
+    "text": "TICKET from finance-ops: customers in Japan received invoices totaling 0 JPY today. 31 so far.\n\n2026-10-20T01:00:04Z billing-jobs-1a INFO migration 0147_money_minor_units applied (changes: amounts stored in minor units)\n2026-10-20T02:00:00Z billing-jobs-1a INFO invoice_run start currency_batches=4\n2026-10-20T02:00:03Z billing-jobs-1a INFO invoice generated id=INV-88121 customer=c-5521 currency=USD total=129.00\n2026-10-20T02:00:03Z billing-jobs-1a INFO invoice generated id=INV-88122 customer=c-5522 currency=EUR total=87.50\n2026-10-20T02:00:04Z billing-jobs-1a INFO invoice generated id=INV-88123 customer=c-5523 currency=JPY total=0\n2026-10-20T02:00:04Z billing-jobs-1a INFO invoice generated id=INV-88124 customer=c-5524 currency=JPY total=0\n2026-10-20T02:00:04Z billing-jobs-1a INFO invoice generated id=INV-88125 customer=c-5525 currency=GBP total=44.99\n2026-10-20T02:00:05Z billing-jobs-1a INFO invoice generated id=INV-88126 customer=c-5526 currency=JPY total=0\n2026-10-20T02:00:09Z billing-jobs-1a INFO invoice_run complete invoices=1840 errors=0\n2026-10-20T02:00:10Z notifications-7c9 INFO sent invoice email id=INV-88123 to=c-5523\n2026-10-20T02:05:00Z billing-api-2b1 INFO GET /v1/invoices/INV-88123 200 61ms\n\nmetrics: billing error rate 0.0%, latency normal, job exit code 0\nmetrics: invoices with total=0 by currency since 02:00: JPY 31, others 0\nnotes: JPY has no minor unit (0 decimal places); USD, EUR, GBP use 2.\ndeploys (24h): billing-jobs migration 0147 at 01:00 UTC"
+  },
+  {
+    "id": "expired-certificate",
+    "title": "Verification calls time out across the board",
+    "trap": "Timeouts look like a network or load problem. One buried line names the real cause.",
+    "expected": {
+      "severity": "sev1",
+      "components": [
+        "voice-verification",
+        "gateway",
+        "mtls-certificate"
+      ]
+    },
+    "text": "ALERT: voice-verification success 0% since 03:00 UTC. All challenges time out. Login MFA blocked.\n\n2026-10-18T03:00:07Z gateway-1a0 ERROR upstream=voice-verification:9443 err='context deadline exceeded' after 3000ms\n2026-10-18T03:00:08Z gateway-5d7 ERROR upstream=voice-verification:9443 err='i/o timeout' after 3000ms\n2026-10-18T03:00:09Z gateway-0c2 ERROR upstream=voice-verification:9443 err='context deadline exceeded' after 3000ms\n2026-10-18T03:00:10Z gateway-1a0 WARN retrying upstream=voice-verification (attempt 2)\n2026-10-18T03:00:13Z gateway-1a0 ERROR upstream=voice-verification:9443 err='i/o timeout' after 3000ms\n2026-10-18T03:00:20Z voice-verification-5c3 INFO listening :9443, cpu 3%, goroutines 41\n2026-10-18T03:00:21Z voice-verification-5c3 INFO active connections 0\n2026-10-18T03:00:30Z mesh-sidecar-5c3 WARN tls handshake error from 198.51.100.24:51522: remote error: tls: bad certificate\n2026-10-18T03:00:31Z mesh-sidecar-5c3 ERROR x509: certificate has expired or is not yet valid: current time 2026-10-18T03:00:31Z is after 2026-10-18T03:00:00Z (client cert CN=gateway.mesh.example.net)\n2026-10-18T03:00:40Z gateway-5d7 ERROR upstream=voice-verification:9443 err='i/o timeout' after 3000ms\n2026-10-18T03:01:02Z billing-api-2b1 INFO GET /v1/invoices 200 90ms\n2026-10-18T03:01:05Z auth-3fa INFO GET /health 200\n\nmetrics: voice-verification cpu 3%, memory 40%, network in 0.1 Mbps (normally 18)\nmetrics: gateway to billing, auth, notifications: healthy\ndeploys (24h): none. Cert rotation job last ran 2026-07-20."
+  }
+]

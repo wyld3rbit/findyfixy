@@ -1,0 +1,13 @@
+[
+  {"service": "auth", "version": "2.14.1", "hours_ago": 3, "author": "team-identity", "summary": "Raise session cache TTL"},
+  {"service": "auth", "version": "2.14.0", "hours_ago": 30, "author": "team-identity", "summary": "Add token refresh endpoint"},
+  {"service": "auth", "version": "2.13.4", "hours_ago": 140, "author": "team-identity", "summary": "Fix clock skew in JWT check"},
+  {"service": "billing", "version": "5.2.0", "hours_ago": 6, "author": "team-payments", "summary": "Batch invoice writer"},
+  {"service": "billing", "version": "5.1.9", "hours_ago": 52, "author": "team-payments", "summary": "Retry policy for vendor 429"},
+  {"service": "gateway", "version": "1.40.2", "hours_ago": 1, "author": "team-platform", "summary": "Rate-limit config reload"},
+  {"service": "gateway", "version": "1.40.1", "hours_ago": 20, "author": "team-platform", "summary": "Upgrade TLS library"},
+  {"service": "gateway", "version": "1.39.8", "hours_ago": 96, "author": "team-platform", "summary": "Feature flag client bump"},
+  {"service": "voice-verification", "version": "0.9.3", "hours_ago": 12, "author": "team-voice", "summary": "Carrier routing table update"},
+  {"service": "voice-verification", "version": "0.9.2", "hours_ago": 75, "author": "team-voice", "summary": "Lower audio buffer size"},
+  {"service": "notifications", "version": "3.3.0", "hours_ago": 8, "author": "team-growth", "summary": "Add push batching"}
+]

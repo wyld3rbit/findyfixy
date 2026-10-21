@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FindyFixy</title>
+<!--
+  What this is
+    One page: the system as a schematic, a Run button, and a live event log.
+    Served by `uv run python -m app.console`. Opening the file directly shows
+    the diagram but cannot run anything (it needs the server's /run and /events).
+
+  How it works
+    POST /run starts a run. GET /events streams that run as Server-Sent Events.
+    Each event does two things: it is written to the log at once, and it is
+    queued as an animation step. The queue plays steps one after another, so a
+    burst of events (a fast fake run) still reads as a sequence.
+
+  Security note
+    Event data includes model output, which is untrusted text. Everything from
+    the stream goes in with textContent, never as markup.
+
+  How to extend (one edit per build day)
+    Change a node's `status` in NODES from "planned" to "built". Nothing else.
+-->
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b1220;
+    --panel: #111a2e;
+    --line: #2a3a5c;
+    --text: #dbe6ff;
+    --muted: #8da2c8;
+    --accent: #5cc8ff;
+    --ok: #4ade80;
+    --bad: #fb7185;
+    --warn: #fbbf24;
+    --planned: #7f8fb0;
+  }
+  * { box-sizing: border-box; }
+  /* Author CSS such as `.field { display: grid }` beats the browser's own
+     `[hidden]` rule. Without this line, hidden controls stay visible. */
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header { padding: 12px 16px 0; max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--muted); }
+  /* min-width: 0 lets grid children shrink below their content width. Without
+     it, a long label or a pre block pushes the whole page past a phone screen. */
+  main > *, .controls > * { min-width: 0; }
+  main { max-width: 1200px; margin: 0 auto; padding: 10px 16px 24px; display: grid; gap: 12px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+  .field { display: grid; gap: 4px; min-width: 0; flex: 0 1 270px; }
+  .field.grow { flex: 1 1 260px; }
+  .field.wide { flex: 1 1 100%; }
+  .actions { display: flex; gap: 8px; align-items: end; }
+  .options { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; margin-top: 10px; }
+  .options input[type=number] { width: 72px; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .qtext { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; }
+  @media (min-width: 900px) { .qtext { grid-template-columns: 1fr 1fr; } }
+  #huntstatus:empty, #msg:empty { display: none; }
+  .check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text); }
+  .check input { margin-top: 3px; }
+  label { font-size: 12px; color: var(--muted); }
+  select, input[type=text], input[type=number] {
+    background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 8px; font: inherit; width: 100%;
+  }
+  button {
+    background: var(--accent); color: #04121f; border: 0; border-radius: 6px;
+    padding: 9px 16px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  textarea { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font: 13px/1.4 ui-monospace, Menlo, monospace; width: 100%; height: 104px; resize: vertical; }
+  #preview { margin: 0; height: 104px; max-height: none; overflow: auto; white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); }
+  #huntstatus { margin-top: 8px; font-size: 14px; }
+  #msg { color: var(--warn); min-height: 1.4em; margin-top: 8px; font-size: 13px; }
+
+  /* The schematic keeps a minimum width and scrolls inside its panel on a
+     phone, so its labels stay readable and the page itself never scrolls sideways. */
+  .schematic { overflow-x: auto; }
+  svg { width: 100%; min-width: 720px; height: auto; display: block; }
+  .edge { fill: none; stroke: var(--line); stroke-width: 2; }
+  .edge.dashed { stroke-dasharray: 5 5; }
+  .edge-label { fill: var(--muted); font-size: 11px; text-anchor: middle; }
+  .node rect, .node polygon { fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
+  .node .t { fill: var(--text); font-size: 14px; font-weight: 600; text-anchor: middle; }
+  .node .s { fill: var(--muted); font-size: 11px; text-anchor: middle; }
+  .node .badge { fill: var(--muted); font-size: 11px; text-anchor: middle; }
+  .node[data-status=planned] rect { stroke: var(--planned); stroke-dasharray: 5 4; }
+  .node[data-status=planned] .t { fill: var(--planned); }
+  .node[data-status=planned] .s { fill: var(--planned); }
+  .node[data-status=unwired] rect { stroke: var(--warn); stroke-dasharray: 5 4; }
+  .node.active rect, .node.active polygon { stroke: #fff; fill: #12304d; }
+  .node.calling rect { animation: pulse 1s ease-in-out infinite; }
+  .node.ok rect, .node.ok polygon { stroke: var(--ok); }
+  .node.bad rect, .node.bad polygon { stroke: var(--bad); }
+  .node.ok .badge { fill: var(--ok); }
+  .node.bad .badge { fill: var(--bad); }
+  @keyframes pulse { 50% { fill: #1a3a5e; } }
+  #dot { fill: var(--accent); opacity: 0; }
+  #dot.on { opacity: 1; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend span::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 2px solid; margin-right: 6px; vertical-align: middle; }
+  .l-built::before { border-color: var(--accent); }
+  .l-unwired::before { border-color: var(--warn); border-top-style: dashed !important; }
+  .l-planned::before { border-color: var(--planned); border-top-style: dashed !important; }
+
+  .lower { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  @media (min-width: 900px) { .lower { grid-template-columns: 1.6fr 1fr; } }
+  h2 { font-size: 14px; margin: 0 0 8px; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+  #log { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow: auto; font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #log li { border-bottom: 1px solid var(--line); padding: 6px 2px; cursor: pointer; }
+  #log .t { color: var(--muted); display: inline-block; width: 56px; }
+  #log li:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  #log .k { display: inline-block; min-width: 120px; color: var(--accent); }
+  #log .k.bad { color: var(--bad); }
+  #log .k.ok { color: var(--ok); }
+  #log .k.warn { color: var(--warn); }
+  #log pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; color: var(--muted); display: none; }
+  #log li.open pre { display: block; }
+  #log li:empty { display: none; }
+  #empty { color: var(--muted); font-size: 13px; }
+  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
+  dt { color: var(--muted); }
+  dd { margin: 0; word-break: break-word; }
+  .sev { font-weight: 700; }
+  @media (prefers-reduced-motion: reduce) {
+    .node.calling rect { animation: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>FindyFixy</h1>
+  <p>Fire a run and watch it move through the system. Dashed boxes are not built yet.</p>
+</header>
+
+<main>
+  <section class="panel" aria-label="Run controls">
+    <div class="controls">
+      <div class="field">
+        <label for="mode">Mode</label>
+        <select id="mode">
+          <option value="fake">Fake (scripted, no model)</option>
+          <option value="live">Live (Ollama)</option>
+        </select>
+      </div>
+      <div class="field grow" id="fake-field">
+        <label for="scenario">Scenario</label>
+        <select id="scenario"></select>
+      </div>
+      <div class="field" id="qset-field" hidden>
+        <label for="qset">Question set</label>
+        <select id="qset">
+          <option value="incidents">Realistic incidents</option>
+          <option value="lesson">Lesson questions</option>
+        </select>
+      </div>
+      <div class="field grow" id="question-field" hidden>
+        <label for="question">Question</label>
+        <select id="question"></select>
+      </div>
+      <div class="actions">
+        <button id="run">Run</button>
+        <button id="stop" class="secondary" hidden>Stop hunt</button>
+        <button id="replay" class="secondary" disabled>Replay</button>
+      </div>
+    </div>
+    <div id="live-extra" hidden>
+      <div class="options">
+        <label class="check" title="Both models run for real. Only the route is overridden, so the large model answers."><input type="checkbox" id="force"> Force escalation</label>
+        <label class="check" title="The small model's first reply is replaced with an illegal one (confidence 75). The retry then runs for real."><input type="checkbox" id="retry"> Force retry</label>
+        <label class="check" title="Repeat real runs until a reply fails validation, up to the max."><input type="checkbox" id="hunt"> Hunt for a bad value, max</label>
+        <input type="number" id="huntmax" min="1" max="50" value="20" aria-label="Maximum runs for the hunt (hard limit 50)" title="Hard limit 50">
+        <span class="hint">hover an option for what it does</span>
+      </div>
+      <div class="qtext">
+        <pre id="preview" aria-label="Question text that will be sent"></pre>
+        <textarea id="custom" rows="4" maxlength="8000" placeholder="Or paste your own report or log lines here (max 8000 characters). Typed text is used instead of the selected question." aria-label="Custom question"></textarea>
+      </div>
+    </div>
+    <div id="huntstatus" role="status" aria-live="polite"></div>
+    <div id="msg" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" aria-label="Architecture schematic">
+    <div class="schematic">
+    <svg viewBox="0 50 940 420" role="img" aria-labelledby="svgtitle">
+      <title id="svgtitle">Request flows from the question to the small model, then validation, then a route that either ends or escalates to the large model, and finally a triage record.</title>
+
+      <!-- edges -->
+      <path id="e_q_small" class="edge" d="M150,260 L180,260"/>
+      <path id="e_small_val" class="edge" d="M320,260 L350,260"/>
+      <path id="e_val_route" class="edge" d="M490,260 L520,260"/>
+      <path id="e_retry" class="edge" d="M420,292 C420,352 250,352 250,292"/>
+      <path id="e_route_rec" class="edge" d="M650,260 L790,260"/>
+      <path id="e_route_large" class="edge" d="M585,305 L585,388"/>
+      <path id="e_large_rec" class="edge" d="M655,420 C860,420 860,330 860,292"/>
+      <path class="edge dashed" d="M250,126 L250,228" style="stroke:var(--warn)"/>
+      <text class="edge-label" x="335" y="366">retry with the error text (once)</text>
+      <text class="edge-label" x="720" y="250">confident (&#8805; threshold)</text>
+      <text class="edge-label" x="660" y="352">low confidence or invalid</text>
+
+      <!-- built nodes -->
+      <g class="node" id="n_q" data-status="built">
+        <rect x="10" y="228" width="140" height="64" rx="8"/>
+        <text class="t" x="80" y="256">Question</text>
+        <text class="s" x="80" y="274">incident report</text>
+      </g>
+      <g class="node" id="n_small" data-status="built">
+        <rect x="180" y="228" width="140" height="64" rx="8"/>
+        <text class="t" x="250" y="254">Small model</text>
+        <text class="s" x="250" y="271">Qwen2.5 1.5B</text>
+        <text class="badge" x="250" y="286" id="b_small"> </text>
+      </g>
+      <g class="node" id="n_val" data-status="built">
+        <rect x="350" y="228" width="140" height="64" rx="8"/>
+        <text class="t" x="420" y="254">Validate</text>
+        <text class="s" x="420" y="271">Pydantic, 1 retry</text>
+        <text class="badge" x="420" y="286" id="b_val"> </text>
+      </g>
+      <g class="node" id="n_route" data-status="built">
+        <polygon points="585,215 650,260 585,305 520,260"/>
+        <text class="t" x="585" y="258">Route</text>
+        <text class="badge" x="585" y="274" id="b_route"> </text>
+      </g>
+      <g class="node" id="n_large" data-status="built">
+        <rect x="515" y="388" width="140" height="64" rx="8"/>
+        <text class="t" x="585" y="414">Large model</text>
+        <text class="s" x="585" y="431">Qwen2.5 7B, validated</text>
+        <text class="badge" x="585" y="446" id="b_large"> </text>
+      </g>
+      <g class="node" id="n_rec" data-status="built">
+        <rect x="790" y="228" width="140" height="64" rx="8"/>
+        <text class="t" x="860" y="254">Triage record</text>
+        <text class="s" x="860" y="271">severity, component</text>
+        <text class="badge" x="860" y="286" id="b_rec"> </text>
+      </g>
+
+      <!-- built, not wired -->
+      <g class="node" data-status="unwired">
+        <rect x="180" y="70" width="140" height="56" rx="8"/>
+        <text class="t" x="250" y="94">Deploy tool</text>
+        <text class="s" x="250" y="112">built, not wired</text>
+      </g>
+
+      <!-- planned nodes: one edit per build day flips data-status to built -->
+      <g class="node" data-status="planned">
+        <rect x="10" y="70" width="140" height="56" rx="8"/>
+        <text class="t" x="80" y="94">Retrieval</text>
+        <text class="s" x="80" y="112">Day 3-4, pgvector</text>
+      </g>
+      <g class="node" data-status="planned">
+        <rect x="350" y="70" width="140" height="56" rx="8"/>
+        <text class="t" x="420" y="94">Tracing</text>
+        <text class="s" x="420" y="112">Day 6, Langfuse</text>
+      </g>
+      <g class="node" data-status="planned">
+        <rect x="520" y="70" width="140" height="56" rx="8"/>
+        <text class="t" x="590" y="94">Policy</text>
+        <text class="s" x="590" y="112">Day 7, guardrails</text>
+      </g>
+      <g class="node" data-status="planned">
+        <rect x="690" y="70" width="140" height="56" rx="8"/>
+        <text class="t" x="760" y="94">Gateway</text>
+        <text class="s" x="760" y="112">Day 8, routing</text>
+      </g>
+      <g class="node" data-status="planned">
+        <rect x="10" y="396" width="140" height="56" rx="8"/>
+        <text class="t" x="80" y="420">Evals</text>
+        <text class="s" x="80" y="438">Day 5, golden set</text>
+      </g>
+      <g class="node" data-status="planned">
+        <rect x="790" y="396" width="140" height="56" rx="8"/>
+        <text class="t" x="860" y="420">Human review</text>
+        <text class="s" x="860" y="438">Day 9, approval</text>
+      </g>
+
+      <circle id="dot" r="7" cx="0" cy="0"/>
+    </svg>
+    </div>
+    <div class="legend">
+      <span class="l-built">built</span>
+      <span class="l-unwired">built, not wired into the graph</span>
+      <span class="l-planned">planned (day shown)</span>
+    </div>
+  </section>
+
+  <div class="lower">
+    <section class="panel" aria-label="Event log">
+      <h2>Event log</h2>
+      <p id="empty">No run yet. Press Run.</p>
+      <ol id="log" aria-live="off"></ol>
+    </section>
+    <section class="panel" aria-label="Result">
+      <h2>Result</h2>
+      <dl id="result"><dt>Status</dt><dd id="r-status">idle</dd></dl>
+    </section>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Animation pace. Normal for a single run and for the replay of a hunt's
+// final run. Fast while a hunt is cycling, so the page keeps up with the server.
+const PACE_NORMAL = { step: reduceMotion ? 0 : 350, dot: reduceMotion ? 0 : 450 };
+const PACE_FAST = { step: reduceMotion ? 0 : 60, dot: reduceMotion ? 0 : 150 };
+let pace = PACE_NORMAL;
+
+let source = null;
+let running = false;
+let lastRunExists = false;
+let queue = Promise.resolve();
+const banks = { lesson: [], incidents: [] };   // filled from /config
+let hunting = false;          // true once the stream shows a hunt_started
+let iteration = [];           // events of the hunt's current run, for the slow replay
+
+// ---- small helpers -------------------------------------------------------
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Incidents are long. Show the start of a question, not the whole text.
+function clip(text, n) {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > n ? flat.slice(0, n) + "..." : flat;
+}
+
+function say(text) { $("msg").textContent = text; }
+
+function nodeEl(id) { return $("n_" + id); }
+
+function setBadge(id, text) { $("b_" + id).textContent = text || " "; }
+
+function resetVisuals() {
+  document.querySelectorAll(".node").forEach((n) => n.classList.remove("active", "calling", "ok", "bad"));
+  ["small", "val", "route", "large", "rec"].forEach((id) => setBadge(id, ""));
+  $("dot").classList.remove("on");
+}
+
+function mark(id, ...cls) {
+  const el = nodeEl(id);
+  el.classList.remove("calling", "ok", "bad", "active");
+  cls.forEach((c) => el.classList.add(c));
+}
+
+// Move the dot along an edge path. Resolves when it arrives.
+async function travel(edgeId) {
+  const path = $(edgeId);
+  const dot = $("dot");
+  // requestAnimationFrame never fires in a background tab, which would freeze
+  // the whole queue. Skip the dot when hidden, and cap the wait as a backstop.
+  if (pace.dot === 0 || document.hidden) return;
+  const len = path.getTotalLength();
+  dot.classList.add("on");
+  const start = performance.now();
+  await new Promise((resolve) => {
+    const backstop = setTimeout(resolve, pace.dot + 250);
+    function frame(now) {
+      const p = Math.min(1, (now - start) / pace.dot);
+      const pt = path.getPointAtLength(len * p);
+      dot.setAttribute("cx", pt.x);
+      dot.setAttribute("cy", pt.y);
+      if (p < 1) requestAnimationFrame(frame); else { clearTimeout(backstop); resolve(); }
+    }
+    requestAnimationFrame(frame);
+  });
+  dot.classList.remove("on");
+}
+
+// ---- event log -----------------------------------------------------------
+function summarize(ev) {
+  const d = ev.data;
+  switch (ev.kind) {
+    case "run_started": return `${d.mode} run, small=${d.small_model}, large=${d.large_model}, ${d.forced ? "ESCALATION FORCED" : "threshold " + d.threshold}`;
+    case "node_entered": return `${d.node} (${d.model})`;
+    case "model_request": return `${d.model}, attempt ${d.attempt}`;
+    case "model_reply": return `${d.model}, attempt ${d.attempt}, ${d.reply.length} chars`;
+    case "validation": return d.ok ? `attempt ${d.attempt} valid` : `attempt ${d.attempt} INVALID`;
+    case "fault_injected": return `INJECTED: ${d.model} reply replaced, ${d.field} = ${d.value}`;
+    case "retry": return `re-asking ${d.model}, attempt ${d.attempt}`;
+    case "node_exited": return d.triage ? `${d.node} produced a record` : `${d.node} produced no valid record`;
+    case "route": return `confidence ${d.confidence === null ? "none" : d.confidence} vs ${d.threshold} -> ${d.target === "__end__" ? "done" : d.target}${d.threshold > 1 ? " (forced)" : ""}`;
+    case "run_finished": return `final: ${d.model_used} model`;
+    case "run_failed": return `${d.error_type}`;
+    case "hunt_started": return `up to ${d.max} runs, ${d.questions} question(s) in rotation`;
+    case "hunt_run": return `run ${d.index} of ${d.max}`;
+    case "hunt_finished": return `${d.reason} after ${d.runs} run(s)`;
+    default: return "";
+  }
+}
+
+function addLog(ev) {
+  $("empty").hidden = true;
+  const li = document.createElement("li");
+  const t = document.createElement("span"); t.className = "t"; t.textContent = ev.t.toFixed(2) + "s";
+  const k = document.createElement("span"); k.className = "k"; k.textContent = ev.kind;
+  if (ev.kind === "run_failed" || (ev.kind === "validation" && !ev.data.ok)) k.classList.add("bad");
+  if (ev.kind === "run_finished" || (ev.kind === "validation" && ev.data.ok)) k.classList.add("ok");
+  if (ev.kind === "fault_injected") k.classList.add("warn");
+  if (ev.kind === "hunt_finished") k.classList.add(ev.data.reason === "found" ? "bad" : "ok");
+  const s = document.createElement("span"); s.textContent = summarize(ev);
+  const pre = document.createElement("pre"); pre.textContent = JSON.stringify(ev.data, null, 2);
+  li.append(t, k, s, pre);
+  const toggle = () => {
+    li.classList.toggle("open");
+    li.setAttribute("aria-expanded", li.classList.contains("open"));
+  };
+  li.tabIndex = 0;
+  li.setAttribute("role", "button");
+  li.setAttribute("aria-expanded", "false");
+  li.addEventListener("click", toggle);
+  li.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+  });
+  $("log").append(li);
+  $("log").scrollTop = $("log").scrollHeight;
+}
+
+// ---- result panel --------------------------------------------------------
+function showResult(rows) {
+  const dl = $("result");
+  dl.replaceChildren();
+  for (const [k, v, cls] of rows) {
+    const dt = document.createElement("dt"); dt.textContent = k;
+    const dd = document.createElement("dd"); dd.textContent = v;
+    if (cls) dd.className = cls;
+    dl.append(dt, dd);
+  }
+}
+
+// ---- animation: one async step per event ---------------------------------
+// `view` tracks which node is "current", so a validation event knows whether
+// to light the Validate box (small model) or just flag the large node.
+const view = { node: null, forced: false };
+
+async function animate(ev) {
+  const d = ev.data;
+  switch (ev.kind) {
+    case "run_started":
+      resetVisuals();
+      view.node = null;
+      view.forced = d.forced;
+      mark("q", "active");
+      showResult([["Status", "running", ""], ["Question", clip(d.question, 160), ""]]);
+      break;
+    case "node_entered":
+      view.node = d.node;
+      if (d.node === "small") await travel("e_q_small");
+      mark(d.node, "active");
+      break;
+    case "model_request":
+      mark(view.node, "calling");
+      setBadge(view.node, `calling, attempt ${d.attempt}`);
+      break;
+    case "fault_injected":
+      setBadge(view.node, "reply INJECTED");
+      break;
+    case "model_reply":
+      mark(view.node, "active");
+      if ($("b_" + view.node).textContent === "reply INJECTED") break;
+      setBadge(view.node, `replied, attempt ${d.attempt}`);
+      break;
+    case "validation":
+      if (view.node === "small") {
+        await travel("e_small_val");
+        mark("val", d.ok ? "ok" : "bad");
+        setBadge("val", d.ok ? `attempt ${d.attempt} valid` : `attempt ${d.attempt} invalid`);
+      } else {
+        mark("large", d.ok ? "ok" : "bad");
+        setBadge("large", d.ok ? "valid" : `attempt ${d.attempt} invalid`);
+      }
+      break;
+    case "retry":
+      if (view.node === "small") {
+        await travel("e_retry");
+        mark("small", "active");
+        setBadge("small", `retry, attempt ${d.attempt}`);
+      } else {
+        setBadge("large", `retry, attempt ${d.attempt}`);
+      }
+      break;
+    case "node_exited":
+      break;
+    case "route": {
+      if (view.node === "small") await travel("e_val_route");
+      const c = d.confidence === null ? "none" : d.confidence;
+      mark("route", d.target === "large" ? "bad" : "ok");
+      setBadge("route", view.forced ? `${c}, forced` : `${c} vs ${d.threshold}`);
+      if (d.target === "large") await travel("e_route_large");
+      else await travel("e_route_rec");
+      break;
+    }
+    case "run_finished": {
+      // `model_used` is a real model name in live mode, so use the node instead.
+      if (view.node === "large") await travel("e_large_rec");
+      mark("rec", "ok");
+      setBadge("rec", d.triage.severity);
+      showResult([
+        ["Status", "finished", "ok"],
+        ["Model", d.model_used, ""],
+        ["Severity", d.triage.severity, "sev"],
+        ["Component", d.triage.component, ""],
+        ["Next action", d.triage.next_action, ""],
+        ["Confidence", String(d.triage.confidence), ""],
+      ]);
+      break;
+    }
+    case "hunt_started":
+      pace = PACE_FAST;
+      $("huntstatus").textContent = `Hunting: up to ${d.max} runs`;
+      break;
+    case "hunt_run":
+      $("huntstatus").textContent = `Hunting: run ${d.index} of ${d.max}, no bad value yet`;
+      break;
+    case "run_failed":
+      if (view.node) mark(view.node, "bad");
+      showResult([["Status", "failed", "bad"], ["Error", d.error_type, ""], ["Detail", d.error, ""]]);
+      break;
+  }
+  await sleep(pace.step);
+}
+
+// The hunt's last step. Say what happened, then, if a bad value was found,
+// replay that one run at normal speed so the flash and the retry can be seen.
+async function finishHunt(d) {
+  const text = {
+    found: `Found a bad value on run ${d.runs} of ${d.max}. Replaying that run slowly.`,
+    exhausted: `No bad value in ${d.runs} runs. That is a result: the model did not slip.`,
+    stopped: `Stopped after ${d.runs} run(s). No bad value yet.`,
+    error: `Hunt ended on an error after ${d.runs} run(s). See the log.`,
+  }[d.reason];
+  $("huntstatus").textContent = text;
+  if (d.reason === "found") {
+    pace = PACE_NORMAL;
+    for (const ev of iteration) await animate(ev);
+    $("huntstatus").textContent = `Found a bad value on run ${d.runs} of ${d.max}.`;
+  }
+  pace = PACE_NORMAL;
+}
+
+// ---- streaming -----------------------------------------------------------
+function finishRun() {
+  running = false;
+  $("stop").hidden = true;
+  $("run").disabled = false;
+  $("replay").disabled = !lastRunExists;
+}
+
+function openStream() {
+  if (source) source.close();
+  $("log").replaceChildren();
+  $("empty").hidden = true;
+  queue = Promise.resolve();
+  hunting = false;
+  iteration = [];
+  $("huntstatus").textContent = "";
+  pace = PACE_NORMAL;
+  source = new EventSource("/events?from=0");
+  source.onmessage = (m) => {
+    const ev = JSON.parse(m.data);
+    addLog(ev);
+    if (ev.kind === "hunt_started") hunting = true;
+    if (ev.kind === "run_started") iteration = [];
+    if (hunting) iteration.push(ev);
+    queue = queue.then(() => animate(ev));
+    // A hunt ends on hunt_finished. Its inner runs also end with run_finished
+    // or run_failed, which must NOT close the stream.
+    const ends = hunting
+      ? ev.kind === "hunt_finished"
+      : ev.kind === "run_finished" || ev.kind === "run_failed";
+    if (ev.kind === "hunt_finished") queue = queue.then(() => finishHunt(ev.data));
+    if (ends) {
+      source.close();
+      queue = queue.then(finishRun);
+    }
+  };
+  source.onerror = () => {
+    // The server closes after the terminal event; if we get here before it,
+    // the connection dropped. Stop rather than loop on reconnects.
+    if (running) { say("Stream lost. Press Replay to try again."); }
+    source.close();
+    finishRun();
+  };
+}
+
+async function startRun() {
+  const mode = $("mode").value;
+  const body = { mode };
+  if (mode === "fake") {
+    body.scenario = $("scenario").value;
+  } else {
+    body.question = $("custom").value.trim() || $("question").value;
+    body.force_escalation = $("force").checked;
+    body.force_retry = $("retry").checked;
+    if ($("hunt").checked) body.hunt_max = Math.max(1, Math.min(50, Number($("huntmax").value) || 20));
+  }
+  say("");
+  $("stop").disabled = false;
+  running = true;
+  $("run").disabled = true;
+  $("replay").disabled = true;
+  let res;
+  try {
+    res = await fetch("/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    say("Could not reach the server. Is `uv run python -m app.console` running?");
+    finishRun();
+    return;
+  }
+  if (res.status !== 202) {
+    let detail = "";
+    try { detail = (await res.json()).error; } catch (_) { /* no body */ }
+    say(`Run refused (${res.status}): ${detail}`);
+    finishRun();
+    return;
+  }
+  lastRunExists = true;
+  $("stop").hidden = !body.hunt_max;
+  openStream();
+}
+
+// ---- setup ---------------------------------------------------------------
+// Option labels are short titles. The value is the full text sent to the
+// server. Both go in through the Option constructor (text, not markup).
+function fillQuestions() {
+  const sel = $("question");
+  sel.replaceChildren();
+  for (const q of banks[$("qset").value]) sel.append(new Option(q.label, q.text));
+  showPreview();
+}
+
+function showPreview() {
+  // What will actually be sent: typed text wins over the dropdown.
+  const typed = $("custom").value.trim();
+  $("preview").textContent = typed || $("question").value;
+}
+
+function syncMode() {
+  const live = $("mode").value === "live";
+  $("fake-field").hidden = live;
+  for (const id of ["qset-field", "question-field", "live-extra"]) $(id).hidden = !live;
+}
+
+async function init() {
+  $("mode").addEventListener("change", syncMode);
+  $("run").addEventListener("click", startRun);
+  $("stop").addEventListener("click", () => {
+    fetch("/stop", { method: "POST" }).catch(() => say("Could not reach the server to stop."));
+    $("stop").disabled = true;
+    say("Stopping after the current run.");
+  });
+  // A hunt looks for real slips, so it cannot be combined with a forced fault
+  // (the server refuses it). Retry and escalation can be combined.
+  $("hunt").addEventListener("change", () => {
+    if ($("hunt").checked) { $("force").checked = false; $("retry").checked = false; }
+  });
+  for (const id of ["force", "retry"]) {
+    $(id).addEventListener("change", () => { if ($(id).checked) $("hunt").checked = false; });
+  }
+  $("replay").addEventListener("click", () => { running = true; $("run").disabled = true; $("replay").disabled = true; openStream(); });
+  syncMode();
+  try {
+    const cfg = await (await fetch("/config")).json();
+    for (const s of cfg.scenarios) $("scenario").append(new Option(s.replaceAll("_", " "), s));
+    banks.lesson = cfg.questions.map((q) => ({ label: q, text: q }));
+    banks.incidents = cfg.incidents.map((i) => ({ label: i.title, text: i.text }));
+    $("qset").addEventListener("change", fillQuestions);
+    $("question").addEventListener("change", showPreview);
+    $("custom").addEventListener("input", showPreview);
+    if (!banks.incidents.length) $("qset").value = "lesson";
+    fillQuestions();
+    if (!cfg.live_available) {
+      $("mode").querySelector("option[value=live]").disabled = true;
+      say("Live mode is off: set SMALL_MODEL and LARGE_MODEL in .env and restart the console.");
+    }
+  } catch (err) {
+    say("Open this page through the console server to run it: uv run python -m app.console");
+    $("run").disabled = true;
+  }
+}
+init();
+</script>
+</body>
+</html>

@@ -1,9 +1,12 @@
-"""Day 1: a small-model-first router, built as a LangGraph state machine.
+"""Day 1 router, Day 2 contract: small-model-first, with validated triage output.
 
 What it does
-    1. The small model (1.5B) answers the question and rates its own confidence.
-    2. If confidence is at or above the threshold, that answer is final.
-    3. If not, the large model (7B) answers instead. That answer is final.
+    1. The small model (1.5B) returns a `Triage` record (app/triage.py). An
+       invalid reply is re-asked once with the error text.
+    2. If the record is valid and confidence is at or above the threshold,
+       it is final.
+    3. If the record is still invalid, or confidence is low, the large model
+       (7B) answers instead. That answer is final.
 
 Why this shape
     Most triage questions are routine. A small model answers them fast and
@@ -20,7 +23,7 @@ Why a graph, and not an if statement
 
 Why the graph is built by a function that takes `ask`
     `build_graph` does not know how a model is called. The caller passes in
-    `ask`, a function (model name, question) -> Answer. Production passes
+    `ask`, a function (model name, prompt) -> raw reply text. Production passes
     `ollama_ask`. Tests pass a fake that returns a chosen confidence.
     This is dependency injection. It buys three things:
       - Routing can be tested in milliseconds with no model and no network.
@@ -31,13 +34,13 @@ Why the graph is built by a function that takes `ask`
     to private names and breaks silently when the code is renamed.
 
 Known weaknesses (read these before trusting the numbers)
-    - Confidence is self-reported. The model grades its own work. Small
-      models do this badly. In the Day 1 run, all 5 questions stayed on the
-      small model, including answers that were incomplete.
-    - The large answer is never checked. If the large model is also unsure,
-      its answer is still returned. There is no third tier and no human yet.
-    - No retry and no timeout. If Ollama is down or the model returns bad
-      JSON, the run raises. Day 2 adds validate-retry-escalate.
+    - Confidence is still self-reported. Validation now rejects values outside
+      0 to 1, so the Day 1 "75" case retries and then escalates. It does not
+      make the number meaningful: a small model can write 0.9 and be wrong.
+    - The large model gets the same retry. If it is still invalid, the run
+      raises `TriageError`. There is no third tier and no human yet.
+    - No timeout. If Ollama is down, the run raises. Retries cover bad
+      output, not infrastructure faults.
 
 Run it:   uv run python -m app.graph
 Test it:  uv run pytest
@@ -52,7 +55,9 @@ from dotenv import load_dotenv
 from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import BaseModel, Field
+
+from app.events import Emit, no_emit
+from app.triage import Ask, Triage, TriageError, ask_validated
 
 # The routing policy in one number. Treat it as a product decision, not a
 # constant of nature: it trades cost against quality. Day 8 tunes it
@@ -75,59 +80,40 @@ class S(TypedDict, total=False):
 
     A node returns only the keys it changes. LangGraph merges them in.
     With no custom reducer, a new value for a key replaces the old one.
-    That is why `large` overwrites `small`'s answer and `model_used`.
+    That is why `large` overwrites `small`'s result and `model_used`.
+
+    `triage` is None when the small model never produced a valid record. That
+    is a real state, not an error: `route` sends it to `large`.
 
     `total=False` makes every key optional. That lets us start a run with
     just {"question": ...}. The cost: the type checker no longer guarantees
-    that `confidence` exists when `route` reads it. It exists at runtime only
+    that `triage` exists when `route` reads it. It exists at runtime only
     because `small` always runs first and always sets it.
     """
 
     question: str
-    answer: str
-    confidence: float
+    triage: Triage | None
     model_used: str
 
 
-class Answer(BaseModel):
-    """The contract for what a model must return: an answer plus a confidence.
+def ollama_ask(model: str, prompt: str) -> str:
+    """The real `ask`: call one Ollama model and return its raw reply text.
 
-    The schema is sent to Ollama so the reply comes back as JSON of this shape.
-    Shape is constrained. Values are not guaranteed. In the Day 1 run the
-    small model wrote confidence = 75 (meaning 75%) though the description
-    says 0 to 1. A range check (ge=0, le=1) crashed the run, so it was removed
-    and the raw number is used as written.
-
-    Consequence: any value above 1 always passes the `>= 0.7` check. A model
-    that writes on a 0-to-100 scale will almost never escalate. Day 2 handles
-    this properly with validation and one retry.
-    """
-
-    answer: str
-    confidence: float = Field(
-        description="How sure you are the answer is correct, from 0 to 1."
-    )
-
-
-# The one seam between the graph and the outside world: (model name, question)
-# in, a parsed Answer out. Anything with this shape can drive the graph.
-Ask = Callable[[str, str], Answer]
-
-
-def ollama_ask(model: str, question: str) -> Answer:
-    """The real `ask`: call one Ollama model and return a parsed Answer.
+    `format=<JSON Schema>` turns on constrained decoding: Ollama masks tokens
+    that would break the schema, so the reply is JSON of the right shape.
+    Values are checked later, in `ask_validated`. We return text, not a parsed
+    object, so a bad value fails in our code with a readable message.
 
     We build the client on every call. That is cheap because it is only a
     thin HTTP client. The expensive part is Ollama loading model weights into
     memory. On a 16 GB Mac, switching from the 1.5B to the 7B model can add a
     load delay, so an escalated run pays for a model swap on top of two calls.
 
-    Fails when: Ollama is not running (connection error), the model is not
-    pulled (404), or the reply does not parse into `Answer` (an
-    OutputParserException). Nothing here retries. See the module docstring.
+    Fails when: Ollama is not running (connection error) or the model is not
+    pulled (404). Nothing here retries and there is no timeout.
     """
-    llm = ChatOllama(model=model).with_structured_output(Answer)
-    return llm.invoke(question)
+    llm = ChatOllama(model=model, format=Triage.model_json_schema())
+    return llm.invoke(prompt).content
 
 
 def build_graph(
@@ -136,6 +122,7 @@ def build_graph(
     small_model: str,
     large_model: str,
     threshold: float = THRESHOLD,
+    emit: Emit = no_emit,
 ) -> CompiledStateGraph:
     """Wire the router and return a compiled graph, ready for `.invoke()`.
 
@@ -145,23 +132,37 @@ def build_graph(
     Model names are plain arguments, not environment lookups. Reading the
     environment is the caller's job (`main` does it). That keeps this function
     pure and keeps a missing variable from surfacing deep inside a graph run.
+
+    `emit` reports node entry and exit, model calls and the route decision
+    (app/events.py). The default reports nothing.
     """
 
-    def make_node(model: str) -> Callable[[S], S]:
+    def make_node(name: str, model: str, *, tolerate_invalid: bool) -> Callable[[S], S]:
         """Build a node that asks `model` and writes the result into state.
 
-        `small` and `large` differ only in which model they call. One factory
-        means they cannot drift apart. The node returns a partial state
-        update; LangGraph merges it. See `S` for the merge rule.
+        `small` and `large` differ only in which model they call and in what
+        happens when the model stays invalid after its retry. `small` records
+        `triage=None` so the router can escalate. `large` has nowhere to
+        escalate to, so it lets `TriageError` propagate. One factory means the
+        two cannot drift apart. The node returns a partial state update;
+        LangGraph merges it. See `S` for the merge rule.
         """
 
         def node(state: S) -> S:
-            out = ask(model, state["question"])
-            return {
-                "answer": out.answer,
-                "confidence": out.confidence,
-                "model_used": model,
-            }
+            emit("node_entered", node=name, model=model)
+            try:
+                triage = ask_validated(ask, model, state["question"], emit=emit)
+            except TriageError:
+                if not tolerate_invalid:
+                    raise
+                triage = None
+            emit(
+                "node_exited",
+                node=name,
+                model=model,
+                triage=triage.model_dump() if triage else None,
+            )
+            return {"triage": triage, "model_used": model}
 
         return node
 
@@ -171,27 +172,47 @@ def build_graph(
         This is a pure function of the state: no model call, no network, no
         clock. That makes it deterministic and testable on its own.
 
+        A missing record always escalates. Otherwise the comparison is `>=`,
+        so exactly 0.7 stays on the small model.
+
         The return annotation is load-bearing. LangGraph reads it to learn
         where this edge can go. With a bare `str` it cannot, and its diagram
         drops the `small -> large` edge. Runtime routing would still work,
         because routing uses the returned value. The annotation exists for
         tooling and for the reader. `tests/test_routing.py` pins it.
-
-        The comparison is `>=`, so exactly 0.7 stays on the small model.
         """
-        return END if state["confidence"] >= threshold else "large"
+        triage = state["triage"]
+        if triage is None or triage.confidence < threshold:
+            return "large"
+        return END
+
+    def decide(state: S) -> Literal["large", "__end__"]:
+        """Run `route` and report the decision. Kept apart so `route` stays pure.
+
+        The `Literal` annotation is repeated on purpose: LangGraph reads the
+        one on the function it is given, which is this one.
+        """
+        target = route(state)
+        triage = state["triage"]
+        emit(
+            "route",
+            confidence=triage.confidence if triage else None,
+            threshold=threshold,
+            target=target,
+        )
+        return target
 
     g = StateGraph(S)
-    g.add_node("small", make_node(small_model))
-    g.add_node("large", make_node(large_model))
+    g.add_node("small", make_node("small", small_model, tolerate_invalid=True))
+    g.add_node("large", make_node("large", large_model, tolerate_invalid=False))
     g.set_entry_point("small")  # every run starts at the cheap model
-    g.add_conditional_edges("small", route)  # the decision point
+    g.add_conditional_edges("small", decide)  # the decision point
     g.add_edge("large", END)  # a plain edge: after `large`, always stop
     return g.compile()
 
 
 def main() -> None:
-    """Run the five lesson questions and print model, confidence and latency.
+    """Run the five lesson questions and print triage, model, confidence, latency.
 
     Latency is wall time for the whole graph run, measured with perf_counter
     (a monotonic clock, so system clock changes cannot skew it). It includes
@@ -217,9 +238,10 @@ def main() -> None:
         result = graph.invoke({"question": q})
         latency = time.perf_counter() - start
         print(f"Q: {q}")
-        print(f"A: {result['answer']}")
+        t = result["triage"]
+        print(f"A: {t.severity} | {t.component} | {t.next_action}")
         print(
-            f"model: {result['model_used']} | confidence: {result['confidence']} "
+            f"model: {result['model_used']} | confidence: {t.confidence} "
             f"| latency: {latency:.1f}s\n"
         )
 
