@@ -1,5 +1,5 @@
 window.DATA = {
-  "updated": "2026-10-17",
+  "updated": "2026-10-20",
   "plannedStart": "2026-10-17",
   "plannedEnd": "2026-10-26",
   "countdownStart": "2026-10-17T18:51:00",
@@ -17,7 +17,10 @@ window.DATA = {
     {"date": "2026-10-17", "entry": "Hidden days collapse to one row with a progress count. Concept sections rewritten at staff+ technical depth; Day 10 gains a Concept section."},
     {"date": "2026-10-17", "entry": "Progress data moved to progress.js. Claude Code now owns the tracker, lessons build and checks."},
     {"date": "2026-10-17", "entry": "Day 1 code hardened: whole folder is one git repo with the code in code/ and notes in notes/, one root .gitignore, personal data scrubbed. 9 unit tests pass in 0.18s with Ollama off. Integration bank added (4 tests against real models, skipped unless Ollama is up); not yet run live."},
-    {"date": "2026-10-17", "entry": "Integration bank ran live against Ollama 0.40.6: 4 of 4 passed in 33.0s (small 1.7s, large 4.6s, forced escalation 10.8s, five-question run 15.6s)."}
+    {"date": "2026-10-17", "entry": "Integration bank ran live against Ollama 0.40.6: 4 of 4 passed in 33.0s (small 1.7s, large 4.6s, forced escalation 10.8s, five-question run 15.6s)."},
+    {"date": "2026-10-17", "entry": "Tracker gained a slide-in session log (Log button, top right). Day 2 not started."},
+    {"date": "2026-10-20", "entry": "Day 2 in progress: Triage schema with validate-retry-escalate, and a direct-bound deploy tool. 40 fast tests and 6 live tests pass. Live run: 5 of 5 valid, 0 of 5 escalated. MCP step planned; waiting on a cooldown decision. No self-check items done yet."},
+    {"date": "2026-10-20", "entry": "Day 2 in progress. Built a live console (FindyFixy) that runs the real graph and streams its events, an 8-incident realistic bank, and the direct tool-call loop. 131 fast tests pass. Assistant check runs, not the learner's: 0 of 8 incidents escalated, severity matched the key 3 of 8, and the 1.5B model called the deploy tool with the wrong window (hours 1, not 24) in 2 of 2 runs. certifi upgraded to 2026.10.19 for PYSEC-2026-4320. No self-check item ticked: the learner's own 10-run table is still to do."}
   ],
   "days": [
     {"n": 1, "week": 1, "date": "2026-10-17", "title": "Setup and first graph", "file": "d01.md",
