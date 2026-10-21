@@ -158,9 +158,12 @@ def test_events_show_the_tool_step_before_the_small_node(tool):
     tm = ToolModel(ai(calls=[lookup(24)]), ai("done"))
     graph, _, events = make(tool, tm, {"s": [reply(0.9)]})
     graph.invoke({"question": "q"})
-    order = kinds(events)
-    assert order[:5] == ["node_entered", "tool_call", "tool_result", "node_exited",
-                         "node_entered"]
+    # The tool step's own model calls and tool call are reported, in order,
+    # and only then does the small model start.
+    assert kinds(events)[:9] == [
+        "node_entered", "model_request", "model_reply", "tool_call", "tool_result",
+        "model_request", "model_reply", "node_exited", "node_entered",
+    ]
     assert [e.data["node"] for e in events if e.kind == "node_entered"] == [
         "investigate", "small"]
     call = next(e for e in events if e.kind == "tool_call")
@@ -169,6 +172,85 @@ def test_events_show_the_tool_step_before_the_small_node(tool):
     # The step's cost is visible: it adds a model call to every run.
     assert exited.data["calls"] == 1 and exited.data["turns"] == 2
     assert exited.data["input_tokens"] == 200
+
+
+def test_the_tool_step_reports_while_the_loop_runs_not_after_it(tmp_path):
+    # `tool_call` must be reported BEFORE the tool executes and `tool_result`
+    # after. If the events were replayed after the loop, a live viewer would
+    # show the tool step seconds late (the failure this test guards).
+    from langchain_core.tools import StructuredTool
+
+    order: list[str] = []
+
+    def spy(service: str, hours: int) -> str:
+        order.append("TOOL RUNS")
+        return "[]"
+
+    spy_tool = StructuredTool.from_function(
+        func=spy, name="get_recent_deploys", description="spy",
+        args_schema=make_deploys_tool().args_schema,
+    )
+    tm = ToolModel(ai(calls=[lookup(24)]), ai("done"))
+    events: list[Event] = []
+
+    def sink(event: Event) -> None:
+        events.append(event)
+        order.append(f"event:{event.kind}")
+
+    graph = build_graph(
+        lambda m, p: reply(0.9), small_model="s", large_model="l",
+        emit=make_emit(sink, lambda: 0.0), investigator=build_investigator(tm, spy_tool),
+    )
+    graph.invoke({"question": "q"})
+    seq = [o for o in order if o in (
+        "event:model_request", "event:model_reply", "event:tool_call",
+        "TOOL RUNS", "event:tool_result")]
+    assert seq[:7] == [
+        "event:model_request", "event:model_reply", "event:tool_call",
+        "TOOL RUNS", "event:tool_result", "event:model_request", "event:model_reply",
+    ]
+
+
+def test_each_investigator_model_call_is_reported_with_its_turn_and_tokens(tool):
+    tm = ToolModel(ai(calls=[lookup(24)]), ai("done"))
+    graph, _, events = make(tool, tm, {"s": [reply(0.9)]}, investigate_model="m")
+    graph.invoke({"question": "q"})
+    reqs = [e.data for e in events if e.kind == "model_request" and e.data["model"] == "m"]
+    reps = [e.data for e in events if e.kind == "model_reply" and e.data["model"] == "m"]
+    assert [r["attempt"] for r in reqs] == [1, 2] == [r["attempt"] for r in reps]
+    assert all(r["input_tokens"] == 100 and r["output_tokens"] == 10 for r in reps)
+
+
+@pytest.mark.parametrize(
+    ("metadata", "served", "mismatch"),
+    [({"model": "m"}, "m", False), ({"model": "other"}, "other", True), ({}, None, False)],
+    ids=["same", "different", "unreported"],
+)
+def test_the_investigator_reply_reports_the_served_model(tool, metadata, served, mismatch):
+    def named(content="", calls=None):
+        return AIMessage(content=content, tool_calls=calls or [], response_metadata=metadata)
+
+    tm = ToolModel(named("no lookup needed"))
+    graph, _, events = make(tool, tm, {"s": [reply(0.9)]}, investigate_model="m")
+    graph.invoke({"question": "q"})
+    got = next(e.data for e in events if e.kind == "model_reply" and e.data["model"] == "m")
+    assert got["served_by"] == served and got["mismatch"] is mismatch
+
+
+def test_a_capped_loop_does_not_announce_a_model_call_that_never_happens(tool):
+    from app.investigate import MAX_TURNS
+
+    class Forever:
+        n = 0
+
+        def invoke(self, messages):
+            Forever.n += 1
+            return ai(calls=[lookup(24, id=f"c{Forever.n}")])
+
+    graph, _, events = make(tool, Forever(), {"s": [reply(0.9)]}, investigate_model="m")
+    graph.invoke({"question": "q"})
+    reqs = [e for e in events if e.kind == "model_request" and e.data["model"] == "m"]
+    assert len(reqs) == MAX_TURNS == Forever.n
 
 
 def test_a_run_that_never_stops_asking_for_tools_still_ends(tool):

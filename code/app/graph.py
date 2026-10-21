@@ -56,10 +56,10 @@ from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
 from app.events import Emit, no_emit
-from app.investigate import analyse, format_evidence, investigation_prompt
+from app.investigate import analyse, content_text, format_evidence, investigation_prompt
 from app.triage import Ask, Reply, Triage, TriageError, ask_validated
 
 # The routing policy in one number. Treat it as a product decision, not a
@@ -132,6 +132,7 @@ def build_graph(
     threshold: float = THRESHOLD,
     emit: Emit = no_emit,
     investigator: CompiledStateGraph | None = None,
+    investigate_model: str | None = None,
 ) -> CompiledStateGraph:
     """Wire the router and return a compiled graph, ready for `.invoke()`.
 
@@ -150,29 +151,57 @@ def build_graph(
     in both models' prompts. If `large` takes over, it reuses that evidence and
     the tools are not called again. With no investigator the graph is exactly
     the two-node router it was before: same nodes, same prompts.
+
+    `investigate_model` is the name to show for the investigator's model in
+    events. The investigator is injected with its model already bound, so the
+    graph cannot know the name on its own. `None` means unnamed.
     """
 
     def investigate(state: S) -> S:
-        """Run the tool loop once and store what it found as evidence.
+        """Run the tool loop once, reporting each step as it finishes.
 
-        Tool calls and results are reported after the loop finishes, not as
-        they happen, because the loop is one nested graph run. The node's exit
-        event carries its cost (tokens and turns), since this step adds a model
-        call to every run, even one that ends with no lookup. Failures from
-        infrastructure (Ollama down) propagate like any other.
+        The loop is a nested graph. Running it with `stream_mode="updates"`
+        hands this node one update per step, so events are emitted while the
+        loop runs, not after it. That matters for a live viewer: each model
+        call here is a real request to Ollama, and the viewer should show it
+        when it happens. `tool_call` is emitted BEFORE the tool runs (the loop
+        is paused until this body returns to the generator) and `tool_result`
+        after it. Failures from infrastructure (Ollama down) propagate like any
+        other.
+
+        The node's exit event carries the whole step's cost, because this step
+        adds model calls to every run, even one that ends with no lookup.
         """
-        emit("node_entered", node="investigate", model=None)
-        final = investigator.invoke(
-            {"messages": [HumanMessage(investigation_prompt(state["question"]))]}
-        )
-        inv = analyse(final["messages"])
-        for c in inv.calls:
-            emit("tool_call", name=c.name, args=c.args)
-            emit("tool_result", name=c.name, result=c.result[:600], error=c.error)
+        emit("node_entered", node="investigate", model=investigate_model)
+        messages: list[BaseMessage] = [
+            HumanMessage(investigation_prompt(state["question"]))
+        ]
+        turn = 1
+        emit("model_request", model=investigate_model, attempt=turn)
+        updates = investigator.stream({"messages": list(messages)}, stream_mode="updates")
+        for update in updates:
+            for step, delta in update.items():
+                new = delta.get("messages", [])
+                messages.extend(new)
+                if step == "agent":
+                    for reply in new:
+                        _emit_agent_reply(reply, turn)
+                elif step == "tools":
+                    for result in new:
+                        if isinstance(result, ToolMessage):
+                            emit(
+                                "tool_result",
+                                name=result.name,
+                                result=content_text(result.content)[:600],
+                                error=result.status == "error",
+                            )
+                    turn += 1
+                    emit("model_request", model=investigate_model, attempt=turn)
+        inv = analyse(messages)
         emit(
             "node_exited",
             node="investigate",
-            model=None,
+            model=investigate_model,
             calls=len(inv.calls),
             turns=inv.turns,
             input_tokens=inv.input_tokens,
@@ -181,6 +210,25 @@ def build_graph(
             served_by=list(inv.served_by),
         )
         return {"evidence": format_evidence(inv.calls)}
+
+    def _emit_agent_reply(reply: BaseMessage, turn: int) -> None:
+        """Report one investigator model reply, then any tool calls in it."""
+        if not isinstance(reply, AIMessage):
+            return
+        served_by = (reply.response_metadata or {}).get("model")
+        usage = reply.usage_metadata or {}
+        emit(
+            "model_reply",
+            model=investigate_model,
+            attempt=turn,
+            reply=content_text(reply.content),
+            served_by=served_by,
+            mismatch=bool(served_by and investigate_model and served_by != investigate_model),
+            input_tokens=usage.get("input_tokens"),
+            output_tokens=usage.get("output_tokens"),
+        )
+        for call in reply.tool_calls:
+            emit("tool_call", name=call["name"], args=call["args"])
 
     def make_node(name: str, model: str, *, tolerate_invalid: bool) -> Callable[[S], S]:
         """Build a node that asks `model` and writes the result into state.

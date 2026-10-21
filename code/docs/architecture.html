@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FindyFixy</title>
+<!-- The icon is inline, so the browser makes no request for /favicon.ico. A
+     magnifier (find) with a check (fix). -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1220'/%3E%3Ccircle cx='27' cy='27' r='13' fill='none' stroke='%235cc8ff' stroke-width='6'/%3E%3Cline x1='37' y1='37' x2='52' y2='52' stroke='%235cc8ff' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M20 27l5 5 9-10' fill='none' stroke='%234ade80' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <!--
   What this is
     One page: the system as a schematic, a Run button, and a live event log.
@@ -61,6 +64,8 @@
   .actions { display: flex; gap: 8px; align-items: end; }
   .options { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; margin-top: 10px; }
   .options input[type=number] { width: 72px; }
+  .stress { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+  .stress select { width: auto; padding: 4px 6px; }
   .hint { color: var(--muted); font-size: 12px; }
   .qtext { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; }
   @media (min-width: 900px) { .qtext { grid-template-columns: 1fr 1fr; } }
@@ -157,8 +162,8 @@
       <div class="field">
         <label for="mode">Mode</label>
         <select id="mode">
+          <option value="live" selected>Live (Ollama)</option>
           <option value="fake">Fake (scripted, no model)</option>
-          <option value="live">Live (Ollama)</option>
         </select>
       </div>
       <div class="field grow" id="fake-field">
@@ -186,6 +191,8 @@
       <div class="options">
         <label class="check" title="Run the tool step first: the model may look up recent deploys, and the result goes into the triage prompt. Adds a model call to every run."><input type="checkbox" id="usetools" checked> Tool step</label>
         <label class="check" title="Both models run for real. Only the route is overridden, so the large model answers."><input type="checkbox" id="force"> Force escalation</label>
+        <label class="stress" title="Make the triage model fail on purpose, with real replies. Pick a setting to see what it does.">Stress
+          <select id="stress"><option value="none">none</option></select></label>
         <label class="check" title="The small model's first reply is replaced with an illegal one (confidence 75). The retry then runs for real."><input type="checkbox" id="retry"> Force retry</label>
         <label class="check" title="Repeat real runs until a reply fails validation, up to the max."><input type="checkbox" id="hunt"> Hunt for a bad value, max</label>
         <input type="number" id="huntmax" min="1" max="50" value="20" aria-label="Maximum runs for the hunt (hard limit 50)" title="Hard limit 50">
@@ -333,7 +340,14 @@ const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").match
 // final run. Fast while a hunt is cycling, so the page keeps up with the server.
 const PACE_NORMAL = { step: reduceMotion ? 0 : 350, dot: reduceMotion ? 0 : 450 };
 const PACE_FAST = { step: reduceMotion ? 0 : 60, dot: reduceMotion ? 0 : 150 };
+// Live runs: events arrive when the real work happens, so the picture must not
+// add delay of its own. A short move, no pause.
+const PACE_REALTIME = { step: 0, dot: reduceMotion ? 0 : 120 };
 let pace = PACE_NORMAL;
+// Events received but not yet animated. In a live run, if this grows past one the
+// picture is behind reality, so it skips moves and pauses until it catches up.
+// Fake runs are not skipped: their events arrive in bursts and need pacing to read.
+let backlog = 0;
 
 let source = null;
 let running = false;
@@ -352,6 +366,8 @@ function clip(text, n) {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > n ? flat.slice(0, n) + "..." : flat;
 }
+
+function catchingUp() { return view.live && backlog > 1; }
 
 function say(text) { $("msg").textContent = text; }
 
@@ -380,7 +396,7 @@ async function travel(edgeId) {
   const dot = $("dot");
   // requestAnimationFrame never fires in a background tab, which would freeze
   // the whole queue. Skip the dot when hidden, and cap the wait as a backstop.
-  if (pace.dot === 0 || document.hidden) return;
+  if (pace.dot === 0 || document.hidden || catchingUp()) return;
   const len = path.getTotalLength();
   dot.classList.add("on");
   const start = performance.now();
@@ -402,12 +418,12 @@ async function travel(edgeId) {
 function summarize(ev) {
   const d = ev.data;
   switch (ev.kind) {
-    case "run_started": return `${d.mode} run, small=${d.small_model}, large=${d.large_model}, ${d.forced ? "ESCALATION FORCED" : "threshold " + d.threshold}`;
+    case "run_started": return `${d.mode} run, small=${d.small_model}, large=${d.large_model}, ${d.forced ? "ESCALATION FORCED" : "threshold " + d.threshold}${d.stress && d.stress !== "none" ? ", STRESS: " + d.stress.replaceAll("_", " ") : ""}`;
     case "node_entered": return d.model ? `${d.node} (${d.model})` : d.node;
     case "tool_call": return `${d.name}(${Object.entries(d.args).map(([k, v]) => k + "=" + v).join(", ")})`;
     case "tool_result": return d.error ? `ERROR ${clip(d.result, 80)}` : clip(d.result, 90);
-    case "model_request": return `${d.model}, attempt ${d.attempt}`;
-    case "model_reply": return `${d.model}, attempt ${d.attempt}, ${d.reply.length} chars, ${servedText(d)}`;
+    case "model_request": return `${d.model ?? "tool model"}, attempt ${d.attempt}`;
+    case "model_reply": return `${d.model ?? "tool model"}, attempt ${d.attempt}, ${d.reply.length} chars, ${servedText(d)}${d.input_tokens != null ? `, ${d.input_tokens} in / ${d.output_tokens} out tokens` : ""}`;
     case "validation": return d.ok ? `attempt ${d.attempt} valid` : `attempt ${d.attempt} INVALID`;
     case "fault_injected": return `INJECTED: ${d.model} reply replaced, ${d.field} = ${d.value}`;
     case "retry": return `re-asking ${d.model}, attempt ${d.attempt}`;
@@ -467,7 +483,10 @@ function showResult(rows) {
 // ---- animation: one async step per event ---------------------------------
 // `view` tracks which node is "current", so a validation event knows whether
 // to light the Validate box (small model) or just flag the large node.
-const view = { node: null, forced: false, tools: false, toolStep: null, served: {}, hasMismatch: false };
+const view = { node: null, forced: false, tools: false, toolStep: null, served: {}, hasMismatch: false, live: false, replaying: false, stress: "none" };
+
+// Page node id for a graph node name (the investigate node is drawn as "inv").
+function nid(node) { return node === "investigate" ? "inv" : node; }
 
 // Compact text for a tool call's arguments, and for what came back.
 function argsText(args) { return clip(Object.values(args).join(", "), 22); }
@@ -486,11 +505,15 @@ function servedText(d) {
 }
 function servedSummary() {
   const parts = [];
-  if (view.toolStep) {
+  // The tool step's own replies carry served_by. Fall back to its summary only
+  // if no reply did (an older stream).
+  if (view.toolStep && !("inv" in view.served)) {
     const s = view.toolStep.served_by || [];
     parts.push(`investigate: ${s.length ? s.join(", ") : "not reported"}`);
   }
-  for (const [node, name] of Object.entries(view.served)) parts.push(`${node}: ${name == null ? "not reported" : name}`);
+  for (const [node, name] of Object.entries(view.served)) {
+    parts.push(`${node === "inv" ? "investigate" : node}: ${name == null ? "not reported" : name}`);
+  }
   return parts.join(" | ") || "not reported";
 }
 function tokensText(d) {
@@ -508,6 +531,9 @@ async function animate(ev) {
       view.toolStep = null;
       view.served = {};
       view.hasMismatch = false;
+      view.live = d.mode === "live";
+      view.stress = d.stress || "none";
+      if (!view.replaying) pace = view.live ? PACE_REALTIME : PACE_NORMAL;
       mark("q", "active");
       if (!d.tools) {
         // No tool step: show the bypass, and dim the boxes that stay idle.
@@ -516,10 +542,12 @@ async function animate(ev) {
         $("e_q_small").style.opacity = 1;
         $("l_bypass").style.opacity = 1;
       }
-      showResult([["Status", "running", ""], ["Question", clip(d.question, 160), ""]]);
+      showResult([["Status", "running", ""], ["Question", clip(d.question, 160), ""],
+                  ...(d.stress && d.stress !== "none" ? [["Stress", d.stress.replaceAll("_", " "), "bad"]] : [])]);
       break;
     case "node_entered":
       if (d.node === "investigate") {
+        view.node = "inv";
         await travel("e_q_inv");
         mark("inv", "calling");
         setBadge("inv", "asking the model");
@@ -602,6 +630,7 @@ async function animate(ev) {
         ["Next action", d.triage.next_action, ""],
         ["Confidence", String(d.triage.confidence), ""],
         ["Served by", servedSummary(), view.hasMismatch ? "bad" : ""],
+        ...(view.stress !== "none" ? [["Stress", view.stress.replaceAll("_", " "), "bad"]] : []),
         ...(view.toolStep ? [["Tool step", `${view.toolStep.calls} call(s), ${view.toolStep.turns} turn(s), ${tokensText(view.toolStep)}`, ""]] : []),
       ]);
       break;
@@ -618,7 +647,7 @@ async function animate(ev) {
       showResult([["Status", "failed", "bad"], ["Error", d.error_type, ""], ["Detail", d.error, ""]]);
       break;
   }
-  await sleep(pace.step);
+  await sleep(catchingUp() ? 0 : pace.step);
 }
 
 // The hunt's last step. Say what happened, then, if a bad value was found,
@@ -633,7 +662,9 @@ async function finishHunt(d) {
   $("huntstatus").textContent = text;
   if (d.reason === "found") {
     pace = PACE_NORMAL;
+    view.replaying = true;   // run_started inside the replay must not switch to real-time pacing
     for (const ev of iteration) await animate(ev);
+    view.replaying = false;
     $("huntstatus").textContent = `Found a bad value on run ${d.runs} of ${d.max}.`;
   }
   pace = PACE_NORMAL;
@@ -664,7 +695,8 @@ function openStream() {
     if (ev.kind === "hunt_started") hunting = true;
     if (ev.kind === "run_started") iteration = [];
     if (hunting) iteration.push(ev);
-    queue = queue.then(() => animate(ev));
+    backlog++;
+    queue = queue.then(() => { backlog--; return animate(ev); });
     // A hunt ends on hunt_finished. Its inner runs also end with run_finished
     // or run_failed, which must NOT close the stream.
     const ends = hunting
@@ -695,6 +727,7 @@ async function startRun() {
     body.force_escalation = $("force").checked;
     body.force_retry = $("retry").checked;
     body.use_tools = $("usetools").checked;
+    body.stress = $("stress").value;
     if ($("hunt").checked) body.hunt_max = Math.max(1, Math.min(50, Number($("huntmax").value) || 20));
   }
   say("");
@@ -790,6 +823,16 @@ async function init() {
       $("usetools").parentElement.title = "Set SMALL_MODEL and LARGE_MODEL in .env and restart the console.";
     }
     if (cfg.dev_reload) startDevReload();
+    for (const [name, text] of Object.entries(cfg.stresses || {})) {
+      if (name === "none") continue;
+      const o = new Option(name.replaceAll("_", " "), name);
+      o.title = text;
+      $("stress").append(o);
+    }
+    $("stress").addEventListener("change", () => {
+      $("stress").title = (cfg.stresses || {})[$("stress").value] || "";
+      say($("stress").value === "none" ? "" : `Stress: ${cfg.stresses[$("stress").value]}`);
+    });
     for (const s of cfg.scenarios) $("scenario").append(new Option(s.replaceAll("_", " "), s));
     banks.lesson = cfg.questions.map((q) => ({ label: q, text: q }));
     banks.incidents = cfg.incidents.map((i) => ({ label: i.title, text: i.text }));
@@ -799,6 +842,9 @@ async function init() {
     if (!banks.incidents.length) $("qset").value = "lesson";
     fillQuestions();
     if (!cfg.live_available) {
+      // Live is the default, but it needs the model names in .env.
+      $("mode").value = "fake";
+      syncMode();
       $("mode").querySelector("option[value=live]").disabled = true;
       say("Live mode is off: set SMALL_MODEL and LARGE_MODEL in .env and restart the console.");
     }

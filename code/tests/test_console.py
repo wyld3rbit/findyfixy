@@ -653,3 +653,100 @@ def test_page_shows_and_flags_the_served_model(server):
     html = call(port, "GET", "/")[1].decode()
     for needle in ("served by", "MISMATCH", "Served by", "not reported"):
         assert needle in html
+
+
+def test_the_page_declares_an_inline_icon_so_browsers_do_not_ask_for_one(server):
+    _, port = server
+    html = call(port, "GET", "/")[1].decode()
+    assert 'rel="icon"' in html and "data:image/svg+xml" in html
+
+
+def test_favicon_requests_get_no_content_and_are_not_logged(server, capsys):
+    _, port = server
+    status, body = call(port, "GET", "/favicon.ico")
+    call(port, "GET", "/config")
+    err = capsys.readouterr().err
+    assert status == 204 and body == b""
+    assert "/config" in err and "favicon" not in err
+
+
+# ---- stress ------------------------------------------------------------------
+
+
+def stressed_hub(monkeypatch):
+    """A live hub whose stressed `ask` is a recording fake. Returns (srv, seen)."""
+    import app.console as console
+
+    seen: list[str] = []
+
+    def fake_make(stress):
+        seen.append(stress)
+        return lambda m, p: console._reply(0.9)
+
+    monkeypatch.setattr(console, "make_ollama_ask", fake_make)
+    hub = RunHub(live_models=("s", "l"), sleep=lambda s: None, fake_delay=0)
+    srv = serve(hub, port=0)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, seen
+
+
+def test_a_stressed_live_run_uses_that_stress_and_says_so(monkeypatch):
+    srv, seen = stressed_hub(monkeypatch)
+    port = srv.server_address[1]
+    try:
+        post_run(port, {"mode": "live", "question": "q", "stress": "vague_prompt"})
+        events = stream(port)
+        assert seen == ["vague_prompt"]
+        assert events[0]["data"]["stress"] == "vague_prompt"
+    finally:
+        srv.shutdown(); srv.server_close()
+
+
+def test_an_unstressed_live_run_does_not_build_a_stressed_ask(monkeypatch):
+    srv, seen = stressed_hub(monkeypatch)
+    port = srv.server_address[1]
+    try:
+        post_run(port, {"mode": "live", "question": "q"})
+        stream(port)
+        assert seen == []
+    finally:
+        srv.shutdown(); srv.server_close()
+
+
+def test_hunt_can_be_combined_with_a_stress(monkeypatch):
+    srv, seen = stressed_hub(monkeypatch)
+    port = srv.server_address[1]
+    try:
+        status, _ = post_run(port, {"mode": "live", "question": "q", "hunt_max": 2,
+                                    "stress": "no_format"})
+        assert status == 202 and seen == ["no_format"]
+        stream(port)
+    finally:
+        srv.shutdown(); srv.server_close()
+
+
+@pytest.mark.parametrize("body", [
+    {"mode": "live", "question": "q", "stress": "nonsense"},
+    {"mode": "fake", "scenario": "stay_small", "stress": "no_format"},
+])
+def test_bad_stress_requests_are_422(monkeypatch, body):
+    srv, _ = stressed_hub(monkeypatch)
+    try:
+        assert post_run(srv.server_address[1], body)[0] == 422
+    finally:
+        srv.shutdown(); srv.server_close()
+
+
+def test_config_lists_the_stresses_with_descriptions(server):
+    _, port = server
+    cfg = json.loads(call(port, "GET", "/config")[1])
+    assert {"none", "no_format", "vague_prompt", "percent_log", "small_context"} == set(cfg["stresses"])
+    assert all(cfg["stresses"].values())
+
+
+def test_page_defaults_to_live_mode_and_has_the_stress_control(server):
+    _, port = server
+    html = call(port, "GET", "/")[1].decode()
+    assert '<option value="live" selected>' in html
+    assert html.index('<option value="live"') < html.index('<option value="fake"')
+    assert 'id="stress"' in html

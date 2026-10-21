@@ -70,6 +70,7 @@ from app.dev_reload import fingerprint, snapshot
 from app.events import Emit, Event, make_emit
 from app.incidents import DEFAULT_PATH, Incident, load_incidents
 from app.investigate import build_investigator
+from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
 from app.tools import make_deploys_tool
 from app.graph import QUESTIONS, THRESHOLD, build_graph, ollama_ask
 from app.triage import Ask, TriageError
@@ -222,6 +223,8 @@ class RunRequest(BaseModel):
     # Live mode only. Replace the small model's FIRST reply with an illegal
     # one (confidence 75), so validation rejects it and the retry runs for real.
     force_retry: bool = False
+    # Live mode only. Make the triage model fail on purpose (app/stress.py).
+    stress: Stress = "none"
     # Live mode only. Run the tool step (look up deploys) before triage.
     use_tools: bool = False
     # Live mode only. Repeat real runs until a reply fails validation, or until
@@ -323,7 +326,9 @@ class RunHub:
             if not (req.question and req.question.strip()):
                 raise ValueError("live mode needs a question")
             small, large = self._live_models
-            ask: Ask = ollama_ask
+            # Unstressed live runs keep using `ollama_ask`, so tests and anything
+            # else that replaces it behave as before.
+            ask: Ask = ollama_ask if req.stress == "none" else make_ollama_ask(req.stress)
             question = req.question.strip()
             forced = req.force_escalation
             investigator = None
@@ -334,8 +339,8 @@ class RunHub:
             if req.hunt_max is not None and (forced or req.force_retry):
                 raise ValueError("hunt cannot be combined with a forced fault")
         else:
-            if req.hunt_max is not None or req.force_retry:
-                raise ValueError("hunt and force_retry need live mode")
+            if req.hunt_max is not None or req.force_retry or req.stress != "none":
+                raise ValueError("hunt, force_retry and stress need live mode")
             if req.scenario is None:
                 raise ValueError("fake mode needs a scenario")
             small, large = "small", "large"
@@ -365,7 +370,7 @@ class RunHub:
                 run_id, ask, small, large, question, req.mode, forced,
                 req.hunt_max, req.force_retry,
             ),
-            kwargs={"investigator": investigator},
+            kwargs={"investigator": investigator, "stress": req.stress},
             daemon=True,
         ).start()
         return run_id
@@ -397,6 +402,7 @@ class RunHub:
         force_retry: bool,
         *,
         investigator: CompiledStateGraph | None = None,
+        stress: Stress = "none",
     ) -> None:
         """The run thread. Always ends with exactly one terminal event.
 
@@ -418,7 +424,7 @@ class RunHub:
         def once(q: str) -> str:
             return self._run_once(
                 emit, ask, small, large, q, mode, forced, run_id, threshold,
-                investigator,
+                investigator, stress,
             )
 
         try:
@@ -443,6 +449,7 @@ class RunHub:
         run_id: int,
         threshold: float,
         investigator: CompiledStateGraph | None = None,
+        stress: Stress = "none",
     ) -> Literal["finished", "failed", "error"]:
         """One graph run. Returns how it ended, after emitting its event.
 
@@ -453,7 +460,7 @@ class RunHub:
         """
         emit("run_started", run=run_id, mode=mode, question=question,
              small_model=small, large_model=large, threshold=threshold, forced=forced,
-             tools=investigator is not None)
+             tools=investigator is not None, stress=stress)
         try:
             graph = build_graph(
                 ask,
@@ -462,6 +469,7 @@ class RunHub:
                 threshold=threshold,
                 emit=emit,
                 investigator=investigator,
+                investigate_model=small if investigator is not None and mode == "live" else None,
             )
             result = graph.invoke({"question": question})
             emit(
@@ -562,13 +570,14 @@ def make_handler(
         protocol_version = "HTTP/1.1"
 
         def log_message(self, format: str, *args: object) -> None:
-            """Log requests to stderr, except the dev page's version poll.
+            """Log requests to stderr, except two that only add noise.
 
-            The page polls `/version` once a second in dev mode. Logged, those
-            lines bury the ones that matter (`POST /run`, `GET /events`). Only
-            that route is quiet; everything else logs as before.
+            The dev page polls `/version` once a second, and some browsers ask for
+            `/favicon.ico` on every load. Logged, those lines bury the ones that
+            matter (`POST /run`, `GET /events`). Only those routes are quiet;
+            everything else logs as before.
             """
-            if self.path.split("?")[0] == "/version":
+            if self.path.split("?")[0] in ("/version", "/favicon.ico"):
                 return
             super().log_message(format, *args)
 
@@ -612,6 +621,13 @@ def make_handler(
                 return self._send(
                     HTTPStatus.OK, page.read_bytes(), "text/html; charset=utf-8"
                 )
+            if url.path == "/favicon.ico":
+                # The page declares an inline icon, so browsers normally never ask.
+                # Some still do. Answer "no content" instead of a 404 in the log.
+                self.send_response(HTTPStatus.NO_CONTENT)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             if url.path == "/version" and dev_root is not None:
                 return self._json(
                     HTTPStatus.OK,
@@ -632,6 +648,7 @@ def make_handler(
                         "threshold": THRESHOLD,
                         "hunt_default": HUNT_DEFAULT,
                         "hunt_limit": HUNT_LIMIT,
+                        "stresses": {s: DESCRIPTIONS[s] for s in STRESSES},
                         "dev_reload": dev_root is not None,
                     },
                 )
