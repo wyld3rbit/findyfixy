@@ -1,31 +1,22 @@
-"""Day 2, step 4: tool calling on the direct path, measured.
+"""Day 2, step 4: the direct tool path, measured.
 
 What it does
-    Gives a model one tool (`get_recent_deploys`), asks a fixed question that
-    needs it, and runs the call loop: the model asks for the tool, our code
-    runs it in-process, the result goes back, the model answers. Each run
-    records input tokens, output tokens, wall time, how many tool calls were
-    made, and whether the answer was right. `main` repeats this and prints a
-    table. Step 5 repeats it through an MCP server so the two can be compared.
+    Runs a fixed question that needs the deploy tool through the LangGraph
+    tool loop (app/investigate.py), 10 times, and prints one row per run:
+    input tokens, output tokens, wall time, tool calls, the arguments the
+    model chose, and whether the answer was right. Step 5 repeats it with the
+    tool served over MCP so the two can be compared.
 
-Why "direct" is a plain function call here
-    The lesson binds the tool in a LangGraph `ToolNode`. This loop calls the
-    tool itself instead. The point of the measurement is the cost of the
-    transport (in-process call vs an MCP hop). A `ToolNode` would add
-    framework time to one side only. Same tool, same schema, same loop on
-    both paths, so the only difference left is the transport.
+Why "direct" means an in-process tool inside a ToolNode
+    The lesson binds the tool with `bind_tools` in a LangGraph `ToolNode`.
+    That is what `build_investigator` does. The tool is a plain Python
+    function called in the same process. Step 5 changes only where the tool
+    comes from (an MCP server). The loop, the model, the prompt and this
+    measurement stay the same, so the difference left is the transport.
 
 The loop is bounded
-    `max_turns` caps model calls per run. A model that keeps asking for tools,
-    or keeps sending bad arguments, would otherwise loop forever and burn
-    tokens. Hitting the cap is recorded, not hidden.
-
-The model never executes anything
-    It emits a tool name and arguments. Those arguments come from a model that
-    has read untrusted text, so `execute_tool_call` treats them as input from
-    the internet: unknown tool names and invalid arguments become an error
-    message sent back to the model. They never crash the run and never reach
-    the data file unchecked (`DeploysArgs` does the validating, see tools.py).
+    The graph carries a turn counter and stops at `MAX_TURNS`. A hit is
+    recorded in the table, not hidden.
 
 What the numbers can and cannot say
     - Input tokens include the tool's name, description and JSON Schema. They
@@ -34,9 +25,13 @@ What the numbers can and cannot say
       so one tool will understate it. Say so when you quote the number.
     - The first run after a model load is slow. `main` runs one warm-up call
       that is printed but excluded from the summary.
-    - Sampling is random, so runs differ. Ten runs show a shape, not a rate.
+    - Sampling is random, but this model repeated itself almost exactly on
+      this task. Ten identical rows show one behaviour, not a spread.
     - The question says "use the tool". That tests whether the model can call
       it correctly, not whether it would choose to.
+    - The `args` column shows what the model asked for. Legal but wrong
+      arguments (a 1 hour window for a 24 hour question) pass validation, so
+      this column is the only place the mistake is visible.
 
 Run it:   uv run python -m app.direct_run [runs]
 Test it:  uv run pytest
@@ -48,17 +43,11 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
 
-from langchain_core.messages import (
-    AIMessage,
-    BaseMessage,
-    HumanMessage,
-    ToolMessage,
-)
-from langchain_core.tools import StructuredTool, ToolException
-from pydantic import ValidationError
+from langchain_core.messages import HumanMessage
+from langgraph.graph.state import CompiledStateGraph
 
+from app.investigate import analyse, build_investigator, format_args
 from app.tools import make_deploys_tool
 
 # Fixed so runs are comparable across the direct and MCP paths. The data
@@ -72,25 +61,14 @@ MUST_INCLUDE = "2.14.1"
 MUST_EXCLUDE = "2.14.0"
 
 DEFAULT_RUNS = 10
-MAX_TURNS = 4
-
-
-class ToolModel(Protocol):
-    """A chat model with its tools already bound: messages in, one message out.
-
-    `ChatOllama(...).bind_tools([tool])` fits. So does a scripted fake in
-    tests. Injected, so the loop never builds a client.
-    """
-
-    def invoke(self, messages: list[BaseMessage]) -> AIMessage: ...
 
 
 @dataclass(frozen=True)
 class RunStats:
-    """What one run cost and did.
+    """What one run cost and did. Built from an `Investigation` plus the clock.
 
     Token fields are None when the model did not report usage on some turn.
-    A partial sum would look like a real number, so it is dropped instead.
+    `args` lists each tool call's arguments, joined with " | ".
     """
 
     input_tokens: int | None
@@ -102,40 +80,7 @@ class RunStats:
     hit_turn_cap: bool
     correct: bool
     answer: str
-
-
-def execute_tool_call(tools: dict[str, StructuredTool], call: dict) -> ToolMessage:
-    """Run one model-requested tool call. Always returns a `ToolMessage`.
-
-    Unknown tool name or invalid arguments become an error message the model
-    can read and correct, instead of an exception that ends the run.
-    Infrastructure faults (a missing data file) are not caught: the model
-    cannot fix them, and hiding them would look like a model failure.
-    """
-    tool = tools.get(call["name"])
-    if tool is None:
-        return ToolMessage(
-            content=f"error: unknown tool {call['name']!r}",
-            tool_call_id=call["id"],
-            status="error",
-        )
-    try:
-        return tool.invoke(call)
-    except (ValidationError, ToolException) as err:
-        return ToolMessage(
-            content=f"error: {err}", tool_call_id=call["id"], status="error"
-        )
-
-
-def _sum_tokens(messages: list[AIMessage], key: str) -> int | None:
-    """Total one usage field across turns, or None if any turn lacked it."""
-    total = 0
-    for m in messages:
-        usage = m.usage_metadata
-        if not usage or key not in usage:
-            return None
-        total += usage[key]
-    return total
+    args: str
 
 
 def is_correct(answer: str) -> bool:
@@ -144,48 +89,31 @@ def is_correct(answer: str) -> bool:
 
 
 def run_once(
-    model: ToolModel,
-    tools: dict[str, StructuredTool],
+    investigator: CompiledStateGraph,
     question: str = TASK,
     *,
-    max_turns: int = MAX_TURNS,
     clock: Callable[[], float] = time.perf_counter,
 ) -> RunStats:
-    """One full run: ask, execute requested tools, repeat until the model answers.
+    """One full run through the tool loop, timed.
 
-    Wall time covers every model call and every tool call. It is measured
-    with a monotonic clock, so a system clock change cannot skew it.
+    Wall time covers every model call and every tool call, measured with a
+    monotonic clock so a system clock change cannot skew it.
     """
-    messages: list[BaseMessage] = [HumanMessage(question)]
-    replies: list[AIMessage] = []
-    tool_calls = tool_errors = 0
-    answer, hit_cap = "", False
     start = clock()
-    for turn in range(max_turns):
-        ai = model.invoke(messages)
-        replies.append(ai)
-        messages.append(ai)
-        if not ai.tool_calls:
-            answer = str(ai.content)
-            break
-        for call in ai.tool_calls:
-            result = execute_tool_call(tools, call)
-            tool_calls += 1
-            tool_errors += result.status == "error"
-            messages.append(result)
-        if turn == max_turns - 1:
-            hit_cap = True
+    final = investigator.invoke({"messages": [HumanMessage(question)]})
     seconds = clock() - start
+    inv = analyse(final["messages"])
     return RunStats(
-        input_tokens=_sum_tokens(replies, "input_tokens"),
-        output_tokens=_sum_tokens(replies, "output_tokens"),
+        input_tokens=inv.input_tokens,
+        output_tokens=inv.output_tokens,
         seconds=seconds,
-        turns=len(replies),
-        tool_calls=tool_calls,
-        tool_errors=tool_errors,
-        hit_turn_cap=hit_cap,
-        correct=is_correct(answer),
-        answer=answer,
+        turns=inv.turns,
+        tool_calls=len(inv.calls),
+        tool_errors=sum(c.error for c in inv.calls),
+        hit_turn_cap=inv.hit_turn_cap,
+        correct=is_correct(inv.answer),
+        answer=inv.answer,
+        args=" | ".join(format_args(c.args) for c in inv.calls),
     )
 
 
@@ -218,11 +146,14 @@ def format_row(label: str, r: RunStats) -> str:
     o = "?" if r.output_tokens is None else r.output_tokens
     return (
         f"{label:>7} {i:>7} {o:>7} {r.seconds:>7.2f} {r.turns:>5} "
-        f"{r.tool_calls:>5} {r.tool_errors:>4} {'yes' if r.correct else 'no':>8}"
+        f"{r.tool_calls:>5} {r.tool_errors:>4} {'yes' if r.correct else 'no':>8}  {r.args}"
     )
 
 
-HEADER = f"{'run':>7} {'in_tok':>7} {'out_tok':>7} {'secs':>7} {'turns':>5} {'calls':>5} {'errs':>4} {'correct':>8}"
+HEADER = (
+    f"{'run':>7} {'in_tok':>7} {'out_tok':>7} {'secs':>7} {'turns':>5} "
+    f"{'calls':>5} {'errs':>4} {'correct':>8}  args"
+)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -239,15 +170,16 @@ def main(argv: list[str] | None = None) -> None:
     n = int(args[0]) if args else DEFAULT_RUNS
     tool = make_deploys_tool()
     model_name = os.environ["SMALL_MODEL"]
-    model = ChatOllama(model=model_name).bind_tools([tool])
-    tools = {tool.name: tool}
+    investigator = build_investigator(
+        ChatOllama(model=model_name).bind_tools([tool]), tool
+    )
 
     print(f"model: {model_name}   task: {TASK}")
     print(HEADER)
-    print(format_row("warm-up", run_once(model, tools)), " (excluded)")
+    print(format_row("warm-up", run_once(investigator)), " (excluded)")
     runs = []
     for i in range(1, n + 1):
-        stats = run_once(model, tools)
+        stats = run_once(investigator)
         runs.append(stats)
         print(format_row(str(i), stats))
     s = summarise(runs)

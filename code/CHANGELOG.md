@@ -153,6 +153,16 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - Check run against the real 1.5B model (2026-10-20, mine, not for notes/day2.md): tool called 2 of 2, correct 0 of 2, 499 input and 46 to 48 output tokens, 0.6s. The model sent `hours: 1` instead of 24. That is a legal argument, so schema validation passed, and the tool returned nothing, so the model answered "no deploys". Validation catches shape, not meaning. Worth a line in the Day 2 drill.
 - Open: the learner's 10-run measurement (`uv run python -m app.direct_run`), the MCP path (Step 5), the table in `notes/day2.md`. One tool understates MCP's token overhead, which grows with the number of tools.
 
+### Day 2, step 4, stage A: the tool loop as a LangGraph graph with ToolNode (by request)
+
+- `app/investigate.py` (new): `build_investigator(model, tool)` compiles `agent` and `tools` (a real `ToolNode`, error-handling on) with a turn counter in the state, capped at `MAX_TURNS = 4`. `analyse` and `format_evidence` are pure. Evidence text always names the arguments, so `[]` for `hours=1` reads as "nothing in the last hour". Aligns with the lesson (ToolNode) and replaces the hand-written loop I used earlier; the departure noted in the Step 4 entry above is closed.
+- Behaviour difference: at the turn cap the final requested tool is NOT executed (the old loop executed it, then stopped). It is reported with an empty result, flagged as an error.
+- `app/direct_run.py`: rewired onto the investigator; `execute_tool_call` is gone (ToolNode does it). New `args` column in the table (what the model asked for), which closes Step 4b.
+- Tests: `tests/test_investigate.py` (new, 17 cases, real ToolNode and real tool, scripted model), `tests/test_direct_run.py` rewritten (7). Mutations: cap off by one (2 failed), no edge from tools back to agent (12 failed), evidence without arguments (1 failed). All restored. Default run: 141 passed.
+- Two test bugs of mine, fixed: expected argument order (keys are sorted), and an `hours` of 200 that the tool correctly rejects (cap is 168).
+- Check run on the real 1.5B model (2 runs, not for notes): 499 in, 46 out, 0.57s, `hours=1` both times. Same tokens and time as the hand-written loop, so ToolNode added no measurable overhead in this setup (2 runs only).
+- Open: the learner re-runs the 10-run table with the ToolNode loop (the table in `notes/day2.md` is from the old loop and should be replaced). Stage B: wire into the router graph. Stage C: console events and page node. Step 5: MCP, which needs `ainvoke` because MCP tools are async-only.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.
