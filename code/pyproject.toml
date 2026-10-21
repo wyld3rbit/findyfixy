@@ -1,5 +1,5 @@
 [project]
-name = "triage-copilot"
+name = "findyfixy"
 version = "0.1.0"
 description = "Incident triage agent: small-model-first routing with LangGraph and Ollama"
 requires-python = ">=3.13,<3.14"

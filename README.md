@@ -1,6 +1,6 @@
 # LLM Production Sprint
 
-A 10-day, hands-on course in the LLM production stack. You build one product end to end: **Triage Copilot**, an incident-triage agent.
+A 10-day, hands-on course in the LLM production stack. You build one product end to end: **FindyFixy**, an incident-triage agent.
 
 You learn by building it with Claude Code as your build partner. Each day ends with a measured number and a drill question.
 

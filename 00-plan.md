@@ -16,7 +16,7 @@ Not ML research. No model training or fine-tuning. The scope is the production s
 
 ## The product
 
-**Triage Copilot.** An on-call engineer pastes an incident. In seconds it returns severity, the likely component, the first action, and the 3 most similar past incidents with their fixes. Safe actions run. Risky ones wait for a human to approve.
+**FindyFixy.** An on-call engineer pastes an incident. In seconds it returns severity, the likely component, the first action, and the 3 most similar past incidents with their fixes. Safe actions run. Risky ones wait for a human to approve.
 
 Built to production standards, measured on your machine:
 
