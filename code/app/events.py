@@ -39,6 +39,8 @@ EventKind = Literal[
     "model_request",
     "model_reply",
     "fault_injected",
+    "tool_call",
+    "tool_result",
     "validation",
     "retry",
     "node_exited",

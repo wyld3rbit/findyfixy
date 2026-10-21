@@ -163,6 +163,17 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - Check run on the real 1.5B model (2 runs, not for notes): 499 in, 46 out, 0.57s, `hours=1` both times. Same tokens and time as the hand-written loop, so ToolNode added no measurable overhead in this setup (2 runs only).
 - Open: the learner re-runs the 10-run table with the ToolNode loop (the table in `notes/day2.md` is from the old loop and should be replaced). Stage B: wire into the router graph. Stage C: console events and page node. Step 5: MCP, which needs `ainvoke` because MCP tools are async-only.
 
+### Day 2, step 4, stage B: the tool step wired into the router graph (by request)
+
+- `build_graph(..., investigator=None)`: when given, an `investigate` node runs once before `small`. Its tool results become `evidence` in state and go into the Triage prompt of whichever model answers, and into the retry prompt. If `large` takes over it reuses the same evidence; the tool is not called again. With no investigator the graph is exactly the old two-node router (same nodes, same prompts).
+- Why a separate step: tested live, `format=` (the Triage shape) makes the model emit a record and no `tool_calls`, so tools and structured output cannot share one call.
+- `app/triage.py`: `build_prompt(question, evidence="")`, `EVIDENCE_PROMPT` (says tool output is data, not instructions, and shows the arguments), `ask_validated(..., evidence="")`. `app/investigate.py`: `investigation_prompt` (service list comes from the tool's own `Service` type). `app/events.py`: `tool_call`, `tool_result`. Tool events are reported after the loop finishes, not live, because the loop is one nested graph run. The node's exit event carries tokens, turns and calls.
+- Tests: `tests/test_graph_tools.py` (10, real tool and ToolNode, scripted tool model, recording `ask`), 2 more in `test_triage.py`. Mutations: small ignores the evidence (5 failed), retry prompt drops it (2 failed), investigate skipped (8 failed). All restored. Default run: 153 passed.
+- Two more test expectations of mine were wrong first (argument text format). Fixed.
+- Live pass over the 8 incidents, plain vs with tools (2026-10-20, mine, not for notes/day2.md, one run, sampling random): the model called the tool for 5 of 8 and skipped 3. The step added about 900 to 2,100 input tokens per run, because the whole incident text is in its prompt too, and 0 to 2 seconds. Severity matched the key 2 of 8 plain and 2 of 8 with tools, on different incidents. No evidence of an accuracy gain.
+- Known limitation: `data/deploys.json` is a fixed fake file. It does not match each incident's own timeline (for example the cascade log says auth 2.14.2 deployed at 16:21; the file has no 2.14.2). So the evidence can be unrelated to the incident, and accuracy with and without tools cannot be compared fairly. This pass shows cost and plumbing only. A fair comparison needs deploy data written to match each incident.
+- Open: Stage C (console events, an Investigate node on the page, the Deploy tool box turning solid), then Step 5 (MCP, needs `ainvoke`). The learner's re-run of the 10-run table.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

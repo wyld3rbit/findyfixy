@@ -118,3 +118,18 @@ def test_long_bad_reply_is_truncated_in_the_retry_prompt():
     ask, prompts = scripted("x" * 5000, GOOD)
     ask_validated(ask, "m", "q")
     assert len(prompts[1]) < 2500
+
+
+def test_evidence_is_in_the_first_prompt_and_in_the_retry_prompt():
+    ask, prompts = scripted(json.dumps({"severity": "sev3", "component": "x",
+                                        "next_action": "y", "confidence": 75}), GOOD)
+    ask_validated(ask, "m", "q", evidence="get_recent_deploys(hours=24,service=auth) result: []")
+    assert len(prompts) == 2
+    assert all("hours=24,service=auth" in p for p in prompts)
+
+
+def test_no_evidence_leaves_the_prompt_exactly_as_before():
+    from app.triage import build_prompt
+
+    assert build_prompt("q") == build_prompt("q", "")
+    assert "Tool results" not in build_prompt("q")

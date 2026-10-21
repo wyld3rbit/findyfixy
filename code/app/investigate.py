@@ -55,7 +55,7 @@ What changes at scale
 """
 
 from dataclasses import dataclass
-from typing import Annotated, Literal, Protocol, TypedDict
+from typing import Annotated, Literal, Protocol, TypedDict, get_args
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.tools import StructuredTool
@@ -63,7 +63,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 
-from app.tools import make_tools_node
+from app.tools import Service, make_tools_node
 
 # Model calls per run. Four is enough for ask, fix a bad argument, retry,
 # answer. More only helps a model that is already lost.
@@ -72,6 +72,25 @@ MAX_TURNS = 4
 # Tool output goes back into the model's context. Clip it in the evidence text
 # so one huge reply cannot flood a later prompt.
 _MAX_RESULT_CHARS = 600
+
+
+# What the investigate step tells the model. It may look up deploys before
+# triage, or skip. The service list comes from the tool's own argument type,
+# so the prompt and the validation cannot drift apart.
+INVESTIGATE_PROMPT = (
+    "You are an incident triage assistant. Before triage you may look up recent "
+    "deploys with the get_recent_deploys tool. Known services: {services}. If the "
+    "report involves one of them, look up its deploys over a window that fits "
+    "the timeline in the report. If no lookup helps, reply: no lookup needed.\n\n"
+    "Report: {question}"
+)
+
+
+def investigation_prompt(question: str) -> str:
+    """Wrap a report in the investigate instructions. Pure."""
+    return INVESTIGATE_PROMPT.format(
+        services=", ".join(get_args(Service)), question=question
+    )
 
 
 class ToolModel(Protocol):

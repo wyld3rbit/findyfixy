@@ -56,7 +56,10 @@ from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from langchain_core.messages import HumanMessage
+
 from app.events import Emit, no_emit
+from app.investigate import analyse, format_evidence, investigation_prompt
 from app.triage import Ask, Triage, TriageError, ask_validated
 
 # The routing policy in one number. Treat it as a product decision, not a
@@ -94,6 +97,7 @@ class S(TypedDict, total=False):
     question: str
     triage: Triage | None
     model_used: str
+    evidence: str
 
 
 def ollama_ask(model: str, prompt: str) -> str:
@@ -123,6 +127,7 @@ def build_graph(
     large_model: str,
     threshold: float = THRESHOLD,
     emit: Emit = no_emit,
+    investigator: CompiledStateGraph | None = None,
 ) -> CompiledStateGraph:
     """Wire the router and return a compiled graph, ready for `.invoke()`.
 
@@ -135,7 +140,42 @@ def build_graph(
 
     `emit` reports node entry and exit, model calls and the route decision
     (app/events.py). The default reports nothing.
+
+    `investigator` (app/investigate.py) is an optional tool-calling step that
+    runs once, before `small`. Its tool results become `evidence` in state and
+    in both models' prompts. If `large` takes over, it reuses that evidence and
+    the tools are not called again. With no investigator the graph is exactly
+    the two-node router it was before: same nodes, same prompts.
     """
+
+    def investigate(state: S) -> S:
+        """Run the tool loop once and store what it found as evidence.
+
+        Tool calls and results are reported after the loop finishes, not as
+        they happen, because the loop is one nested graph run. The node's exit
+        event carries its cost (tokens and turns), since this step adds a model
+        call to every run, even one that ends with no lookup. Failures from
+        infrastructure (Ollama down) propagate like any other.
+        """
+        emit("node_entered", node="investigate", model=None)
+        final = investigator.invoke(
+            {"messages": [HumanMessage(investigation_prompt(state["question"]))]}
+        )
+        inv = analyse(final["messages"])
+        for c in inv.calls:
+            emit("tool_call", name=c.name, args=c.args)
+            emit("tool_result", name=c.name, result=c.result[:600], error=c.error)
+        emit(
+            "node_exited",
+            node="investigate",
+            model=None,
+            calls=len(inv.calls),
+            turns=inv.turns,
+            input_tokens=inv.input_tokens,
+            output_tokens=inv.output_tokens,
+            hit_turn_cap=inv.hit_turn_cap,
+        )
+        return {"evidence": format_evidence(inv.calls)}
 
     def make_node(name: str, model: str, *, tolerate_invalid: bool) -> Callable[[S], S]:
         """Build a node that asks `model` and writes the result into state.
@@ -151,7 +191,13 @@ def build_graph(
         def node(state: S) -> S:
             emit("node_entered", node=name, model=model)
             try:
-                triage = ask_validated(ask, model, state["question"], emit=emit)
+                triage = ask_validated(
+                    ask,
+                    model,
+                    state["question"],
+                    emit=emit,
+                    evidence=state.get("evidence", ""),
+                )
             except TriageError:
                 if not tolerate_invalid:
                     raise
@@ -205,7 +251,12 @@ def build_graph(
     g = StateGraph(S)
     g.add_node("small", make_node("small", small_model, tolerate_invalid=True))
     g.add_node("large", make_node("large", large_model, tolerate_invalid=False))
-    g.set_entry_point("small")  # every run starts at the cheap model
+    if investigator is None:
+        g.set_entry_point("small")  # every run starts at the cheap model
+    else:
+        g.add_node("investigate", investigate)
+        g.set_entry_point("investigate")  # gather evidence, then the cheap model
+        g.add_edge("investigate", "small")
     g.add_conditional_edges("small", decide)  # the decision point
     g.add_edge("large", END)  # a plain edge: after `large`, always stop
     return g.compile()
