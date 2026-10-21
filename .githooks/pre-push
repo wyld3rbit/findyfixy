@@ -1,0 +1,4 @@
+#!/bin/sh
+# Blocks a push whose commits contain PII or secrets, in files or in metadata.
+# git passes the refs being pushed on stdin; the scanner reads them.
+exec uv run --no-project python "$(git rev-parse --show-toplevel)/tools/scan_private.py" --pre-push "$1"

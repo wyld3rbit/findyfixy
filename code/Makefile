@@ -7,7 +7,7 @@
 #      how a hijacked package can persist. Only the known shims are allowed.
 # On any finding, stop and read it. Do not upgrade or remove to make it pass.
 
-.PHONY: audit
+.PHONY: audit hooks scan
 
 audit:
 	uv export --frozen --format requirements-txt --no-emit-project -o .audit-req.txt > /dev/null
@@ -22,3 +22,16 @@ audit:
 	    echo "$$bad"; exit 1; \
 	fi; \
 	echo "none beyond the allowed shims"
+
+# hooks: install the privacy hooks for THIS clone (git hook settings are not
+# part of a clone). They block a commit or push that carries PII or secrets.
+# See tools/scan_private.py. Run once after cloning.
+hooks:
+	git config core.hooksPath .githooks
+	@echo "privacy hooks installed (pre-commit and pre-push)"
+
+# scan: check everything on disk and in history, on demand. Prints rule, file
+# and line, never the matched text.
+scan:
+	uv run --no-project python ../tools/scan_private.py --tree
+	uv run --no-project python ../tools/scan_private.py --history

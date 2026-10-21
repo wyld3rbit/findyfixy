@@ -1,0 +1,4 @@
+#!/bin/sh
+# Blocks a commit that stages PII or secrets. See tools/scan_private.py.
+# Install once per clone with: make hooks   (run from code/)
+exec uv run --no-project python "$(git rev-parse --show-toplevel)/tools/scan_private.py" --staged

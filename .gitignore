@@ -51,3 +51,6 @@ Icon?
 
 # Scratch file written by `make audit`.
 .audit-req.txt
+
+# Words the privacy scanner must block (a name, say). Never committed.
+.private-terms
