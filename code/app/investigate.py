@@ -54,11 +54,12 @@ What changes at scale
       them, not the sum.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Annotated, Literal, Protocol, TypedDict, get_args
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import BaseTool
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
@@ -141,13 +142,15 @@ class Investigation:
 
 def build_investigator(
     model: ToolModel,
-    tool: StructuredTool,
+    tool: BaseTool | Sequence[BaseTool],
     *,
     max_turns: int = MAX_TURNS,
 ) -> CompiledStateGraph:
     """Compile the agent and tools loop. Nothing runs until `.invoke()`.
 
-    Start it with `{"messages": [HumanMessage(question)]}`.
+    Start it with `{"messages": [HumanMessage(question)]}`. `tool` is one tool
+    or a list. Tools from an MCP server are async-only, so a graph that uses
+    them must be run with `.ainvoke()`.
     """
 
     def agent(state: InvestigationState) -> InvestigationState:
@@ -174,6 +177,29 @@ def build_investigator(
     g.add_conditional_edges("agent", after_agent)
     g.add_edge("tools", "agent")
     return g.compile()
+
+
+def content_text(content: str | list) -> str:
+    """Plain text of a message's content. Pure.
+
+    A direct tool returns a string. An MCP tool returns a list of content
+    blocks, `[{"type": "text", "text": ...}]`. The model is shown only their
+    text (ChatOllama drops the block metadata), so the evidence must be the
+    text too. Without this, the Triage prompt would carry the Python repr of
+    the list: noise, extra tokens, and a prompt that differs between transports.
+    Non-text blocks are shown as their repr, so nothing is silently dropped.
+    """
+    if isinstance(content, str):
+        return content
+    parts = []
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "text":
+            parts.append(str(block.get("text", "")))
+        elif isinstance(block, str):
+            parts.append(block)
+        else:
+            parts.append(repr(block))
+    return "".join(parts)
 
 
 def _sum_tokens(replies: list[AIMessage], key: str) -> int | None:
@@ -204,7 +230,7 @@ def analyse(messages: list[BaseMessage]) -> Investigation:
                 ToolCallRecord(
                     name=call["name"],
                     args=dict(call["args"]),
-                    result="" if res is None else str(res.content),
+                    result="" if res is None else content_text(res.content),
                     error=res is None or res.status == "error",
                 )
             )

@@ -101,8 +101,16 @@ def run_once(
     """
     start = clock()
     final = investigator.invoke({"messages": [HumanMessage(question)]})
-    seconds = clock() - start
-    inv = analyse(final["messages"])
+    return stats_from(final["messages"], clock() - start)
+
+
+def stats_from(messages: list, seconds: float) -> RunStats:
+    """Turn a finished conversation and its wall time into a table row. Pure.
+
+    Shared by the direct path and the MCP paths (app/mcp_run.py), so every
+    transport reports exactly the same columns, computed the same way.
+    """
+    inv = analyse(messages)
     return RunStats(
         input_tokens=inv.input_tokens,
         output_tokens=inv.output_tokens,

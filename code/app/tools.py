@@ -31,10 +31,11 @@ Failure modes
 """
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
 
@@ -89,11 +90,14 @@ def make_deploys_tool(path: Path = DEFAULT_DEPLOYS_PATH) -> StructuredTool:
     )
 
 
-def make_tools_node(tool: StructuredTool) -> ToolNode:
+def make_tools_node(tools: BaseTool | Sequence[BaseTool]) -> ToolNode:
     """A ToolNode that reports bad arguments to the model instead of crashing.
+
+    Takes one tool or several. MCP tools arrive as a list.
 
     `handle_tool_errors=True` catches the tool's exception and returns it as a
     ToolMessage. The model sees the validation text and can retry. Bound this
     with a max-turns limit in the loop, or a stubborn model loops forever.
     """
-    return ToolNode([tool], handle_tool_errors=True)
+    tool_list = [tools] if isinstance(tools, BaseTool) else list(tools)
+    return ToolNode(tool_list, handle_tool_errors=True)

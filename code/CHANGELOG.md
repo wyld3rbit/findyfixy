@@ -192,6 +192,18 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - Default run: 161 passed.
 - Open: 5b (an MCP server wrapping the same tool, the adapter client, async graph run), 5c (the 10-run measurement through MCP and the comparison table).
 
+### Day 2, step 5b: the MCP path, persistent-session mode (approved; per-call mode still to do)
+
+- `app/mcp_server.py` (new): FastMCP server over stdio exposing `get_recent_deploys`. It calls the same function as the direct path. Its argument descriptions and bounds are read from `DeploysArgs`, so the model sees the same tool either way; a test compares the two schemas. Log level WARNING so per-request logging does not add noise to measured runs.
+- `app/mcp_client.py` (new): `persistent_tools()` starts the server as a child process (same Python, run from the project root, small default environment), holds one MCP session open, yields the adapter's LangChain tools, and stops the process on exit even on error.
+- `app/mcp_run.py` (new): `uv run python -m app.mcp_run session [runs]`. Same task, loop, columns and summary as `direct_run`, run with `ainvoke`. Startup (spawn, initialize, list tools) is timed once and printed separately.
+- `app/investigate.py`: `build_investigator` and `make_tools_node` accept one tool or a list. New pure `content_text`: MCP returns content blocks, and the evidence must be their text, not the Python repr of the list (which would have put `[{'type': 'text', ...}]` into the Triage prompt). `app/direct_run.py`: `stats_from` is shared by both paths.
+- Two checks done before building tests: `ChatOllama` sends a block-list tool result to the model as the text plus a leading newline, so MCP's result shape adds almost nothing to the prompt; and an MCP tool error arrives with `status="error"`, so the tool-error column is right.
+- Adapter facts read from its source: `get_tools()` opens a new session per tool call (over stdio, a new server process each time), and its tools are async-only, so the graph must run with `ainvoke`. This mode avoids the first cost on purpose.
+- Tests: `tests/test_mcp.py` (12; real stdio server, scripted tool-calling model, no Ollama): schema parity, round trip equals the direct function, invalid arguments give an error, evidence is clean text, no server process left behind, including when the caller raises. Mutations: schema drift (1 failed), evidence uses the raw block list (5 failed), a stray server process (2 failed). Two test mistakes of mine fixed first: a malformed `pgrep` pattern that counted zero. Default run: 173 passed.
+- Check run on the real 1.5B model, 2 runs (mine, not for notes): 499 input tokens, identical to the direct path; 0.58 to 0.61s against 0.57s direct; server startup 0.46s once; model sent `hours=1` again.
+- Still to do: per-call session mode (the adapter's default), 5c (the learner's 10-run measurements for all modes and the table).
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.
