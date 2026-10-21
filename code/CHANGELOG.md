@@ -204,6 +204,19 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - Check run on the real 1.5B model, 2 runs (mine, not for notes): 499 input tokens, identical to the direct path; 0.58 to 0.61s against 0.57s direct; server startup 0.46s once; model sent `hours=1` again.
 - Still to do: per-call session mode (the adapter's default), 5c (the learner's 10-run measurements for all modes and the table).
 
+### Hot reload for the console (by request, approved)
+
+- `uv run python -m app.console --reload` (and `--port N`). `app/dev_reload.py` (new): a stdlib supervisor runs the console as a child process and polls the files every 0.5s. A change to `app/**/*.py`, `data/*.json` or `.env` restarts the child, after a debounce so a burst of saves restarts once. A change to `docs/*.html` does not restart anything (the page is read from disk on each request); the page reloads itself. No new package: `watchfiles` or `uvicorn --reload` would add dependencies.
+- The console exposes `/version` (boot token plus a fingerprint of the watched files) and `dev_reload` in `/config` only in dev mode. The page polls it once a second and reloads when it changes. If a run is in progress it waits until the run ends. If the server is mid-restart the poll just tries again.
+- A broken edit does not crash-loop: the supervisor prints that the server exited and waits for the next change.
+- SIGTERM and SIGHUP are turned into the same clean stop as Ctrl-C, so closing the terminal does not leave an orphaned server holding the port. (Found by an end-to-end run; without the handler the child was orphaned.)
+- Tests: `tests/test_dev_reload.py` (19 with the console hooks and argument parsing; fakes for the process, clock and files). Mutations: no debounce (1 failed), respawn on crash (2 failed), Ctrl-C leaves the child (1 failed). End to end, with real processes in a scratch copy on port 8790: 14 of 14 checks (page edit does not restart; Python edit is live; broken edit gives one message and no loop; fixed edit recovers; SIGTERM and SIGINT stop both processes and free the port). With the signal handler removed, 11 of 14. The page's reload logic was checked in a stub: no reload when unchanged, reload when idle, deferred during a run and done after, no crash when the server is down. Default run: 190 passed.
+- Mistakes of mine found along the way: an early version restarted the server on page edits too (the plan said only the page should reload), and several check scripts of mine had bugs (a background job that ignores Ctrl-C, a response check that only read the first 40 characters). Fixed or corrected.
+- Limits: a restart kills a run in flight; a new dependency still needs `uv sync` first; `pyproject.toml` and `uv.lock` are not watched; if the supervisor itself is killed with SIGKILL its child is orphaned. The page's own reload was not watched in a real browser, only in a stub.
+
+- Quiet dev log (by request): the console no longer logs `GET /version`, which the page polls once a second in dev mode and which buried `POST /run` and `GET /events`. Only that route is quiet. Test, with a mutation that fails it. End to end again: 14 of 14, zero `/version` lines in the supervisor log, other requests still logged. Default run: 191 passed.
+- Found while answering "is escalation really using Ollama": the event log records the model name we ASKED for, not the one Ollama reports serving. Ollama's response carries a `model` field (checked: asking for `qwen2.5:7b` returns `model='qwen2.5:7b'`), and `/api/ps` lists what is loaded. The Ollama server log lines in a screenshot (`[GIN] ... POST /api/chat`, `slot ...`) show timings and token counts, not a model name, so they correlate with a call but do not prove which model ran. Not built: recording `served_by` from the response in the event log.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

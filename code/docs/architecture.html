@@ -340,6 +340,7 @@ let running = false;
 let lastRunExists = false;
 let queue = Promise.resolve();
 const banks = { lesson: [], incidents: [] };   // filled from /config
+let reloadPending = false;    // dev mode: a reload is due once the current run ends
 let hunting = false;          // true once the stream shows a hunt_started
 let iteration = [];           // events of the hunt's current run, for the slow replay
 
@@ -621,6 +622,7 @@ async function finishHunt(d) {
 // ---- streaming -----------------------------------------------------------
 function finishRun() {
   running = false;
+  if (reloadPending) location.reload();
   $("stop").hidden = true;
   $("run").disabled = false;
   $("replay").disabled = !lastRunExists;
@@ -704,6 +706,22 @@ async function startRun() {
   openStream();
 }
 
+// ---- dev mode: reload when the server or the page changes ------------------
+// Only runs when the server was started with `--reload`. It polls /version,
+// which changes when a watched file changes or the server restarts. A reload
+// during a run waits until the run ends, so a live run is not cut off.
+function startDevReload() {
+  let known = null;
+  setInterval(async () => {
+    try {
+      const res = await fetch("/version", { cache: "no-store" });
+      const v = (await res.json()).version;
+      if (known === null) known = v;
+      else if (v !== known) { if (running) reloadPending = true; else location.reload(); }
+    } catch (_) { /* the server is restarting: try again next tick */ }
+  }, 1000);
+}
+
 // ---- setup ---------------------------------------------------------------
 // Option labels are short titles. The value is the full text sent to the
 // server. Both go in through the Option constructor (text, not markup).
@@ -751,6 +769,7 @@ async function init() {
       $("usetools").disabled = true;
       $("usetools").parentElement.title = "Set SMALL_MODEL and LARGE_MODEL in .env and restart the console.";
     }
+    if (cfg.dev_reload) startDevReload();
     for (const s of cfg.scenarios) $("scenario").append(new Option(s.replaceAll("_", " "), s));
     banks.lesson = cfg.questions.map((q) => ({ label: q, text: q }));
     banks.incidents = cfg.incidents.map((i) => ({ label: i.title, text: i.text }));

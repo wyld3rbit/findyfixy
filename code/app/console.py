@@ -12,6 +12,9 @@ What it does
         GET  /events   SSE stream of the latest run, replayed from the start
 
 Run it:   uv run python -m app.console      (then open the printed address)
+Develop:  uv run python -m app.console --reload
+          Restarts the server when code changes and reloads the page. See
+          app/dev_reload.py. `--port N` picks another port.
 Test it:  uv run pytest
 
 Why the standard library, and not FastAPI
@@ -48,6 +51,7 @@ Failure modes
 
 import json
 import os
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -62,6 +66,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field, ValidationError
 
+from app.dev_reload import fingerprint, snapshot
 from app.events import Emit, Event, make_emit
 from app.incidents import DEFAULT_PATH, Incident, load_incidents
 from app.investigate import build_investigator
@@ -78,6 +83,10 @@ Scenario = Literal[
     "tool_lookup",
     "tool_wrong_window",
 ]
+
+# The project root (code/). Resolved from this file, never from the current
+# directory.
+ROOT = Path(__file__).resolve().parents[1]
 
 # The page lives next to the docs. Resolved from this file, never from the
 # current directory, so the server works from any clone.
@@ -535,13 +544,33 @@ class RunHub:
             return self._run_id > 0
 
 
-def make_handler(hub: RunHub, page: Path) -> type[BaseHTTPRequestHandler]:
-    """Build the request handler class bound to `hub` and the page path."""
+def make_handler(
+    hub: RunHub, page: Path, dev_root: Path | None = None
+) -> type[BaseHTTPRequestHandler]:
+    """Build the request handler class bound to `hub` and the page path.
+
+    `dev_root`, when given, turns on dev mode: `/version` reports a fingerprint
+    of the watched files and this process's start time, and `/config` says so.
+    The page polls it and reloads itself. Off by default: the plain console
+    exposes no file information.
+    """
+    boot = time.time_ns()  # changes on every restart, even with no file change
 
     class Handler(BaseHTTPRequestHandler):
         """Routes, header checks and SSE framing. Logic stays in `RunHub`."""
 
         protocol_version = "HTTP/1.1"
+
+        def log_message(self, format: str, *args: object) -> None:
+            """Log requests to stderr, except the dev page's version poll.
+
+            The page polls `/version` once a second in dev mode. Logged, those
+            lines bury the ones that matter (`POST /run`, `GET /events`). Only
+            that route is quiet; everything else logs as before.
+            """
+            if self.path.split("?")[0] == "/version":
+                return
+            super().log_message(format, *args)
 
         # -- helpers ------------------------------------------------------
         def _send(self, status: HTTPStatus, body: bytes, ctype: str) -> None:
@@ -583,6 +612,11 @@ def make_handler(hub: RunHub, page: Path) -> type[BaseHTTPRequestHandler]:
                 return self._send(
                     HTTPStatus.OK, page.read_bytes(), "text/html; charset=utf-8"
                 )
+            if url.path == "/version" and dev_root is not None:
+                return self._json(
+                    HTTPStatus.OK,
+                    {"version": f"{boot}:{fingerprint(snapshot(dev_root))}"},
+                )
             if url.path == "/config":
                 return self._json(
                     HTTPStatus.OK,
@@ -598,6 +632,7 @@ def make_handler(hub: RunHub, page: Path) -> type[BaseHTTPRequestHandler]:
                         "threshold": THRESHOLD,
                         "hunt_default": HUNT_DEFAULT,
                         "hunt_limit": HUNT_LIMIT,
+                        "dev_reload": dev_root is not None,
                     },
                 )
             if url.path == "/events":
@@ -677,20 +712,57 @@ def make_handler(hub: RunHub, page: Path) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
-def serve(hub: RunHub, host: str = "127.0.0.1", port: int = 8765) -> ThreadingHTTPServer:
+def serve(
+    hub: RunHub,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    dev_root: Path | None = None,
+) -> ThreadingHTTPServer:
     """Build the server. Port 0 picks a free port (tests use it)."""
-    server = ThreadingHTTPServer((host, port), make_handler(hub, PAGE))
+    server = ThreadingHTTPServer((host, port), make_handler(hub, PAGE, dev_root))
     server.daemon_threads = True
     return server
 
 
-def main() -> None:
+DEFAULT_PORT = 8765
+
+
+def parse_args(argv: list[str]) -> tuple[bool, int]:
+    """Read `--reload` and `--port N`. Returns (reload, port). Pure.
+
+    Anything else is an error: a typo should stop the run, not be ignored.
+    """
+    reload, port, i = False, DEFAULT_PORT, 0
+    while i < len(argv):
+        if argv[i] == "--reload":
+            reload = True
+        elif argv[i] == "--port" and i + 1 < len(argv) and argv[i + 1].isdigit():
+            port, i = int(argv[i + 1]), i + 1
+        else:
+            raise SystemExit(f"usage: python -m app.console [--reload] [--port N] (got {argv[i]!r})")
+        i += 1
+    return reload, port
+
+
+def main(argv: list[str] | None = None) -> None:
     """Read the environment, build the hub, serve until Ctrl-C.
+
+    `--reload` runs this same command under a supervisor that restarts it when
+    code changes (app/dev_reload.py). The child is started without the flag and
+    with `FINDYFIXY_DEV` set, which turns on the page's auto-reload.
 
     Like `app.graph.main`, this is the only place that reads `.env`. Missing
     model names do not stop the server: fake mode needs none. Live mode then
     reports "not configured" instead of failing at startup.
     """
+    args = sys.argv[1:] if argv is None else argv
+    reload, port = parse_args(args)
+    if reload:
+        from app import dev_reload
+
+        dev_reload.run(ROOT, port)
+        return
+
     from dotenv import load_dotenv
 
     load_dotenv()
@@ -708,7 +780,8 @@ def main() -> None:
         incidents=load_incidents(DEFAULT_PATH),
         investigator=investigator,
     )
-    server = serve(hub)
+    dev = ROOT if os.environ.get("FINDYFIXY_DEV") else None
+    server = serve(hub, port=port, dev_root=dev)
     port = server.server_address[1]
     print(f"Console: http://127.0.0.1:{port}  (Ctrl-C to stop)", flush=True)
     live = "on" if hub.live_available else "off (set SMALL_MODEL, LARGE_MODEL)"
