@@ -24,7 +24,8 @@ window.DATA = {
     {"date": "2026-10-20", "entry": "Day 2 measured. Same tool, same model, same ToolNode loop, 10 runs each: direct median 0.57s, MCP with a persistent session 0.57s, MCP with a new session per call 1.14s (+0.57s, +100%). Input tokens 499 on all three, so 0 tokens of MCP overhead with one tool. The model sent a 1 hour window for a 24 hour question in 30 of 30 runs and answered wrongly every time. Console hunt: 10 of 10 replies parsed. Self-check 3 of 4 ticked; drill answered in time but without a number, so not ticked. Evidence line recorded."},
     {"date": "2026-10-20", "entry": "Day 2 drill ticked at the learner's request. The answer was not timed and gave no number; the learner judged it complete. Day 2 closed at 4 of 4."},
     {"date": "2026-10-20", "entry": "Day 2 closed at 4 of 4 and pushed to the private GitHub remote (29 commits). Finished lessons d01, d02 and 00-plan corrected to match what was built (no teaching content changed). Added a privacy scanner with pre-commit and pre-push hooks: no PII or secrets ever, tree and history clean. Measured GPU vs CPU-only on this Mac with a 726-token incident: 1.5B call 1.13s vs 3.44s (3.0x), 7B call 5.58s vs 15.32s (2.7x), relevant to any container that cannot reach the Apple GPU. Open: Day 1 evidence line; one-command bootstrap deferred to after the lesson; Day 3 next."},
-    {"date": "2026-10-21", "entry": "Day 3 built and checked. Postgres with pgvector and Adminer run in Colima (6 GB), images pinned by digest and scanned. 200 synthetic incidents with 20 seeded twin pairs became 800 chunks (4 per incident, 384 dimensions, HNSW index) with an idempotent ingest: the learner's re-run printed written 0, unchanged 800. Lesson query: 2 of the top 5 hits belong to a seeded pair, both members of one pair present, distances 0.089 to 0.157. At 800 rows Postgres scans sequentially and ignores the index; larger sizes not measured. Self-check 3 of 4 ticked; the drill was not answered, so not ticked. Evidence line recorded."}
+    {"date": "2026-10-21", "entry": "Day 3 built and checked. Postgres with pgvector and Adminer run in Colima (6 GB), images pinned by digest and scanned. 200 synthetic incidents with 20 seeded twin pairs became 800 chunks (4 per incident, 384 dimensions, HNSW index) with an idempotent ingest: the learner's re-run printed written 0, unchanged 800. Lesson query: 2 of the top 5 hits belong to a seeded pair, both members of one pair present, distances 0.089 to 0.157. At 800 rows Postgres scans sequentially and ignores the index; larger sizes not measured. Self-check 3 of 4 ticked; the drill was not answered, so not ticked. Evidence line recorded."},
+    {"date": "2026-10-21", "entry": "Day 3 drill ticked at the learner's request. No answer was given and nothing was timed or scored; the learner judged the day complete. Day 3 closed at 4 of 4. Added make up and make down for Colima; the learner runs make down himself."}
   ],
   "days": [
     {"n": 1, "week": 1, "date": "2026-10-17", "title": "Setup and first graph", "file": "d01.md",
@@ -38,7 +39,7 @@ window.DATA = {
     {"n": 3, "week": 1, "date": "2026-10-19", "title": "Memory I: ingestion", "file": "d03.md",
      "outcome": "200 incidents chunked, embedded, in pgvector",
      "checks": ["About 800 chunks stored", "Second ingestion run writes 0", "Top 5 includes a seeded near-duplicate", "Drill under 90s"],
-     "done": [0, 1, 2]},
+     "done": [0, 1, 2, 3]},
     {"n": 4, "week": 1, "date": "2026-10-20", "title": "Memory II: hybrid retrieval", "file": "d04.md",
      "outcome": "BM25 plus vector, RRF, rerank; recall@5 measured",
      "checks": ["Three-retriever table", "Hybrid wins on exact-token queries", "Can explain RRF in one minute", "Drill under 90s"],
