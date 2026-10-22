@@ -34,7 +34,7 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - Root `README.md` tells a new reader how to start. No license file yet: the owner chooses one.
 - Not done: pushing to GitHub, and choosing a license.
 
-## Day 3: memory I, ingestion (in progress)
+## Day 3: memory I, ingestion (complete, 4 of 4)
 
 Step 1 done: Postgres with pgvector, plus Adminer to look at it.
 
@@ -67,16 +67,64 @@ Step 1 done: Postgres with pgvector, plus Adminer to look at it.
 
 ## Where we stopped (read this first when resuming)
 
-- **Stale section.** It describes the end of Day 1. See the Day 3 entry above and `notes/` for the current state.
+Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 
-- Day 1 is built, tested and committed. Left open on purpose: the Day 1 drill (skipped) and the Day 1 evidence line (the new end-of-day step in `CLAUDE.md`).
-- Next: Day 2, structured output and tools (`d02.md`). From Day 2 on, `CLAUDE.md` says to start with the warm-up: the learner explains Day 1 from memory in 3 to 5 lines before any file is opened. Reply in one line: right, or the one thing missed.
-- Things to watch on Day 2:
-  - Self-reported confidence came back on mixed scales (0.95, 9.0, 100.0 from the 1.5B model; 0.95 from the 7B). Day 2's `Triage` schema and validate-retry should deal with this.
-  - Both models returned only an intro sentence in `answer` for question 1, with no list of checks. Cause not diagnosed. Check whether the `Triage` schema fixes it.
-  - `uv add mcp` and `langchain-mcp-adapters` are not in the bill of materials. Check licenses and tell the learner before adding.
-- Run commands from `code/`. Tests: `uv run pytest` (9 passed, 4 integration deselected). Integration: `uv run pytest -m integration` (needs Ollama up; passed live once, 4 of 4). Router: `uv run python -m app.graph`.
-- Preferences saved in Claude's memory and in `CLAUDE.md`: plan before code, short plain sentences, staff+ depth docs, idiomatic code, no personal data or absolute paths, no judging of drills unless asked, never suggest tracker log updates, ask before committing.
+### State
+- Day 3 is complete in the tracker at 4 of 4. The drill was ticked at the learner's request with no answer (same as Day 2). Day 1's drill was skipped and its evidence line is still missing.
+- Everything up to commit `21b4c4a` is pushed to `origin/main`. This section is the only uncommitted change, unless git says otherwise. Check `git status`.
+- Colima is OFF. Postgres and Adminer are down. The data is safe in the `pgdata` volume. Run `make up` from `code/` before anything that needs the database (`COLIMA_MEMORY=8` on Langfuse days). The learner runs `make down` himself. Do not offer to, and do not re-ask about a `CLAUDE.md` step for it.
+- Tests: `uv run pytest` gives 324 passed, 13 deselected. Database tests: `uv run pytest -m integration tests/integration/test_ingest_db.py tests/integration/test_search_db.py` (7, need `make up`). Ollama integration tests are separate and need Ollama.
+- Dependencies are unchanged since Day 3's `make audit`. The cooldown in `pyproject.toml` is still `2026-10-17`.
+
+### Day 4 status
+- The learner skipped the warm-up (we had just narrated Day 3). `d04.md` has been read. He reads each lesson's concept himself: do not offer to teach it.
+- Day 4 lab: `uv add rank-bm25`; 40 labelled queries; `app/retrieve.py` with `vector`, `hybrid` (BM25 top 50 plus vector top 50, RRF with k = 60) and `hybrid_rerank` (top 30 reranked with `BAAI/bge-reranker-base`), each with an optional `service` filter; `app/eval_retrieval.py` printing recall@5, MRR and p50 latency; a `recall` node before `small` that puts the top 3 prior incidents in the prompt.
+- Day 4 self-check: a table of three retrievers; hybrid beats vector on the exact-token queries; explain RRF in one minute. Drill: "Your RAG system gives confident wrong answers. Where do you look first?"
+- NOTHING is built for Day 4. The step 1 plan below was shown and is waiting for the learner's approval.
+
+### Step 1 plan (waiting for approval): the labelled queries
+- Writes `data/retrieval_eval.jsonl`: 40 queries and the incident ids that should come back.
+- 20 meaning queries: one per twin pair, in a third wording that matches neither voice. Expected: the pair.
+- 10 host queries: an exact hostname (for example `auth-240`) plus a little context. Expected: the incidents that mention that host.
+- 10 number queries: for example "auth latency 41 times normal after a certificate rotation". Nine incidents share a pattern and only the number tells them apart. This targets the 14x versus 41x weakness from Day 3.
+- Files: new `app/eval_set.py` and `tests/test_eval_set.py`; a small refactor of `app/corpus.py` to expose each incident's facts and scenario (output must stay byte-identical: check `git diff --stat data/incidents.jsonl`); new `data/retrieval_eval.jsonl`; a Day 4 changelog entry.
+- Tests: 40 queries with the right mix; every expected id exists; expected ids are really a twin pair; no query repeats stored text verbatim. Break one on purpose once.
+- No packages in step 1.
+
+### Things to get right in Day 4 (found while planning, not yet acted on)
+- Compute each query's expected ids from the data. Do not assume them. A host such as `auth-240` or a number such as 41 may appear in more than one incident. Drop or replace ambiguous queries.
+- Only scenarios whose steps use `{host}` put a hostname in the text. The corpus has hostnames, and versions in some scenarios, but no error codes. Host queries are limited to those pairs.
+- BM25 tokenising must keep hostnames whole. A tokenizer that splits on hyphens turns `auth-240` into `auth` and `240`, and the exact-token advantage disappears.
+- The labels come from the same generator as the data, so every number is a ceiling, not a forecast. Say so in `notes/day4.md`.
+- `search` (Day 3) is vector only and never reads `twin_of`. Keep it that way. The eval harness reads labels from `retrieval_eval.jsonl` only.
+- The `service` filter: with HNSW the WHERE runs after the index scan, so a narrow filter can return fewer than k rows. At 800 rows Postgres scans sequentially and is exact, so this will not show yet. Mention it, and consider pgvector's iterative scan.
+- `rank-bm25`: check name, license (believed Apache-2.0), maintainers and downloads before adding. It has had few releases for years. An in-repo BM25 of about 30 lines is an alternative: no dependency, and it shows the maths. Recommend and ask.
+- `BAAI/bge-reranker-base`: check size (large, about 1 GB, I believe), license, safetensors weights and revision. Pin the revision, record it in `notes/models.md`. Memory is tight: Colima 6 GB plus the 7B model (about 5 GB) plus a reranker on a 16 GB Mac. Latency on CPU for 30 candidates is unmeasured.
+- Step 4 (wire-in): add the `recall` node in `app/graph.py` (its docstring already says Day 4 adds it). Then update `docs/architecture.html`: Retrieval becomes a built, animated node and it needs the Memory store, which the learner reverted as a static box on Day 3. Update the replay tests (`tests/js/replay.js`, `tests/test_page_lag.py`) and the console's event handling. The console then needs the database.
+
+### What Day 3 taught (context for Day 4 numbers)
+- Query "auth latency spike after certificate rotation": top 5 were all certificate-rotation summaries at distances 0.089 to 0.157; 2 of 5 belong to a seeded pair; both members of INC-0073 and INC-0074 were present.
+- INC-0054 ("14 times normal") sat between the twins INC-0073 and INC-0074 ("41 times normal"), 0.003 from the latter. The model did not separate 14 from 41. That is the case BM25 and a cross-encoder should help with.
+- At 800 rows Postgres uses a sequential scan (1.27 ms); forced HNSW took 0.78 ms. Larger sizes are not measured. The learner asked how HNSW is guaranteed to take over: it is not. An optional 50,000 to 100,000 vector experiment was offered and not run.
+- The ingest hash covers the model name, the embedded text and the date, so a model change re-embeds everything.
+
+### Environment quirks
+- Firewall (LuLu) prompts: `limactl usernet` sends DNS (UDP 53) to the router for `ntp.ubuntu.com` on every Colima start. Allow it. Earlier timeouts in `make audit`, `uvx` and `uv run --with` were also firewall prompts: approve and retry.
+- `node --check` fails with the learner's `NODE_OPTIONS`. Use `env -u NODE_OPTIONS node --check`.
+- The privacy hook flags anything shaped like `user:password@host`, including inside docs and the changelog. Do not write such strings. The default database connection uses psycopg's keyword form for this reason.
+- `git push` output shows the remote path. Do not echo it.
+- Use the scratchpad for temp files, never `/tmp`. Run `make audit` and `make scan` before dependency commits. Commit and push only when asked.
+
+### Deferred or optional
+- A container GUI (Portainer CE as a compose service) is optional, not before Day 6.
+- The one-command bootstrap waits until the lesson is done (see memory).
+- The tracker still shows the planned dates (Day 3 was 2026-10-19 but happened 2026-10-21). Not changed. Ask if he wants the later days shifted.
+- The Day 1 evidence line and the Day 1 drill.
+
+### Working preferences (also in Claude's memory)
+- Before every new build step: a short architecture note, then the plan, then wait for approval.
+- Explanations must form one continuous story that ties what was learned to what was built, in order. He objected to a run of disconnected fragments. Short plain sentences. No em-dashes. Bottom line first.
+- Evidence lines are in his words. Never invent numbers. His own runs are the evidence; mark assistant runs as such.
 
 ## Day 1: setup and first graph (complete except drill and evidence line)
 
