@@ -60,7 +60,6 @@
   .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
   .field { display: grid; gap: 4px; min-width: 0; flex: 0 1 270px; }
   .field.grow { flex: 1 1 260px; }
-  .field.wide { flex: 1 1 100%; }
   .actions { display: flex; gap: 8px; align-items: end; }
   .options { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; margin-top: 10px; }
   .options input[type=number] { width: 72px; }
@@ -107,7 +106,6 @@
   .node[data-status=planned] rect { stroke: var(--planned); stroke-dasharray: 5 4; }
   .node[data-status=planned] .t { fill: var(--planned); }
   .node[data-status=planned] .s { fill: var(--planned); }
-  .node[data-status=unwired] rect { stroke: var(--warn); stroke-dasharray: 5 4; }
   .node.active rect, .node.active polygon { stroke: #fff; fill: #12304d; }
   .node.calling rect { animation: pulse 1s ease-in-out infinite; }
   .node.ok rect, .node.ok polygon { stroke: var(--ok); }
@@ -123,7 +121,6 @@
   .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 8px; }
   .legend span::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 2px solid; margin-right: 6px; vertical-align: middle; }
   .l-built::before { border-color: var(--accent); }
-  .l-unwired::before { border-color: var(--warn); border-top-style: dashed !important; }
   .l-planned::before { border-color: var(--planned); border-top-style: dashed !important; }
 
   .lower { display: grid; gap: 16px; grid-template-columns: 1fr; }
@@ -326,7 +323,7 @@
     </section>
     <section class="panel" aria-label="Result">
       <h2>Result</h2>
-      <dl id="result"><dt>Status</dt><dd id="r-status">idle</dd></dl>
+      <dl id="result"><dt>Status</dt><dd>idle</dd></dl>
     </section>
   </div>
 </main>
@@ -485,8 +482,6 @@ function showResult(rows) {
 // to light the Validate box (small model) or just flag the large node.
 const view = { node: null, forced: false, tools: false, toolStep: null, served: {}, hasMismatch: false, live: false, replaying: false, stress: "none" };
 
-// Page node id for a graph node name (the investigate node is drawn as "inv").
-function nid(node) { return node === "investigate" ? "inv" : node; }
 
 // Compact text for a tool call's arguments, and for what came back.
 function argsText(args) { return clip(Object.values(args).join(", "), 22); }

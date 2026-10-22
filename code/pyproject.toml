@@ -8,8 +8,11 @@ dependencies = [
     "langchain-ollama>=1.1.0",
     "langgraph>=1.2.16",
     "mcp>=1.30.0,<2",
+    "pgvector>=0.5.1",
+    "psycopg[binary]>=3.3.6",
     "pydantic>=2.14.1",
     "python-dotenv>=1.2.4",
+    "sentence-transformers>=6.1.0",
 ]
 
 [tool.uv]
@@ -53,5 +56,5 @@ testpaths = ["tests"]
 # A -m on the command line overrides this one (the last -m wins).
 addopts = "-m 'not integration'"
 markers = [
-    "integration: calls real Ollama models (run with `pytest -m integration`)",
+    "integration: needs a live service, Ollama or Postgres (run with `pytest -m integration`)",
 ]

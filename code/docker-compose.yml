@@ -1,0 +1,53 @@
+# Day 3 services: Postgres with the pgvector extension, plus Adminer to look at it.
+#
+# Run from code/:   docker compose up -d
+# Stop, keep data:  docker compose down
+# Stop, wipe data:  docker compose down -v     (this deletes the pgdata volume)
+#
+# Supply chain. Both images are pinned by digest, not by tag. A tag can be moved
+# to different bytes after we scanned it. A digest cannot. The digest below is the
+# multi-arch index, so the same line works on Apple silicon and on x86 CI.
+# Both were scanned with Grype v0.120.1 before first use. Results are in
+# CHANGELOG.md. To move a digest: pick a build older than 7 days, rescan, update.
+#
+# Network. Both ports bind to 127.0.0.1. Without that prefix Docker publishes on
+# every interface, so anything on your Wi-Fi could reach a database with the
+# password "dev". Local-only keeps a dev password acceptable.
+
+services:
+  db:
+    # pgvector/pgvector:pg16 (Debian 12), pushed 2026-10-01.
+    image: pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
+    environment:
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: triage
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # Named volume: rows survive container removal. Without it the data lives in
+      # the container's writable layer and `docker compose down` deletes it.
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Postgres accepts TCP connections a moment before it can serve queries.
+      # pg_isready closes that gap, so dependents wait for a usable database.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d triage"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  adminer:
+    # adminer:6.1.1 (Alpine), pushed 2026-09-30. A stateless web UI: it holds no
+    # data, so it can be deleted and recreated freely.
+    image: adminer:6.1.1@sha256:74f29c416e148b98305e84446a18db7cd2c1038264dec464359d36774ef080ce
+    environment:
+      # Pre-fills the "Server" field. Inside the compose network the database is
+      # reachable by its service name, not by localhost.
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

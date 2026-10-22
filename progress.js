@@ -1,5 +1,5 @@
 window.DATA = {
-  "updated": "2026-10-20",
+  "updated": "2026-10-21",
   "plannedStart": "2026-10-17",
   "plannedEnd": "2026-10-26",
   "countdownStart": "2026-10-17T18:51:00",
@@ -22,7 +22,9 @@ window.DATA = {
     {"date": "2026-10-20", "entry": "Day 2 in progress: Triage schema with validate-retry-escalate, and a direct-bound deploy tool. 40 fast tests and 6 live tests pass. Live run: 5 of 5 valid, 0 of 5 escalated. MCP step planned; waiting on a cooldown decision. No self-check items done yet."},
     {"date": "2026-10-20", "entry": "Day 2 in progress. Built a live console (FindyFixy) that runs the real graph and streams its events, an 8-incident realistic bank, and the direct tool-call loop. 131 fast tests pass. Assistant check runs, not the learner's: 0 of 8 incidents escalated, severity matched the key 3 of 8, and the 1.5B model called the deploy tool with the wrong window (hours 1, not 24) in 2 of 2 runs. certifi upgraded to 2026.10.19 for PYSEC-2026-4320. No self-check item ticked: the learner's own 10-run table is still to do."},
     {"date": "2026-10-20", "entry": "Day 2 measured. Same tool, same model, same ToolNode loop, 10 runs each: direct median 0.57s, MCP with a persistent session 0.57s, MCP with a new session per call 1.14s (+0.57s, +100%). Input tokens 499 on all three, so 0 tokens of MCP overhead with one tool. The model sent a 1 hour window for a 24 hour question in 30 of 30 runs and answered wrongly every time. Console hunt: 10 of 10 replies parsed. Self-check 3 of 4 ticked; drill answered in time but without a number, so not ticked. Evidence line recorded."},
-    {"date": "2026-10-20", "entry": "Day 2 drill ticked at the learner's request. The answer was not timed and gave no number; the learner judged it complete. Day 2 closed at 4 of 4."}
+    {"date": "2026-10-20", "entry": "Day 2 drill ticked at the learner's request. The answer was not timed and gave no number; the learner judged it complete. Day 2 closed at 4 of 4."},
+    {"date": "2026-10-20", "entry": "Day 2 closed at 4 of 4 and pushed to the private GitHub remote (29 commits). Finished lessons d01, d02 and 00-plan corrected to match what was built (no teaching content changed). Added a privacy scanner with pre-commit and pre-push hooks: no PII or secrets ever, tree and history clean. Measured GPU vs CPU-only on this Mac with a 726-token incident: 1.5B call 1.13s vs 3.44s (3.0x), 7B call 5.58s vs 15.32s (2.7x), relevant to any container that cannot reach the Apple GPU. Open: Day 1 evidence line; one-command bootstrap deferred to after the lesson; Day 3 next."},
+    {"date": "2026-10-21", "entry": "Day 3 built and checked. Postgres with pgvector and Adminer run in Colima (6 GB), images pinned by digest and scanned. 200 synthetic incidents with 20 seeded twin pairs became 800 chunks (4 per incident, 384 dimensions, HNSW index) with an idempotent ingest: the learner's re-run printed written 0, unchanged 800. Lesson query: 2 of the top 5 hits belong to a seeded pair, both members of one pair present, distances 0.089 to 0.157. At 800 rows Postgres scans sequentially and ignores the index; larger sizes not measured. Self-check 3 of 4 ticked; the drill was not answered, so not ticked. Evidence line recorded."}
   ],
   "days": [
     {"n": 1, "week": 1, "date": "2026-10-17", "title": "Setup and first graph", "file": "d01.md",
@@ -36,7 +38,7 @@ window.DATA = {
     {"n": 3, "week": 1, "date": "2026-10-19", "title": "Memory I: ingestion", "file": "d03.md",
      "outcome": "200 incidents chunked, embedded, in pgvector",
      "checks": ["About 800 chunks stored", "Second ingestion run writes 0", "Top 5 includes a seeded near-duplicate", "Drill under 90s"],
-     "done": []},
+     "done": [0, 1, 2]},
     {"n": 4, "week": 1, "date": "2026-10-20", "title": "Memory II: hybrid retrieval", "file": "d04.md",
      "outcome": "BM25 plus vector, RRF, rerank; recall@5 measured",
      "checks": ["Three-retriever table", "Hybrid wins on exact-token queries", "Can explain RRF in one minute", "Drill under 90s"],

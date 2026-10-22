@@ -24,12 +24,17 @@ Skip, do not fail, when the environment is missing
 import os
 import signal
 import urllib.request
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+import psycopg
 import pytest
 from dotenv import load_dotenv
+from pgvector.psycopg import register_vector
+
+from app.ingest import database_url
 
 # Project root is code/, two levels above this file. Resolving from the file,
 # not from the current directory, means the tests work from any working dir.
@@ -128,3 +133,27 @@ def deadline():
             signal.signal(signal.SIGALRM, previous)
 
     return _deadline
+
+
+@pytest.fixture
+def conn() -> Iterator[psycopg.Connection]:
+    """A Postgres connection whose search_path is a private schema, dropped at the end.
+
+    Tests that write to `chunks` use this, so they cannot touch the real table.
+    It skips, not fails, when the database is down: a red result should mean the
+    code is wrong, not that `docker compose up` was not run.
+    """
+    try:
+        connection = psycopg.connect(database_url(), autocommit=True, connect_timeout=3)
+    except psycopg.OperationalError as error:
+        pytest.skip(f"Postgres not reachable (run `docker compose up -d db`): {error}")
+    schema = f"test_{os.getpid()}"
+    connection.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    connection.execute(f"CREATE SCHEMA {schema}")
+    connection.execute(f"SET search_path TO {schema}, public")
+    register_vector(connection)
+    try:
+        yield connection
+    finally:
+        connection.execute(f"DROP SCHEMA {schema} CASCADE")
+        connection.close()

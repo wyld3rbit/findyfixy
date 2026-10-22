@@ -34,7 +34,36 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - Root `README.md` tells a new reader how to start. No license file yet: the owner chooses one.
 - Not done: pushing to GitHub, and choosing a license.
 
+## Day 3: memory I, ingestion (in progress)
+
+Step 1 done: Postgres with pgvector, plus Adminer to look at it.
+
+- **Container runtime:** Colima (open source), started with `colima start --memory 6`. The Docker CLI talks to it through the `colima` context. Docker Desktop is not used.
+- **Services:** `code/docker-compose.yml`. `db` (`pgvector/pgvector:pg16`, pgvector 0.8.7) and `adminer` (6.1.1). Both pinned by digest. Both ports bind to `127.0.0.1`. Data lives in the named volume `pgdata`.
+- **Differs from the lesson:** digest pin instead of the `pg16` tag, localhost-only ports, a named volume, a healthcheck, and Adminer (not in the lesson).
+- **Packages added:** `psycopg[binary]` 3.3.6 (LGPL-3.0), `pgvector` 0.5.1 (MIT), `sentence-transformers` 6.1.0 (Apache-2.0), which pulls `torch` 2.14.1. `make audit` passes: no known vulnerabilities, no unexpected `.pth` files. Cooldown unchanged at 2026-10-17.
+- **Image scans** (Grype v0.120.1 as a container, against the registry, 2026-10-21):
+  - `pgvector/pgvector:pg16@sha256:7b822b0a...b90a`, Debian 12. 8 unique Critical and 37 unique High CVEs, all in Debian base packages (perl, glibc, util-linux, libxml2, openssl and others). 5 Critical have a Debian fix (perl); 3 are marked won't fix. None is in Postgres or pgvector.
+  - `adminer:6.1.1@sha256:74f29c41...80ce`, Alpine. 0 Critical, 6 unique High (openssl, curl, zlib).
+  - **Decision (learner, 2026-10-21): accept and proceed.** Reason: local only, synthetic data, no untrusted input reaches the containers. Revisit when a digest moves: rescan, compare.
+  - Images chosen at least 7 days old. Adminer 6.1.2 and Grype v0.121.0 were skipped as too new.
+- **Step 2 done: synthetic corpus.** `app/corpus.py` builds `data/incidents.jsonl` (`uv run python -m app.corpus`): 200 incidents, 8 services, 20 scenarios in two voices each. 180 originals plus 20 seeded twins (same facts, other wording, dated 1 to 4 days later). `twin_of` is the answer key for Day 4; ingest must ignore it. Every row has `synthetic: true`. Deterministic: seed 7. 10 tests in `tests/test_corpus.py`; full suite 305 passed. Proved the twin test can fail by breaking the generator once. The test also caught two templates whose voices disagreed on a fixed number; both fixed.
+- **Differs from the lesson:** extra fields `synthetic` and `twin_of`; twins reuse an original's facts, so a twin is a true duplicate and not just a similar incident.
+- **Known limit:** timeline stamps and stated durations are drawn separately, so they can disagree. Documented in the module docstring. Template text is more regular than real postmortems, so Day 4 recall is a ceiling.
+- **Step 3 done: ingestion job.** `app/ingest.py` (`uv run python -m app.ingest`). Chunk by section (4 per incident), hash, diff against the table, embed only new or changed chunks, then one transaction for upserts and deletes. Result: 800 chunks from 200 incidents, 384 dimensions, HNSW index `chunks_embedding_hnsw`. First run wrote 800 in about 40 s on CPU. Re-run: written 0, deleted 0, unchanged 800, in 0.3 s because it skips loading the model when the plan is empty. `twin_of` is never read. 14 fast tests (`tests/test_ingest.py`) and 4 database tests (`tests/integration/test_ingest_db.py`, run in a throwaway schema, skipped when Postgres is down). Proved the diff tests can fail by breaking the diff once.
+- **Embedding model:** `BAAI/bge-small-en-v1.5`, MIT, pinned to revision `5c38ec7c...267a`, safetensors weights. Revision and weights SHA-256 are in `notes/models.md`.
+- **Differs from the lesson:** extra columns `embedding_model` and `incident_date`; each chunk is embedded with a `service | severity | section:` header, the stored `body` stays clean; the hash covers model, embedded text and date, so a model change re-embeds everything.
+- **pyproject.toml:** the `integration` marker text now says "Ollama or Postgres".
+- **Console page (`docs/architecture.html`):** dead code removed (3 unused CSS rules: `.node[data-status=unwired]`, `.l-unwired`, `.field.wide`; the uncalled JS function `nid`; the unused `r-status` id). Checked first that the page and `graph.py` agree and that every emitted event kind is handled. Page script passes `node --check`; its replay tests ran and passed. Otherwise unchanged on Day 3. I added a static "Memory store" box, then reverted it at the learner's request: a box that no run touches shows nothing. Day 4 adds Retrieval and the store together, when they animate.
+- **Audit:** the first `make audit` after the install failed on a network timeout (firewall prompt). The retry passed: no known vulnerabilities, no unexpected `.pth` files.
+- **Step 4 done: first query.** `app/search.py` (`uv run python -m app.search "..."`). Embeds the query with the bge instruction prefix (documents get none), orders by cosine distance, prints the top 5 and marks hits that belong to a seeded pair. `search` never reads `twin_of`; only the display code does. Assistant run of the lesson query: top 5 were auth and notifications certificate-rotation summaries at distances 0.089 to 0.157; 2 of 5 hits belong to a seeded pair, and both members of one pair (INC-0073, INC-0074) were in the results. The learner's own run is still to do.
+- **Query plan (assistant run):** at 800 rows Postgres uses a sequential scan (1.27 ms, 800 rows read) and ignores the HNSW index. Forced with `enable_seqscan = off` it uses the index (0.78 ms). Expected at this size.
+- **Tests:** 5 fast tests in `tests/test_search.py`, 3 database tests in `tests/integration/test_search_db.py` with a two-axis fake model so distances are known in advance. Proved the ordering test can fail by reversing the sort (3 failed), then restored. The throwaway-schema `conn` fixture moved to `tests/integration/conftest.py` and is shared with the ingest database tests. Full suite: 324 passed.
+- **Open:** the learner's self-check runs, `notes/day3.md`, drill, evidence line, `progress.js`, and the commit.
+
 ## Where we stopped (read this first when resuming)
+
+- **Stale section.** It describes the end of Day 1. See the Day 3 entry above and `notes/` for the current state.
 
 - Day 1 is built, tested and committed. Left open on purpose: the Day 1 drill (skipped) and the Day 1 evidence line (the new end-of-day step in `CLAUDE.md`).
 - Next: Day 2, structured output and tools (`d02.md`). From Day 2 on, `CLAUDE.md` says to start with the warm-up: the learner explains Day 1 from memory in 3 to 5 lines before any file is opened. Reply in one line: right, or the one thing missed.
