@@ -12,6 +12,7 @@ dependencies = [
     "psycopg[binary]>=3.3.6",
     "pydantic>=2.14.1",
     "python-dotenv>=1.2.4",
+    "rank-bm25>=0.2.2",
     "sentence-transformers>=6.1.0",
 ]
 
@@ -21,9 +22,11 @@ dependencies = [
 # uploaded on 2026-10-15 and 16, so a strict 7-day window (2026-10-13) cannot be
 # applied retroactively. Move this date forward deliberately, never to today.
 exclude-newer = "2026-10-17T00:00:00Z"
-# Documented exception: certifi 2026.10.19 fixes PYSEC-2026-4320. Without this
-# line the cutoff above would downgrade it to the vulnerable 2026.7.22.
-exclude-newer-package = { certifi = "2026-10-21T00:00:00Z" }
+# Documented exceptions: certifi 2026.10.19 fixes PYSEC-2026-4320. filelock 4.2.1
+# (2026-10-17) fixes six CVEs in 4.2.0, and setuptools 84.1.0 (2026-10-19) fixes
+# GHSA-xmj3-9gf7-h52w. Without these lines the cutoff above would keep the
+# vulnerable versions.
+exclude-newer-package = { certifi = "2026-10-21T00:00:00Z", filelock = "2026-10-18T00:00:00Z", setuptools = "2026-10-20T00:00:00Z" }
 # `mcp` lists these as hard requirements, but only its HTTP serving and OAuth
 # features import them. This project talks to MCP over stdio, so they are not
 # needed. A never-true marker removes them from the install (about 4.4 MB, most

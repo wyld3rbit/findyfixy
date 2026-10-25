@@ -54,6 +54,7 @@ from langchain_ollama import ChatOllama
 from app.triage import (
     CONFIDENCE_RULE,
     EVIDENCE_MARKER,
+    PRIOR_MARKER,
     RETRY_MARKER,
     Ask,
     Reply,
@@ -88,11 +89,11 @@ def vague(prompt: str) -> str:
 def with_percent_note(prompt: str) -> str:
     """Insert the percentage note where the report ends. Pure.
 
-    The report ends at the first of the evidence or retry sections, or at the
+    The report ends at the first of the prior, evidence or retry sections, or at the
     end of the prompt. Putting the note there makes it read as part of the
     report, which is where untrusted text would be.
     """
-    cuts = [i for m in (EVIDENCE_MARKER, RETRY_MARKER) if (i := prompt.find(m)) != -1]
+    cuts = [i for m in (PRIOR_MARKER, EVIDENCE_MARKER, RETRY_MARKER) if (i := prompt.find(m)) != -1]
     at = min(cuts) if cuts else len(prompt)
     return prompt[:at] + PERCENT_NOTE + prompt[at:]
 

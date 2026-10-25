@@ -351,6 +351,26 @@ Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 - Limits: a net, not proof. It cannot know a word in prose is a name unless it is in `.private-terms`, cannot recognise a secret format it has no pattern for, and a commit made with `--no-verify` skips the pre-commit check (the pre-push check still runs). A team would run the same checks in CI too.
 - Nothing has been pushed. The remote is added (`origin`, empty).
 
+### Day 4, step 1: labelled retrieval queries
+
+- `app/eval_queries.py` builds `data/retrieval_eval.jsonl`: 40 queries. 30 meaning (paraphrases of seeded pairs, 19 from the summary and 11 from the root cause) and 10 exact-token (hostnames found in 1 to 3 incidents, picked at an even stride, labels computed from the corpus).
+- Differs from the lesson: the generator is a module, so the set can be rebuilt. Two identical gateway pairs (INC-0021/0023 and INC-0126/0127) share one query with four labels, because no content tells them apart.
+- Tests: `tests/test_eval_queries.py` (8). One test found a real bug on its first run (a bad anchor raised `KeyError`, not `ValueError`). Mutation: labelling the anchor without its twin failed 2 tests.
+- Open: `rank-bm25` not added yet (step 2). Download volume not checked.
+
+### Day 4, steps 2 to 4: three retrievers, the eval, the recall node
+
+- `app/retrieve.py`: `Retriever` with `vector`, `hybrid` (BM25 top 50 + vector top 50, RRF k=60) and `hybrid_rerank` (top 30 chunks, `bge-reranker-base`). All return incidents (each ranked by its best chunk) and take an optional `service`. Vector search and the reranker are injected. `rank-bm25` 0.2.2 added (Apache-2.0).
+- `app/eval_retrieval.py`: recall@5, all@5, MRR and p50 latency, for all queries and by kind. First call per retriever is a discarded warm-up. Numbers are in `notes/day4.md` (assistant run; the learner's run is open).
+- `recall` node before `small` (`build_graph(..., recall=...)`), order recall, investigate, small. Prior incidents go into the prompt after the report (`Prior`, `format_prior`, `PRIOR_MARKER` in `app/triage.py`), capped at 400 characters each, and into retry prompts. The percentage stress still lands inside the report.
+- Console: `RunHub(recall=...)`. Live runs use the real retriever, built on first use (`lazy_recall`). Fake runs show three invented incidents (`FAKE_RECALL`). `run_started` carries `recall`. Page: Recall node replaces the planned Retrieval box, an edge from Question, a "Recalled" row in the result panel.
+- Differs from the lesson: results are incidents, not chunks. The recall node uses `hybrid_rerank` with k = 3.
+- Reranker revision and weight hash are in `notes/models.md`.
+- Tests: 371 pass. New: `test_retrieve.py` (19), `test_eval_retrieval.py` (7), `test_graph_recall.py` (11), 2 console tests, recall events added to the page-lag replay. Five mutations, each caught.
+- Audit: `make audit` found 7 known vulnerabilities in packages this step did not touch (`filelock` 4.2.0, six CVEs; `setuptools` 84.0.0, GHSA-xmj3-9gf7-h52w). Approved by the learner. `filelock` is now 4.2.1 and `setuptools` 84.2.0. Both have a per-package cooldown exception in `pyproject.toml`. `setuptools` 84.2.0 (2026-10-19) is newer than the 84.1.0 named at approval, because the exception date admitted it. Audit clean.
+- Open: near-twin incidents take two of three recall slots. Not built.
+- Not run: the page in a real browser with a live recall run.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

@@ -45,9 +45,12 @@ def timeline(mode: str) -> list[dict]:
 
     return [
         ev(0.00, "run_started", mode=mode, tools=True, forced=True, question="q",
-           small_model="s", large_model="l", threshold=1.01),
-        ev(0.00, "node_entered", node="investigate", model="s"),
-        ev(0.00, "model_request", model="s", attempt=1),
+           small_model="s", large_model="l", threshold=1.01, recall=True),
+        # The recall step: a lookup that takes real time, then the rest shifts.
+        ev(0.00, "node_entered", node="recall", model=None),
+        ev(0.40, "node_exited", node="recall", model=None, incidents=["INC-0073", "INC-0074"]),
+        ev(0.40, "node_entered", node="investigate", model="s"),
+        ev(0.40, "model_request", model="s", attempt=1),
         ev(0.90, "model_reply", model="s", attempt=1, reply="", served_by="s", mismatch=False,
            input_tokens=900, output_tokens=30),
         ev(0.90, "tool_call", name="get_recent_deploys", args={"service": "billing", "hours": 24}),

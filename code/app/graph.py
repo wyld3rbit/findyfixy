@@ -18,7 +18,7 @@ Why a graph, and not an if statement
     Two nodes would fit in an if statement. The graph pays off as the system
     grows. Each step is a named node with its own inputs and outputs. That
     makes it easy to trace, test, retry, and pause for a human later (Day 9).
-    Day 4 adds a retrieval node before `small`. Day 7 adds a policy node.
+    Day 4 adds a recall node before `small`. Day 7 adds a policy node.
     With a graph, those are new nodes. With an if statement, they are a rewrite.
 
 Why the graph is built by a function that takes `ask`
@@ -48,7 +48,7 @@ Test it:  uv run pytest
 
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Literal, TypedDict
 
 from dotenv import load_dotenv
@@ -60,7 +60,11 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMe
 
 from app.events import Emit, no_emit
 from app.investigate import analyse, content_text, format_evidence, investigation_prompt
-from app.triage import Ask, Reply, Triage, TriageError, ask_validated
+from app.triage import Ask, Prior, Reply, Triage, TriageError, ask_validated, format_prior
+
+# The recall step's seam: a question in, similar past incidents out. Production
+# passes a function built on `app.retrieve.Retriever`. Tests pass a fake.
+Recall = Callable[[str], Sequence[Prior]]
 
 # The routing policy in one number. Treat it as a product decision, not a
 # constant of nature: it trades cost against quality. Day 8 tunes it
@@ -98,6 +102,7 @@ class S(TypedDict, total=False):
     triage: Triage | None
     model_used: str
     evidence: str
+    prior: str
 
 
 def ollama_ask(model: str, prompt: str) -> str:
@@ -133,6 +138,7 @@ def build_graph(
     emit: Emit = no_emit,
     investigator: CompiledStateGraph | None = None,
     investigate_model: str | None = None,
+    recall: Recall | None = None,
 ) -> CompiledStateGraph:
     """Wire the router and return a compiled graph, ready for `.invoke()`.
 
@@ -155,7 +161,29 @@ def build_graph(
     `investigate_model` is the name to show for the investigator's model in
     events. The investigator is injected with its model already bound, so the
     graph cannot know the name on its own. `None` means unnamed.
+
+    `recall` (app/retrieve.py) is an optional step that runs first. It looks up
+    similar past incidents for the question and puts them in both models' prompts
+    as `prior`. Retrieval before generation: if the right incident never reaches
+    the prompt, no prompt recovers it. With no `recall` the graph is unchanged.
     """
+
+    def recall_node(state: S) -> S:
+        """Look up similar past incidents and store them as prompt text.
+
+        An infrastructure fault (database down) propagates, like Ollama being
+        down: a retry here would hide it. The exit event lists the incident IDs
+        so the page and the log show what the model was given.
+        """
+        emit("node_entered", node="recall", model=None)
+        items = list(recall(state["question"]))
+        emit(
+            "node_exited",
+            node="recall",
+            model=None,
+            incidents=[item.incident_id for item in items],
+        )
+        return {"prior": format_prior(items)}
 
     def investigate(state: S) -> S:
         """Run the tool loop once, reporting each step as it finishes.
@@ -250,6 +278,7 @@ def build_graph(
                     state["question"],
                     emit=emit,
                     evidence=state.get("evidence", ""),
+                    prior=state.get("prior", ""),
                 )
             except TriageError:
                 if not tolerate_invalid:
@@ -304,12 +333,19 @@ def build_graph(
     g = StateGraph(S)
     g.add_node("small", make_node("small", small_model, tolerate_invalid=True))
     g.add_node("large", make_node("large", large_model, tolerate_invalid=False))
-    if investigator is None:
-        g.set_entry_point("small")  # every run starts at the cheap model
-    else:
+    # Steps before the cheap model, in order: recall, then investigate. Each is
+    # optional, and the chain ends at `small`.
+    before = []
+    if recall is not None:
+        g.add_node("recall", recall_node)
+        before.append("recall")
+    if investigator is not None:
         g.add_node("investigate", investigate)
-        g.set_entry_point("investigate")  # gather evidence, then the cheap model
-        g.add_edge("investigate", "small")
+        before.append("investigate")
+    chain = [*before, "small"]
+    g.set_entry_point(chain[0])  # without optional steps, the cheap model
+    for here, there in zip(chain, chain[1:]):
+        g.add_edge(here, there)
     g.add_conditional_edges("small", decide)  # the decision point
     g.add_edge("large", END)  # a plain edge: after `large`, always stop
     return g.compile()

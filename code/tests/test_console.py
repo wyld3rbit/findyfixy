@@ -750,3 +750,62 @@ def test_page_defaults_to_live_mode_and_has_the_stress_control(server):
     assert '<option value="live" selected>' in html
     assert html.index('<option value="live"') < html.index('<option value="fake"')
     assert 'id="stress"' in html
+
+
+# ---- recall: similar past incidents before the small model ------------------
+
+
+def _serve(hub):
+    srv = serve(hub, port=0)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, srv.server_address[1]
+
+
+def test_a_fake_run_shows_the_recall_step_when_the_hub_has_one():
+    from app.console import FAKE_RECALL
+
+    srv, port = _serve(RunHub(live_models=None, recall=lambda q: [], sleep=lambda s: None, fake_delay=0))
+    try:
+        post_run(port, {"mode": "fake", "scenario": "stay_small"})
+        events = stream(port)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert events[0]["data"]["recall"] is True
+    assert [e["data"]["node"] for e in events if e["kind"] == "node_entered"][0] == "recall"
+    (done,) = [e for e in events if e["kind"] == "node_exited" and e["data"]["node"] == "recall"]
+    # A fake run never calls the real recall: it shows the fixed, invented ones.
+    assert done["data"]["incidents"] == [p.incident_id for p in FAKE_RECALL]
+
+
+def test_a_live_run_uses_the_hubs_recall_and_a_hub_without_one_has_no_step(monkeypatch):
+    import app.console as console
+    from app.triage import Prior
+
+    monkeypatch.setattr(console, "ollama_ask", lambda model, prompt: console._reply(0.95))
+    seen: list[str] = []
+
+    def recall(question):
+        seen.append(question)
+        return [Prior("INC-9", "auth", "s", "c")]
+
+    srv, port = _serve(RunHub(live_models=("s", "l"), recall=recall, sleep=lambda s: None, fake_delay=0))
+    try:
+        post_run(port, {"mode": "live", "question": "auth slow"})
+        events = stream(port)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert seen == ["auth slow"]
+    (done,) = [e for e in events if e["kind"] == "node_exited" and e["data"]["node"] == "recall"]
+    assert done["data"]["incidents"] == ["INC-9"]
+
+    srv, port = _serve(RunHub(live_models=None, sleep=lambda s: None, fake_delay=0))
+    try:
+        post_run(port, {"mode": "fake", "scenario": "stay_small"})
+        events = stream(port)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert events[0]["data"]["recall"] is False
+    assert "recall" not in [e["data"].get("node") for e in events]

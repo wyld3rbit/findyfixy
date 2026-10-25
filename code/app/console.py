@@ -72,8 +72,8 @@ from app.incidents import DEFAULT_PATH, Incident, load_incidents
 from app.investigate import build_investigator
 from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
 from app.tools import make_deploys_tool
-from app.graph import QUESTIONS, THRESHOLD, build_graph, ollama_ask
-from app.triage import Ask, TriageError
+from app.graph import QUESTIONS, THRESHOLD, Recall, build_graph, ollama_ask
+from app.triage import Ask, Prior, TriageError
 
 Mode = Literal["live", "fake"]
 Scenario = Literal[
@@ -100,6 +100,18 @@ _MAX_QUESTION = 8000
 _KEEPALIVE_SECONDS = 10.0
 
 _FORCE_THRESHOLD = 1.01
+
+# How many prior incidents go into the prompt. Three is the lesson's number: more
+# costs prompt tokens and, with a 1.5B model, starts to distract it.
+RECALL_K = 3
+
+# What the page shows for the recall step in a fake run: fixed, invented, and
+# marked as such by its IDs. A fake run must never need a database or a model.
+FAKE_RECALL: tuple[Prior, ...] = (
+    Prior("FAKE-1", "auth", "Latency rose after a certificate rotation.", "Peers lacked the new intermediate authority."),
+    Prior("FAKE-2", "auth", "Slow logins after a rotation.", "Trust was not tested before cutover."),
+    Prior("FAKE-3", "gateway", "Saturation at the daily peak.", "The autoscaler floor was too low."),
+)
 
 # A hunt repeats real model runs, so the cap is a cost and time bound. The
 # server enforces it. The page default is lower than the limit on purpose.
@@ -287,6 +299,7 @@ class RunHub:
         live_models: tuple[str, str] | None,
         incidents: list[Incident] | None = None,
         investigator: CompiledStateGraph | None = None,
+        recall: Recall | None = None,
         sleep: Callable[[float], None] = time.sleep,
         fake_delay: float = 0.6,
         clock: Callable[[], float] = time.perf_counter,
@@ -294,6 +307,9 @@ class RunHub:
         self._live_models = live_models
         self.incidents = incidents or []
         self._investigator = investigator
+        # When set, live runs use it and fake runs use `FAKE_RECALL`. When None
+        # no run has a recall step, and the graph is what it was before Day 4.
+        self._recall = recall
         self._sleep = sleep
         self._fake_delay = fake_delay
         self._clock = clock
@@ -370,10 +386,20 @@ class RunHub:
                 run_id, ask, small, large, question, req.mode, forced,
                 req.hunt_max, req.force_retry,
             ),
-            kwargs={"investigator": investigator, "stress": req.stress},
+            kwargs={
+                "investigator": investigator,
+                "stress": req.stress,
+                "recall": self._recall_for(req.mode),
+            },
             daemon=True,
         ).start()
         return run_id
+
+    def _recall_for(self, mode: Mode) -> Recall | None:
+        """The recall step for a run of this mode, or None when the hub has none."""
+        if self._recall is None:
+            return None
+        return self._recall if mode == "live" else (lambda question: FAKE_RECALL)
 
     def _publish(self, event: Event) -> None:
         """Sink for the run's emitter: append and wake the SSE handlers."""
@@ -403,6 +429,7 @@ class RunHub:
         *,
         investigator: CompiledStateGraph | None = None,
         stress: Stress = "none",
+        recall: Recall | None = None,
     ) -> None:
         """The run thread. Always ends with exactly one terminal event.
 
@@ -424,7 +451,7 @@ class RunHub:
         def once(q: str) -> str:
             return self._run_once(
                 emit, ask, small, large, q, mode, forced, run_id, threshold,
-                investigator, stress,
+                investigator, stress, recall,
             )
 
         try:
@@ -450,6 +477,7 @@ class RunHub:
         threshold: float,
         investigator: CompiledStateGraph | None = None,
         stress: Stress = "none",
+        recall: Recall | None = None,
     ) -> Literal["finished", "failed", "error"]:
         """One graph run. Returns how it ended, after emitting its event.
 
@@ -460,7 +488,8 @@ class RunHub:
         """
         emit("run_started", run=run_id, mode=mode, question=question,
              small_model=small, large_model=large, threshold=threshold, forced=forced,
-             tools=investigator is not None, stress=stress)
+             tools=investigator is not None, stress=stress,
+             recall=recall is not None)
         try:
             graph = build_graph(
                 ask,
@@ -470,6 +499,7 @@ class RunHub:
                 emit=emit,
                 investigator=investigator,
                 investigate_model=small if investigator is not None and mode == "live" else None,
+                recall=recall,
             )
             result = graph.invoke({"question": question})
             emit(
@@ -761,6 +791,43 @@ def parse_args(argv: list[str]) -> tuple[bool, int]:
     return reload, port
 
 
+def lazy_recall() -> Recall:
+    """The real recall step, built on first use instead of at startup.
+
+    Building it loads two models (about 1.3 GB) and opens the database. Doing
+    that at startup would slow every start and fail it when the database is
+    off, though fake mode needs neither. On first use a failure becomes a
+    `run_failed` event, which the page shows. The retriever is kept after
+    the first build. One lock keeps two runs from building it twice.
+    """
+    import psycopg
+    from pgvector.psycopg import register_vector
+
+    from app.ingest import database_url, make_embedder
+    from app.retrieve import Retriever, load_passages, make_reranker, postgres_vector_search
+
+    lock = threading.Lock()
+    built: list[Retriever] = []
+
+    def recall(question: str) -> list[Prior]:
+        with lock:
+            if not built:
+                conn = psycopg.connect(database_url(), autocommit=True)
+                register_vector(conn)
+                built.append(
+                    Retriever(
+                        load_passages(conn),
+                        postgres_vector_search(conn, make_embedder()),
+                        make_reranker(),
+                    )
+                )
+            retriever = built[0]
+            found = retriever.hybrid_rerank(question, RECALL_K)
+            return [retriever.brief(f.incident_id) for f in found]
+
+    return recall
+
+
 def main(argv: list[str] | None = None) -> None:
     """Read the environment, build the hub, serve until Ctrl-C.
 
@@ -796,6 +863,7 @@ def main(argv: list[str] | None = None) -> None:
         live_models=(small, large) if small and large else None,
         incidents=load_incidents(DEFAULT_PATH),
         investigator=investigator,
+        recall=lazy_recall() if small and large else None,
     )
     dev = ROOT if os.environ.get("FINDYFIXY_DEV") else None
     server = serve(hub, port=port, dev_root=dev)

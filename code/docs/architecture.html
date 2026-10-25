@@ -207,7 +207,7 @@
   <section class="panel" aria-label="Architecture schematic">
     <div class="schematic">
     <svg viewBox="0 50 940 420" role="img" aria-labelledby="svgtitle">
-      <title id="svgtitle">The question goes to an investigate step that may look up deploys with a tool, then to the small model, then validation, then a route that either ends or escalates to the large model, and finally a triage record.</title>
+      <title id="svgtitle">The question first goes to a recall step that looks up similar past incidents, then to an investigate step that may look up deploys with a tool, then to the small model, then validation, then a route that either ends or escalates to the large model, and finally a triage record.</title>
 
       <!-- edges -->
       <path id="e_q_inv" class="edge" d="M120,260 L142,260"/>
@@ -219,11 +219,13 @@
       <path id="e_route_rec" class="edge" d="M718,260 L780,260"/>
       <path id="e_route_large" class="edge" d="M658,305 L658,388"/>
       <path id="e_large_rec" class="edge" d="M723,420 C845,420 845,330 845,292"/>
+      <path id="e_q_recall" class="edge tool" d="M65,228 L65,126"/>
       <path id="e_inv_tool" class="edge tool" d="M207,228 L207,126"/>
       <path id="e_tool_inv" class="edge" d="M207,126 L207,228" style="stroke:none"/>
       <text class="edge-label" x="435" y="366">retry with the error text (once)</text>
       <text class="edge-label" x="749" y="250">confident</text>
       <text class="edge-label" x="745" y="352">low confidence or invalid</text>
+      <text class="edge-label" x="71" y="182">similar incidents</text>
       <text id="l_bypass" class="edge-label" x="198" y="356" style="opacity:0">tool step off</text>
 
       <!-- built nodes -->
@@ -267,6 +269,12 @@
         <text class="s" x="845" y="271">severity, component</text>
         <text class="badge" x="845" y="286" id="b_rec"> </text>
       </g>
+      <g class="node" id="n_recall" data-status="built">
+        <rect x="10" y="62" width="110" height="64" rx="8"/>
+        <text class="t" x="65" y="86">Recall</text>
+        <text class="s" x="65" y="103">hybrid + rerank</text>
+        <text class="badge" x="65" y="119" id="b_recall"> </text>
+      </g>
       <g class="node" id="n_tool" data-status="built">
         <rect x="142" y="62" width="130" height="64" rx="8"/>
         <text class="t" x="207" y="86">Deploy tool</text>
@@ -275,11 +283,6 @@
       </g>
 
       <!-- planned nodes: one edit per build day flips data-status to built -->
-      <g class="node" data-status="planned">
-        <rect x="10" y="70" width="110" height="56" rx="8"/>
-        <text class="t" x="65" y="94">Retrieval</text>
-        <text class="s" x="65" y="112">Day 3-4</text>
-      </g>
       <g class="node" data-status="planned">
         <rect x="294" y="70" width="130" height="56" rx="8"/>
         <text class="t" x="359" y="94">Tracing</text>
@@ -374,7 +377,7 @@ function setBadge(id, text) { $("b_" + id).textContent = text || " "; }
 
 function resetVisuals() {
   document.querySelectorAll(".node").forEach((n) => n.classList.remove("active", "calling", "ok", "bad", "warn"));
-  ["inv", "tool", "small", "val", "route", "large", "rec"].forEach((id) => setBadge(id, ""));
+  ["recall", "inv", "tool", "small", "val", "route", "large", "rec"].forEach((id) => setBadge(id, ""));
   document.querySelectorAll(".node").forEach((n) => n.classList.remove("skipped"));
   $("e_q_small").style.opacity = 0;
   $("l_bypass").style.opacity = 0;
@@ -425,6 +428,7 @@ function summarize(ev) {
     case "fault_injected": return `INJECTED: ${d.model} reply replaced, ${d.field} = ${d.value}`;
     case "retry": return `re-asking ${d.model}, attempt ${d.attempt}`;
     case "node_exited":
+      if (d.node === "recall") return d.incidents.length ? `${d.incidents.length} similar incident(s): ${d.incidents.join(", ")}` : "no similar incidents";
       if (d.node === "investigate") return `${d.calls} tool call(s), ${d.turns} turn(s), ${tokensText(d)}${d.hit_turn_cap ? ", HIT TURN CAP" : ""}`;
       return d.triage ? `${d.node} produced a record` : `${d.node} produced no valid record`;
     case "route": return `confidence ${d.confidence === null ? "none" : d.confidence} vs ${d.threshold} -> ${d.target === "__end__" ? "done" : d.target}${d.threshold > 1 ? " (forced)" : ""}`;
@@ -480,7 +484,7 @@ function showResult(rows) {
 // ---- animation: one async step per event ---------------------------------
 // `view` tracks which node is "current", so a validation event knows whether
 // to light the Validate box (small model) or just flag the large node.
-const view = { node: null, forced: false, tools: false, toolStep: null, served: {}, hasMismatch: false, live: false, replaying: false, stress: "none" };
+const view = { recall: null, node: null, forced: false, tools: false, toolStep: null, served: {}, hasMismatch: false, live: false, replaying: false, stress: "none" };
 
 
 // Compact text for a tool call's arguments, and for what came back.
@@ -521,6 +525,7 @@ async function animate(ev) {
     case "run_started":
       resetVisuals();
       view.node = null;
+      view.recall = null;
       view.forced = d.forced;
       view.tools = d.tools;
       view.toolStep = null;
@@ -530,6 +535,7 @@ async function animate(ev) {
       view.stress = d.stress || "none";
       if (!view.replaying) pace = view.live ? PACE_REALTIME : PACE_NORMAL;
       mark("q", "active");
+      if (!d.recall) nodeEl("recall").classList.add("skipped");
       if (!d.tools) {
         // No tool step: show the bypass, and dim the boxes that stay idle.
         nodeEl("inv").classList.add("skipped");
@@ -541,6 +547,14 @@ async function animate(ev) {
                   ...(d.stress && d.stress !== "none" ? [["Stress", d.stress.replaceAll("_", " "), "bad"]] : [])]);
       break;
     case "node_entered":
+      if (d.node === "recall") {
+        // Recall is a side lookup that feeds the prompt, so it does not become
+        // the current model node: validation events must still find `small`.
+        await travel("e_q_recall");
+        mark("recall", "calling");
+        setBadge("recall", "searching");
+        break;
+      }
       if (d.node === "investigate") {
         view.node = "inv";
         await travel("e_q_inv");
@@ -597,6 +611,11 @@ async function animate(ev) {
       }
       break;
     case "node_exited":
+      if (d.node === "recall") {
+        view.recall = d.incidents;
+        mark("recall", "ok");
+        setBadge("recall", d.incidents.length ? `${d.incidents.length} found` : "none found");
+      }
       if (d.node === "investigate") {
         view.toolStep = d;
         mark("inv", d.hit_turn_cap ? "bad" : "ok");
@@ -626,6 +645,7 @@ async function animate(ev) {
         ["Confidence", String(d.triage.confidence), ""],
         ["Served by", servedSummary(), view.hasMismatch ? "bad" : ""],
         ...(view.stress !== "none" ? [["Stress", view.stress.replaceAll("_", " "), "bad"]] : []),
+        ...(view.recall ? [["Recalled", view.recall.length ? view.recall.join(", ") : "nothing similar", ""]] : []),
         ...(view.toolStep ? [["Tool step", `${view.toolStep.calls} call(s), ${view.toolStep.turns} turn(s), ${tokensText(view.toolStep)}`, ""]] : []),
       ]);
       break;

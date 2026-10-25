@@ -18,3 +18,19 @@ Check it any time:
 ```bash
 shasum -a 256 < ~/.cache/huggingface/hub/models--BAAI--bge-small-en-v1.5/snapshots/*/model.safetensors
 ```
+
+## Reranker (Day 4)
+
+- Name: `BAAI/bge-reranker-base` (cross-encoder)
+- License: MIT (model card)
+- Pinned revision: `2cfc18c9415c912f9d8155881c133215df768a70` (last changed upstream 2024-06-24). The downloaded snapshot folder carries the same hash.
+- Weights file: `model.safetensors`, 1112206140 bytes
+- SHA-256 of the weights: `ced967c45fd1902eb92716c9ceeca7c95a936770ea9db611f5a841b926e33fbd`
+- Downloaded: first run of `uv run python -m app.eval_retrieval`
+- Where it is pinned in code: `RERANKER_NAME` and `RERANKER_REVISION` in `code/app/retrieve.py`
+
+Check it any time:
+
+```bash
+shasum -a 256 < ~/.cache/huggingface/hub/models--BAAI--bge-reranker-base/snapshots/*/model.safetensors
+```
