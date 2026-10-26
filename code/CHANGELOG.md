@@ -371,6 +371,14 @@ Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 - Open: near-twin incidents take two of three recall slots. Not built.
 - Not run: the page in a real browser with a live recall run.
 
+### Where Day 4 stopped (2026-10-25)
+
+- Built, tested (371 pass), audited and committed (`cd9283d`). Not pushed.
+- Self-check items 1 and 2 are ticked. Open: explain RRF from memory (item 3), the drill (say "I'm excited" first), the evidence line for `notes/evidence.md`.
+- Not done: the Day 1 to 3 drills and evidence lines, if wanted. The recall node and page were not watched in a real browser with a live run.
+- Ideas, not built: remove near-twin incidents before filling the 3 recall slots. Labels that treat a whole failure pattern as correct, so meaning queries stop punishing correct hits.
+- Start: `make up`, then `resume day 4`.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.
