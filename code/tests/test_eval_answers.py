@@ -228,7 +228,7 @@ def test_a_metric_that_raises_is_a_failed_metric_not_an_abort() -> None:
     report = run_eval([case("g1", "S")], make_graph=graph_factory(),
                       candidates=FakeCandidates([prior("A")] * 4), judge=FakeJudge(),
                       embed=bad_embed, provenance=PROV)
-    assert report["cases"][0]["metrics"]["response_relevancy"] == {"score": None, "failed": True}
+    assert report["cases"][0]["metrics"]["response_relevancy"] == {"score": None, "failed": True, "trace": []}
     assert report["cases"][0]["run_error"] is None
 
 
@@ -316,7 +316,7 @@ def test_n0_and_n1_have_no_interval_and_do_not_crash() -> None:
 def provenance(**over: Any) -> dict[str, Any]:
     args: dict[str, Any] = dict(
         judge_model="qwen2.5:7b", digest=lambda m: "dig-" + m, golden_sha256="gold",
-        small_model="s", large_model="l", git=lambda: ("abc1234", True), now=lambda: NOW)
+        small_model="s", large_model="l", git=lambda: ("abc1234", False), now=lambda: NOW)
     args.update(over)
     return build_provenance(**args)
 
@@ -329,7 +329,7 @@ def test_provenance_has_every_key() -> None:
     assert p["judge_digest"] == "dig-qwen2.5:7b"
     assert p["prompt_versions"] == PROMPT_VERSIONS
     assert p["timestamp_utc"] == "2026-10-26T12:30:05+00:00"
-    assert p["git_sha"] == "abc1234" and p["git_dirty"] is True
+    assert p["git_sha"] == "abc1234" and p["git_dirty"] is False
 
 
 def test_report_is_written_under_a_timestamped_name(tmp_path: Path) -> None:
@@ -642,4 +642,100 @@ def test_main_passes_workers_only_when_above_one_and_rejects_values_over_the_cap
     assert seen == [{}, {"workers": 3}]
     with pytest.raises(SystemExit):
         main(["--workers", "9"], runner=runner, **kw)
+
+
+# ---- Audit trail, case viewer, freezing from a saved report -------------------
+
+
+def saved_report(tmp_path: Path, **prov) -> Path:
+    """A real report, run with fakes and written to disk."""
+    report = run([case("g1", "S", "T"), case("g2", "S2")], provenance=provenance(**prov))
+    path = tmp_path / "reports" / "eval-20261026T120000Z.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(report))
+    return path
+
+
+def test_the_case_record_keeps_the_answer_the_contexts_and_the_judge_decisions() -> None:
+    report = run([case("g1", "S", "T")])
+    record = report["cases"][0]
+    assert record["answer"].startswith("Severity sev2")
+    assert record["contexts"] and all(isinstance(c, str) for c in record["contexts"])
+    assert record["metrics"]["faithfulness"]["trace"][0]["claim"] == "it is auth"
+    assert len(record["metrics"]["response_relevancy"]["trace"]) == 3
+
+
+def test_show_case_prints_everything_needed_to_check_a_score(tmp_path: Path, capsys, monkeypatch) -> None:
+    path = saved_report(tmp_path)
+    monkeypatch.setattr(ea, "load_golden", lambda: [case("g1", "S", "T")])
+    assert main(["--show-case", "g1", "--report", str(path)]) == 0
+    out = capsys.readouterr().out
+    for needle in ("g1", "ALERT", "REFERENCE", "RECALLED", "ANSWER", "faithfulness:",
+                   "response_relevancy:", "context_recall:", "[x] it is auth", "SEEN BY THE MODEL"):
+        assert needle in out, needle
+
+
+def test_show_case_uses_the_newest_report_by_default(tmp_path: Path, capsys, monkeypatch) -> None:
+    saved_report(tmp_path)
+    monkeypatch.setattr(ea, "load_golden", lambda: [case("g1", "S", "T")])
+    assert main(["--show-case", "g1"], reports_dir=tmp_path / "reports") == 0
+    assert "g1" in capsys.readouterr().out
+
+
+def test_show_case_with_an_unknown_id_or_no_report_is_a_clear_error(tmp_path: Path, capsys) -> None:
+    path = saved_report(tmp_path)
+    assert main(["--show-case", "g99", "--report", str(path)]) == 2
+    assert "no case 'g99'" in capsys.readouterr().err
+    assert main(["--show-case", "g1"], reports_dir=tmp_path / "empty") == 2
+
+
+def test_show_case_survives_a_run_error_and_a_failed_metric() -> None:
+    errored = {"id": "g1", "group": "twin", "source_id": "S", "twin_id": "T", "recalled_ids": [],
+               "run_error": "RuntimeError: boom", "latency_s": 0.1}
+    assert "RUN ERROR  RuntimeError: boom" in ea.format_case(errored, case("g1", "S", "T"))
+    failed = {**errored, "run_error": None, "severity": "sev2", "severity_match": True, "answer": "a",
+              "contexts": [], "metrics": {"faithfulness": {"score": None, "failed": True, "trace": []}}}
+    out = ea.format_case(failed, None)
+    assert "faithfulness: FAILED" in out and "nothing was recalled" in out
+
+
+@pytest.mark.parametrize("content", ["not json", "[]", "{}", '{"provenance": 1}'])
+def test_a_file_that_is_not_a_report_is_refused(tmp_path: Path, content: str, capsys) -> None:
+    bad = tmp_path / "bad.json"
+    bad.write_text(content)
+    assert main(["--baseline-from", str(bad)], baseline_path=tmp_path / "b.json") == 2
+    assert not (tmp_path / "b.json").exists()
+
+
+def test_a_huge_file_is_refused_before_it_is_read(tmp_path: Path, monkeypatch) -> None:
+    big = tmp_path / "big.json"
+    big.write_text("{}")
+    monkeypatch.setattr(ea, "MAX_REPORT_BYTES", 1)
+    with pytest.raises(ea.ReportInvalid, match="too large"):
+        ea.load_report(big)
+
+
+def test_baseline_from_a_saved_report_runs_nothing_and_then_the_gate_passes(tmp_path: Path) -> None:
+    path = saved_report(tmp_path)
+    baseline = tmp_path / "evals" / "baseline.json"
+
+    def runner(progress, **kwargs):
+        raise AssertionError("freezing a saved report must not run the evaluation")
+
+    assert main(["--baseline-from", str(path)], runner=runner, baseline_path=baseline) == 0
+    assert baseline.exists()
+    report = json.loads(path.read_text())
+    assert gate(report, load_baseline(baseline)) == []
+
+
+def test_baseline_from_refuses_a_dirty_tree_and_a_no_recall_run(tmp_path: Path, capsys) -> None:
+    baseline = tmp_path / "evals" / "baseline.json"
+    dirty = saved_report(tmp_path, git=lambda: ("abc1234", True))
+    assert main(["--baseline-from", str(dirty)], baseline_path=baseline) == 1
+    assert "uncommitted changes" in capsys.readouterr().err and not baseline.exists()
+    other = tmp_path / "other"
+    other.mkdir()
+    no_recall = saved_report(other, recall_enabled=False)
+    assert main(["--baseline-from", str(no_recall)], baseline_path=baseline) == 1
+    assert "negative control" in capsys.readouterr().err
 

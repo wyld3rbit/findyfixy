@@ -30,6 +30,11 @@ from app.metrics import (
 )
 
 
+def pair(result):
+    """The (score, failed) pair of a result, ignoring its trace."""
+    return (result.score, result.failed)
+
+
 class FakeJudge:
     """Plays scripted replies by schema type and records prompts."""
 
@@ -69,12 +74,12 @@ def test_faithfulness_two_of_three_supported():
 
 def test_faithfulness_all_unsupported_is_zero_not_failed():
     judge = FakeJudge({Claims: [Claims(claims=["a"])], Verdict: verdicts(False)})
-    assert faithfulness(judge, "ans", ["c"]) == (0.0, False)
+    assert pair(faithfulness(judge, "ans", ["c"])) == (0.0, False)
 
 
 def test_faithfulness_zero_claims_is_failed():
     judge = FakeJudge({Claims: [Claims(claims=[])], Verdict: []})
-    assert faithfulness(judge, "ans", ["c"]) == (None, True)
+    assert pair(faithfulness(judge, "ans", ["c"])) == (None, True)
 
 
 def test_faithfulness_blank_claims_count_as_zero_claims():
@@ -84,7 +89,7 @@ def test_faithfulness_blank_claims_count_as_zero_claims():
 
 def test_faithfulness_judge_error_on_split_fails():
     judge = FakeJudge({Claims: [JudgeError("x")], Verdict: []})
-    assert faithfulness(judge, "ans", ["c"]) == (None, True)
+    assert pair(faithfulness(judge, "ans", ["c"])) == (None, True)
 
 
 def test_faithfulness_judge_error_midway_fails_whole_metric():
@@ -94,14 +99,14 @@ def test_faithfulness_judge_error_midway_fails_whole_metric():
             Verdict: [*verdicts(True), JudgeError("x")],
         }
     )
-    assert faithfulness(judge, "ans", ["c"]) == (None, True)
+    assert pair(faithfulness(judge, "ans", ["c"])) == (None, True)
 
 
 def test_faithfulness_empty_contexts_is_scored_not_failed():
     judge = FakeJudge(
         {Claims: [Claims(claims=["a", "b"])], Verdict: verdicts(False, False)}
     )
-    assert faithfulness(judge, "ans", []) == (0.0, False)
+    assert pair(faithfulness(judge, "ans", [])) == (0.0, False)
     assert "Context:\n\n" in judge.prompts[1][1]
 
 
@@ -143,19 +148,19 @@ def test_relevancy_respects_n():
 def test_relevancy_wrong_question_count_fails_before_embedding():
     judge = FakeJudge({Questions: [Questions(questions=["q1", "q2"])]})
     embed = fake_embed([])
-    assert response_relevancy(judge, embed, "o", "a") == (None, True)
+    assert pair(response_relevancy(judge, embed, "o", "a")) == (None, True)
     assert embed.seen == []
 
 
 def test_relevancy_judge_error_fails():
     judge = FakeJudge({Questions: [JudgeError("x")]})
-    assert response_relevancy(judge, fake_embed([]), "o", "a") == (None, True)
+    assert pair(response_relevancy(judge, fake_embed([]), "o", "a")) == (None, True)
 
 
 def test_relevancy_zero_vector_is_failure_not_crash():
     judge = FakeJudge({Questions: [Questions(questions=["a", "b", "c"])]})
     vectors = [[1.0, 0.0], [1.0, 0.0], [0.0, 0.0], [1.0, 0.0]]
-    assert response_relevancy(judge, fake_embed(vectors), "o", "a") == (None, True)
+    assert pair(response_relevancy(judge, fake_embed(vectors), "o", "a")) == (None, True)
 
 
 def test_relevancy_zero_question_vector_is_failure():
@@ -183,18 +188,18 @@ def test_recall_one_of_two_sentences_attributed():
 
 def test_recall_empty_reference_is_failed():
     judge = FakeJudge({Verdict: []})
-    assert context_recall(judge, "   ", ["ctx"]) == (None, True)
+    assert pair(context_recall(judge, "   ", ["ctx"])) == (None, True)
     assert judge.prompts == []
 
 
 def test_recall_judge_error_fails():
     judge = FakeJudge({Verdict: [*verdicts(True), JudgeError("x")]})
-    assert context_recall(judge, "One. Two.", ["c"]) == (None, True)
+    assert pair(context_recall(judge, "One. Two.", ["c"])) == (None, True)
 
 
 def test_recall_empty_contexts_is_zero_not_failed():
     judge = FakeJudge({Verdict: verdicts(False, False)})
-    assert context_recall(judge, "One. Two.", []) == (0.0, False)
+    assert pair(context_recall(judge, "One. Two.", [])) == (0.0, False)
 
 
 # ---- helpers ---------------------------------------------------------------
@@ -235,3 +240,52 @@ def test_prompt_hash_changes_when_a_template_changes(monkeypatch):
     after = metrics._sha(metrics.CLAIMS_PROMPT, metrics.SUPPORT_PROMPT)
     assert before == PROMPT_VERSIONS["faithfulness"]
     assert after != before
+
+
+# ---- traces: the evidence behind each score ---------------------------------
+
+
+def test_faithfulness_trace_lists_each_claim_with_its_verdict_and_reason():
+    judge = FakeJudge(
+        {
+            Claims: [Claims(claims=["a", "b"])],
+            Verdict: [Verdict(supported=True, reason="stated"), Verdict(supported=False, reason="not in context")],
+        }
+    )
+    result = faithfulness(judge, "ans", ["ctx"])
+    assert result.trace == (
+        {"claim": "a", "supported": True, "reason": "stated"},
+        {"claim": "b", "supported": False, "reason": "not in context"},
+    )
+
+
+def test_recall_trace_lists_each_reference_sentence():
+    judge = FakeJudge({Verdict: verdicts(True, False)})
+    result = context_recall(judge, "First point. Second point.", ["ctx"])
+    assert [row["sentence"] for row in result.trace] == ["First point.", "Second point."]
+    assert [row["supported"] for row in result.trace] == [True, False]
+
+
+def test_relevancy_trace_lists_each_generated_question_with_its_similarity():
+    judge = FakeJudge({Questions: [Questions(questions=["q1", "q2", "q3"])]})
+    vectors = {"orig": [1.0, 0.0], "q1": [1.0, 0.0], "q2": [0.0, 1.0], "q3": [1.0, 0.0]}
+    result = response_relevancy(judge, lambda texts: [vectors[t] for t in texts], "orig", "ans")
+    assert result.trace == (
+        {"question": "q1", "similarity": 1.0},
+        {"question": "q2", "similarity": 0.0},
+        {"question": "q3", "similarity": 1.0},
+    )
+
+
+def test_a_failed_result_has_no_trace():
+    judge = FakeJudge({Claims: [JudgeError("x")]})
+    assert faithfulness(judge, "ans", ["c"]).trace == ()
+
+
+def test_a_runaway_judge_reason_is_capped_before_it_is_stored():
+    from app.metrics import MAX_REASON_CHARS
+
+    judge = FakeJudge({Claims: [Claims(claims=["a"])], Verdict: [Verdict(supported=True, reason="x" * 5000)]})
+    (row,) = faithfulness(judge, "ans", ["c"]).trace
+    assert len(row["reason"]) == MAX_REASON_CHARS and row["reason"].endswith("...")
+

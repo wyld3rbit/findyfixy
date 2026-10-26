@@ -7,7 +7,7 @@
 #      how a hijacked package can persist. Only the known shims are allowed.
 # On any finding, stop and read it. Do not upgrade or remove to make it pass.
 
-.PHONY: audit hooks scan up down setup ingest console triage test eval-retrieval eval eval-gate eval-baseline eval-negative golden
+.PHONY: audit hooks scan up down setup ingest console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-negative case golden
 
 # Memory for the Colima VM, in GB. 6 on most days, 8 on Langfuse days:
 #   make up COLIMA_MEMORY=8
@@ -113,3 +113,18 @@ eval-negative:
 # and check by eye. Read-only.
 golden:
 	uv run python -m app.golden --show
+
+# case: print one case from the newest report: the alert, what the model and the
+# judge saw, the answer and every judge decision. For checking a score by eye.
+#   make case ID=g07
+case:
+	@test -n "$(ID)" || { echo "usage: make case ID=g07"; exit 2; }
+	uv run python -m app.eval_answers --show-case $(ID)
+
+# eval-freeze: freeze a SAVED report as the baseline (no run). The baseline is then
+# exactly the numbers you reviewed. Refuses a dirty-tree run, run errors, a high
+# judge failure rate and a no-recall run.
+#   make eval-freeze REPORT=reports/eval-<timestamp>.json
+eval-freeze:
+	@test -n "$(REPORT)" || { echo "usage: make eval-freeze REPORT=reports/eval-<timestamp>.json"; exit 2; }
+	uv run python -m app.eval_answers --baseline-from $(REPORT)

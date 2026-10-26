@@ -6,7 +6,7 @@
 # its own, so the real commands stay readable in one place each.
 
 .DEFAULT_GOAL := help
-.PHONY: help setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-negative golden ingest audit tracker ui check
+.PHONY: help setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-negative case golden ingest audit tracker ui check
 
 help:
 	@echo "First time:       make setup"
@@ -14,7 +14,8 @@ help:
 	@echo "Run the product:  make console   make triage   make ingest"
 	@echo "Measure / test:   make test   make eval-retrieval"
 	@echo "Answer quality:   make eval   make eval-gate   make eval-baseline   make eval-negative"
-	@echo "See test cases:   make golden"
+	@echo "See test cases:   make golden   make case ID=g07"
+	@echo "Freeze baseline:  make eval-freeze REPORT=reports/eval-<timestamp>.json"
 	@echo "Tracker page:     make tracker"
 	@echo "Landing page:     make ui   (tracker with the visualization embedded)"
 	@echo "Before a commit:  make check   make audit"
@@ -22,6 +23,14 @@ help:
 # Product targets: see code/Makefile for what each one runs.
 setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-negative golden ingest audit:
 	$(MAKE) -C code $@
+
+# Targets that take a value are forwarded explicitly, because the pattern rule
+# above cannot pass variables to the code Makefile.
+case:
+	$(MAKE) -C code case ID=$(ID)
+
+eval-freeze:
+	$(MAKE) -C code eval-freeze REPORT=$(REPORT)
 
 # The tracker page at http://127.0.0.1:8766. Ctrl-C stops it.
 tracker:

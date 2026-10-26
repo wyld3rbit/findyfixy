@@ -308,6 +308,8 @@ def run_case(
         "latency_s": 0.0,
         "severity": None,
         "severity_match": None,
+        "answer": None,
+        "contexts": [],
         "metrics": {},
         "run_error": None,
     }
@@ -339,7 +341,14 @@ def run_case(
         ),
         "context_recall": _safe_metric(lambda: context_recall(judge, case.reference, contexts)),
     }
-    record["metrics"] = {n: {"score": r.score, "failed": r.failed} for n, r in results.items()}
+    # The answer, what the judge was shown, and the judge's own decisions are
+    # kept so a score can be audited and hand-checked (`--show-case`).
+    record["answer"] = answer
+    record["contexts"] = list(contexts)
+    record["metrics"] = {
+        n: {"score": r.score, "failed": r.failed, "trace": [dict(row) for row in r.trace]}
+        for n, r in results.items()
+    }
     return record
 
 
@@ -559,6 +568,8 @@ def baseline_refusals(report: Mapping[str, Any], max_failure_rate: float) -> lis
     reasons = []
     if report["provenance"].get("recall_enabled") is False:
         reasons.append("recall was disabled for this run (negative control)")
+    if report["provenance"].get("git_dirty") is True:
+        reasons.append("the working tree had uncommitted changes, so the code is not traceable")
     if overall["n_run_errors"]:
         reasons.append(f"{overall['n_run_errors']} case(s) had a run error")
     for name in METRIC_NAMES:
@@ -674,6 +685,131 @@ def _cell(stat: Mapping[str, Any]) -> str:
     ci = stat["ci"]
     span = f" [{ci[0]:.2f},{ci[1]:.2f}]" if ci else " [n/a]"
     return f"{stat['mean']:.2f}{span} f{stat['n_failed']}"
+
+
+# ---- Saved reports: load, show one case, freeze a baseline ------------------
+
+# A report is a few hundred KB. A file far larger than that is not one of ours,
+# and reading it whole would be an easy way to exhaust memory.
+MAX_REPORT_BYTES = 20_000_000
+
+
+class ReportInvalid(ValueError):
+    """The file is not a report this module wrote."""
+
+
+def latest_report(directory: Path = REPORTS_DIR) -> Path:
+    """The newest report file by name (names carry a UTC timestamp)."""
+    found = sorted(directory.glob("eval-*.json"))
+    if not found:
+        raise ReportInvalid(f"no reports in {directory}")
+    return found[-1]
+
+
+def load_report(path: Path) -> dict[str, Any]:
+    """Read a saved report. Raises `ReportInvalid` for anything that is not one."""
+    try:
+        if path.stat().st_size > MAX_REPORT_BYTES:
+            raise ReportInvalid(f"{path.name} is too large to be a report")
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as err:
+        raise ReportInvalid(f"cannot read {path.name}: {err}") from err
+    if not isinstance(data, dict) or not {"provenance", "aggregates", "cases"} <= data.keys():
+        raise ReportInvalid(f"{path.name} is missing provenance, aggregates or cases")
+    return data
+
+
+def _verdict_rows(trace: Sequence[Mapping[str, Any]], key: str) -> list[str]:
+    """One line per judge decision: [x] supported, [ ] not, then the text and reason."""
+    return [
+        f"    [{'x' if row.get('supported') else ' '}] {row.get(key, '')}"
+        + (f"  -- {row['reason']}" if row.get("reason") else "")
+        for row in trace
+    ]
+
+
+def format_case(record: Mapping[str, Any], golden: GoldenCase | None) -> str:
+    """One case end to end, as plain text, for a person to check by eye.
+
+    Everything the model and the judge saw, and every decision the judge made.
+    Tolerates a run error and reports saved before traces existed.
+    """
+    verdict = {True: "MATCH", False: "MISS", None: "-"}[record.get("severity_match")]
+    head = (
+        f"{record['id']}  {record['group']}  source {record['source_id']}  "
+        f"expected {golden.expected_severity if golden else '?'}  "
+        f"answered {record.get('severity')}  {verdict}  "
+        f"model {record.get('model_used')}  {record.get('latency_s', 0):.1f}s"
+    )
+    twin = record.get("twin_id")
+    lines = [head, f"ALERT      {golden.question if golden else '?'}"]
+    if golden:
+        lines.append("REFERENCE  " + golden.reference.replace("\n", "\n           "))
+    recalled = ", ".join(
+        f"{i} (twin)" if i == twin else i for i in record.get("recalled_ids", [])
+    )
+    lines.append(f"RECALLED   {recalled or 'nothing'}")
+    if record.get("run_error"):
+        lines.append(f"RUN ERROR  {record['run_error']}")
+        return "\n".join(lines)
+    lines.append("SEEN BY THE MODEL AND THE JUDGE")
+    lines.extend(f"    {c}" for c in record.get("contexts", []) or ["(nothing was recalled)"])
+    lines.append(f"ANSWER     {record.get('answer')}")
+    for name, key in (
+        ("faithfulness", "claim"),
+        ("response_relevancy", "question"),
+        ("context_recall", "sentence"),
+    ):
+        m = record.get("metrics", {}).get(name, {})
+        if not m:
+            lines.append(f"{name}: not recorded")
+            continue
+        if m.get("failed") or m.get("score") is None:
+            lines.append(f"{name}: FAILED (the judge gave no usable result)")
+            continue
+        lines.append(f"{name}: {m['score']:.3f}")
+        trace = m.get("trace", [])
+        if name == "response_relevancy":
+            lines.extend(f"    {row['similarity']:.2f}  {row['question']}" for row in trace)
+        else:
+            lines.extend(_verdict_rows(trace, key))
+    return "\n".join(lines)
+
+
+def show_case(case_id: str, report_path: Path | None, reports_dir: Path) -> int:
+    """Print one case from a saved report. Returns the exit code."""
+    try:
+        report = load_report(report_path or latest_report(reports_dir))
+    except ReportInvalid as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 2
+    record = next((r for r in report["cases"] if r.get("id") == case_id), None)
+    if record is None:
+        known = ", ".join(r.get("id", "?") for r in report["cases"])
+        print(f"error: no case {case_id!r} in that report. Cases: {known}", file=sys.stderr)
+        return 2
+    golden = {c.id: c for c in load_golden()}.get(case_id)
+    print(format_case(record, golden))
+    return 0
+
+
+def freeze_baseline(report_path: Path, baseline_path: Path) -> int:
+    """Freeze a saved report as the baseline, with the same refusals as a live run.
+
+    The baseline is then exactly the numbers that were reviewed, not a fresh
+    run that happens to follow them. Returns the exit code.
+    """
+    try:
+        report = load_report(report_path)
+        write_baseline(report, baseline_path)
+    except ReportInvalid as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 2
+    except BaselineRefused as err:
+        print(f"baseline refused: {err}", file=sys.stderr)
+        return 1
+    print(f"baseline written: {baseline_path.name} (from {report_path.name})")
+    return 0
 
 
 def format_table(report: Mapping[str, Any]) -> str:
@@ -820,7 +956,20 @@ def main(
         action="store_true",
         help="negative control: run without the recall step. Never saved as a baseline.",
     )
+    parser.add_argument("--show-case", metavar="ID", help="print one case from a saved report, with every judge decision")
+    parser.add_argument("--report", type=Path, help="the saved report for --show-case (default: the newest)")
+    parser.add_argument(
+        "--baseline-from",
+        metavar="REPORT",
+        type=Path,
+        help="freeze a saved report as the baseline, without running anything",
+    )
     args = parser.parse_args(argv)
+
+    if args.show_case:
+        return show_case(args.show_case, args.report, reports_dir)
+    if args.baseline_from:
+        return freeze_baseline(args.baseline_from, baseline_path)
 
     baseline = None
     if args.gate:  # fail on a missing baseline before spending an hour on the run

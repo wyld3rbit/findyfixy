@@ -43,7 +43,7 @@ import hashlib
 import math
 import re
 from collections.abc import Callable, Sequence
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from pydantic import BaseModel, Field
 
@@ -54,11 +54,29 @@ from app.judge import Judge, JudgeError
 Embed = Callable[[Sequence[str]], list[list[float]]]
 
 
+# A judge's free-text reason is stored in the report for audit. It is model
+# output, so it is capped: a runaway reply must not bloat the file.
+MAX_REASON_CHARS = 300
+
+
+def _cap(text: str) -> str:
+    """Cap a judge-written string for storage."""
+    return text if len(text) <= MAX_REASON_CHARS else text[: MAX_REASON_CHARS - 3] + "..."
+
+
 class MetricResult(NamedTuple):
-    """One metric on one sample. `score` is None exactly when `failed`."""
+    """One metric on one sample. `score` is None exactly when `failed`.
+
+    `trace` is the evidence behind the score, as plain dicts that go straight
+    into the JSON report: the claims and each verdict, the sentences and each
+    verdict, or the generated questions and their similarities. A score you
+    cannot trace to its parts cannot be audited or hand-checked. It is empty
+    for a failed result.
+    """
 
     score: float | None
     failed: bool
+    trace: tuple[dict[str, Any], ...] = ()
 
 
 def _failed() -> MetricResult:
@@ -173,18 +191,22 @@ def _join(contexts: Sequence[str]) -> str:
 
 def _fraction_supported(
     judge: Judge, template: str, key: str, items: Sequence[str], context: str
-) -> float:
-    """Ask one verdict per item and return supported / total. Raises JudgeError.
+) -> tuple[float, tuple[dict[str, Any], ...]]:
+    """Ask one verdict per item. Return (supported / total, one trace row each).
+
+    Raises JudgeError.
 
     One call per item, not one batch: a 7B model asked for many verdicts at
     once loses count and drifts toward the same answer for all of them.
     """
     supported = 0
+    trace = []
     for item in items:
         prompt = template.format(context=context, **{key: item})
-        if judge.ask(prompt, Verdict).supported:
-            supported += 1
-    return supported / len(items)
+        verdict = judge.ask(prompt, Verdict)
+        supported += verdict.supported
+        trace.append({key: item, "supported": verdict.supported, "reason": _cap(verdict.reason)})
+    return supported / len(items), tuple(trace)
 
 
 # ---- Metrics. ---------------------------------------------------------------
@@ -204,12 +226,12 @@ def faithfulness(
         claims = [c.strip() for c in raw if c.strip()]
         if not claims:
             return _failed()
-        score = _fraction_supported(
+        score, trace = _fraction_supported(
             judge, SUPPORT_PROMPT, "claim", claims, _join(contexts)
         )
     except JudgeError:
         return _failed()
-    return MetricResult(score, False)
+    return MetricResult(score, False, trace)
 
 
 def response_relevancy(
@@ -236,7 +258,8 @@ def response_relevancy(
         sims = [cosine(vectors[0], v) for v in vectors[1:]]
     except ValueError:
         return _failed()
-    return MetricResult(sum(sims) / n, False)
+    trace = tuple({"question": q, "similarity": s} for q, s in zip(generated, sims))
+    return MetricResult(sum(sims) / n, False, trace)
 
 
 def context_recall(
@@ -251,9 +274,9 @@ def context_recall(
     if not sentences:
         return _failed()
     try:
-        score = _fraction_supported(
+        score, trace = _fraction_supported(
             judge, ATTRIBUTION_PROMPT, "sentence", sentences, _join(contexts)
         )
     except JudgeError:
         return _failed()
-    return MetricResult(score, False)
+    return MetricResult(score, False, trace)
