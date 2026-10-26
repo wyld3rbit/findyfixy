@@ -428,6 +428,14 @@ Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 - Operator note: start the model server with `OLLAMA_NUM_PARALLEL` set to match, or requests queue and nothing speeds up. The code does not set it.
 - Tests: 478 pass (11 new). Breaks caught: pool of one thread, cap check off, records out of case order, timing dropped. Not unit-tested: the lock in the live wiring (it needs the real database and models); it is covered by the live comparison runs.
 
+### Finding: the system under test is not deterministic (2026-10-26)
+
+- Same configuration, three runs, severity right in 11, 16 and 9 of 30 (reports 221939Z, 224046Z, 224915Z). `ollama_ask` builds `ChatOllama` with Ollama's default sampling temperature, while the judge is pinned to 0. Answers differ in 18 of 30 cases between two runs. So the earlier reading "adding severity moved 7 to 11 of 30" is withdrawn: it sits inside the run-to-run spread.
+- Forcing every case to the 7B model (threshold 1.01, one run): 23 of 30, faithfulness 0.54, median 4.3 s per case against 1.5 s. The gap to the small model is large relative to the spread, but it is one sample.
+- Parallel workers: 428.1 s serial against 431.7 s with 2 workers and `OLLAMA_NUM_PARALLEL=2`; per-case median 1.15 s to 2.25 s. No speedup on this machine. Memory stayed at 16 to 22 percent free, no new swap growth. The experiment ran on a second Ollama server on port 11435 (stopped afterwards).
+- Also noted: `ollama_ask` has no request timeout (its docstring says so). A hung model call would hang the graph.
+- Open: decide whether the product should answer at temperature 0. Until then a single run cannot support a regression gate.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

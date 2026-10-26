@@ -100,6 +100,10 @@
     {
       "date": "2026-10-26",
       "entry": "Day 5 built, baseline not yet run: golden set (30 alert-only cases, 20 twin and 10 no_twin), judge and three metrics, eval runner with bootstrap intervals, provenance and a baseline gate, 455 tests pass (84 new, mutations caught in each package). Subagents in worktrees built A and B; C ran in the main checkout because worktrees branch from an older commit."
+    },
+    {
+      "date": "2026-10-26",
+      "entry": "Correction: the earlier claim that adding severity to recalled incidents helped (7 to 11 of 30) is not supported. Three runs of the same configuration scored 11, 16 and 9 of 30 because the answering model samples at Ollama's default temperature. Forcing every case to the 7B model scored 23 of 30 in one run (interval 0.60 to 0.90), a large gap, but a single sample. Retrieval returned the paired incident in 19 of 20 twin cases in every run."
     }
   ],
   "decisions": [
@@ -186,6 +190,13 @@
       "decision": "A --no-recall negative control exists, is stamped in the report, and can never be saved as a baseline.",
       "rejected": "Only proving the gate with fakes",
       "why": "The lesson's proof that a gate works is to break the system and watch it fail. The control makes that repeatable and safe."
+    },
+    {
+      "date": "2026-10-26",
+      "day": 5,
+      "decision": "Keep the --workers option, default 1. On this machine two workers with OLLAMA_NUM_PARALLEL=2 gave no speedup (428.1 s serial, 431.7 s parallel, per-case time doubled): the GPU is already saturated.",
+      "rejected": "Making parallel the default",
+      "why": "It adds locks and a thread pool for no gain here. It may pay off on a bigger or dedicated GPU, which is why the option stays, capped at 4."
     }
   ],
   "days": [
