@@ -76,6 +76,21 @@ body.log-open #logPanel{transform:none;visibility:visible}
 #logPanel ol{list-style:none;margin:0;padding:0}
 #logPanel li{padding:8px 0;border-top:1px solid var(--line)}
 #logPanel .when{display:block;color:var(--muted);font-size:13px}
+.viz{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.viz summary{cursor:pointer;color:var(--accent);font-weight:600}
+.viz .vizbar{font-size:14px;color:var(--muted);margin:6px 0}
+.viz iframe{width:100%;height:760px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.lessonbox{margin:10px 0}
+.lessonbox summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:15px}
+.plan{font-size:15px;margin:0 0 10px}
+.plan .st{font-weight:600;color:var(--accent)}
+.plan .st-approved,.plan .st-built,.plan .st-gated{color:var(--ok)}
+.dec{margin:0 0 12px;font-size:15px}
+.dec summary{cursor:pointer;color:var(--accent);font-weight:600}
+.dec ul{list-style:none;margin:6px 0 0;padding:0}
+.dec li{padding:8px 0;border-top:1px solid var(--line)}
+.dec .when{display:block;color:var(--muted);font-size:13px}
+.dec div{color:var(--muted)}
 </style>
 </head>
 <body>
@@ -94,13 +109,10 @@ body.log-open #logPanel{transform:none;visibility:visible}
 <main id="days"></main>
 <div class="note" id="note"></div>
 </div>
-<script src="progress.js"></script>
-<script src="lessons.js"></script>
 <script>
-/* All progress data lives in progress.js (window.DATA). Edit that file, not this one. */
-var DATA = window.DATA || {updated: "", plannedStart: "", plannedEnd: "", log: [{date: "", entry: "progress.js missing"}], days: []};
-
-var LESSONS = window.LESSONS || {};
+/* This page is code only. The record is record/progress.json and the lessons are
+   the .md files; tools/serve.py serves both (/api/progress, /api/lesson/N). */
+var DATA = null;
 var KEY = "llm-sprint-v1";
 function load(){ try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e){ return {}; } }
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
@@ -112,8 +124,14 @@ function dayDone(d){ return d.checks.every(function(_,i){ return isDone(d,i); })
 function fmt(iso){ var p = iso.split("-"); return new Date(Date.UTC(+p[0], +p[1]-1, +p[2])).toLocaleDateString("en-US",{timeZone:"UTC",weekday:"short",month:"short",day:"numeric"}); }
 function nextDay(){ for (var i=0;i<DATA.days.length;i++){ if(!dayDone(DATA.days[i])) return DATA.days[i]; } return null; }
 
-function lessonHTML(n, file){
-  return LESSONS[n] ? LESSONS[n] : '<p>Lesson text not loaded. Keep lessons.js next to this file, or open <a href="'+file+'">'+file+'</a>.</p>';
+/* Lesson HTML is rendered by the server from the .md file and fetched on first open. */
+function loadLesson(n, el){
+  if(el.dataset.loaded) return;
+  el.dataset.loaded = "1";
+  el.textContent = "Loading...";
+  fetch("/api/lesson/"+n).then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
+    .then(function(html){ el.innerHTML = html; addCopyButtons(el); })
+    .catch(function(){ delete el.dataset.loaded; el.textContent = "Lesson text could not be loaded. Is tools/serve.py running?"; });
 }
 
 function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
@@ -148,11 +166,11 @@ function stats(){
 
 /* Countdown: from the first session to the end of the last day, local time. */
 function localDate(s){ var p = s.split(/[-T:]/).map(Number); return new Date(p[0], p[1]-1, p[2], p[3]||0, p[4]||0, p[5]||0); }
-var START = localDate(DATA.countdownStart || "2026-10-17T18:51:00");
-var END = localDate(DATA.countdownEnd || "2026-10-26T23:59:59");
+var START, END;
 var WORK = 0;
 function pad(n){ return (n < 10 ? "0" : "") + n; }
 function tick(){
+  if(!END) return;
   var now = new Date(), left = Math.max(0, END - now);
   var tfrac = Math.min(1, Math.max(0, (now - START) / (END - START)));
   var s = Math.floor(left/1000), d = Math.floor(s/86400), h = Math.floor(s%86400/3600), m = Math.floor(s%3600/60), sec = s%60;
@@ -195,22 +213,64 @@ function setOpen(key, open){
   if(card) card.classList.toggle("collapsed", !open);
 }
 
+/* The live visualization is a separate server (code/app/console.py, port 8765). It is embedded
+   here so this page is the one landing page. It is probed first: an iframe to a stopped server
+   shows a browser error page, not something we can catch. */
+var VIZ_PORT = 8765;
+function vizURL(){ return location.protocol + "//" + location.hostname + ":" + VIZ_PORT + "/"; }
+function vizHTML(){
+  return '<details class="viz" id="viz"'+(state.open.viz !== false ? ' open' : '')+'><summary>Live visualization</summary>'
+    + '<p class="vizbar"><span id="vizstatus"></span> <a href="'+vizURL()+'" target="_blank" rel="noopener">Open in its own tab</a></p>'
+    + '<iframe id="vizframe" title="Live visualization" hidden></iframe></details>';
+}
+function loadViz(){
+  var frame = document.getElementById("vizframe"), status = document.getElementById("vizstatus");
+  if(!frame) return;
+  status.textContent = "Checking...";
+  fetch(vizURL(), {mode: "no-cors", cache: "no-store"}).then(function(){
+    status.textContent = "Running.";
+    if(!frame.getAttribute("src")) frame.setAttribute("src", vizURL());
+    frame.hidden = false;
+  }).catch(function(){
+    frame.hidden = true; frame.removeAttribute("src");
+    status.textContent = "Not running. In the training folder run: make ui";
+  });
+}
+
+/* Plan status and decisions for one day, from record/progress.json. Text is escaped: the record is data, not markup. */
+function recordHTML(d){
+  var out = "";
+  if(d.plan) out += '<div class="plan"><span class="st st-'+esc(d.plan.status)+'">Plan: '+esc(d.plan.status)+'</span> <code>'+esc(d.plan.file)+'</code></div>';
+  var decs = (DATA.decisions || []).filter(function(x){ return x.day === d.n; });
+  if(decs.length){
+    out += '<details class="dec"><summary>Decisions ('+decs.length+')</summary><ul>';
+    decs.forEach(function(x){
+      out += '<li><span class="when">'+esc(fmt(x.date))+'</span><b>'+esc(x.decision)+'</b>'
+        + '<div><i>Rejected:</i> '+esc(x.rejected)+'</div><div><i>Why:</i> '+esc(x.why)+'</div></li>';
+    });
+    out += '</ul></details>';
+  }
+  return out;
+}
+
 function render(){
   var about = document.getElementById("about");
-  about.innerHTML = '<div class="head"><span class="title">About this course</span><button class="toggle" type="button" data-drawer aria-label="Close">Close</button></div><div class="lesson">'+lessonHTML(0,"00-plan.md")+'</div>';
+  about.innerHTML = '<div class="head"><span class="title">About this course</span><button class="toggle" type="button" data-drawer aria-label="Close">Close</button></div><div class="lesson" data-lesson="0"></div>';
+  loadLesson(0, about.querySelector("[data-lesson]"));
 
   var nx = nextDay();
   if(nx && state.open["d"+nx.n] === undefined) state.open["d"+nx.n] = true;
 
-  var html = "", wk = 0;
+  var html = vizHTML(), wk = 0;
   DATA.days.forEach(function(d){
     if(d.week !== wk){ wk = d.week; html += '<h2 class="wk">Week '+wk+(wk===1?": Build":": Ship")+'</h2>'; }
     var key = "d"+d.n;
     html += '<div class="day" id="day'+d.n+'"><div class="head" data-t="'+key+'"><span class="num">Day '+d.n+'</span><span class="title">'+d.title+'</span><span class="date">'+fmt(d.date)+'</span><span class="chip" id="chip-'+d.n+'"></span><button class="toggle" type="button" id="btn-'+key+'"></button></div>';
     html += '<div id="body-'+key+'">';
     html += '<div class="out">'+d.outcome+'</div>';
+    html += recordHTML(d);
     html += startBlock(d.n);
-    html += '<div class="lesson">'+lessonHTML(d.n, d.file)+'</div>';
+    html += '<details class="lessonbox"><summary>Lesson text ('+esc(d.file)+')</summary><div class="lesson" data-lesson="'+d.n+'"></div></details>';
     html += '<div class="checks"><h3>Self-check</h3><ul class="ck">';
     d.checks.forEach(function(c,i){
       var id = "c"+d.n+"_"+i;
@@ -219,6 +279,7 @@ function render(){
     html += '</ul></div></div></div>';
   });
   document.getElementById("days").innerHTML = html;
+  if(state.open.viz !== false) loadViz();
 
   setDrawer(state.drawer === undefined ? window.innerWidth >= 1100 : state.drawer, false);
   DATA.days.forEach(function(d){ setOpen("d"+d.n, !!state.open["d"+d.n]); });
@@ -232,7 +293,7 @@ function render(){
     w.className = "when"; w.textContent = e.date ? fmt(e.date) : "";
     li.appendChild(w); li.appendChild(document.createTextNode(e.entry)); ll.appendChild(li);
   });
-  document.getElementById("note").textContent = "Record: progress.js, kept by Claude Code. Browser ticks are local. Last log: " + fmt(last.date) + ", " + last.entry;
+  document.getElementById("note").textContent = "Record: record/progress.json, kept by Claude Code. Browser ticks are local. Last log: " + fmt(last.date) + ", " + last.entry;
   stats();
 }
 
@@ -265,8 +326,36 @@ document.addEventListener("change", function(e){
   var t = e.target;
   if(t.dataset.k){ state[t.dataset.k] = t.checked; save(); stats(); }
 });
+/* A <details> toggle event does not bubble, so listen in the capture phase. */
+document.addEventListener("toggle", function(e){
+  var box = e.target;
+  if(box.id === "viz"){
+    state.open.viz = box.open; save();
+    if(box.open) loadViz();
+    return;
+  }
+  if(box.classList && box.classList.contains("lessonbox") && box.open){
+    var el = box.querySelector("[data-lesson]");
+    loadLesson(+el.dataset.lesson, el);
+  }
+}, true);
+
+function boot(){
+  fetch("/api/progress", {cache: "no-store"}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(data){
+      DATA = data;
+      START = localDate(DATA.countdownStart);
+      END = localDate(DATA.countdownEnd);
+      fitTop();
+      render();
+    })
+    .catch(function(){
+      document.getElementById("days").innerHTML = '<div class="day"><p>The record could not be loaded. This page needs its server. From the training folder run:</p>'
+        + '<pre><code>uv run --no-project --with markdown python tools/serve.py</code></pre><p>Then open http://127.0.0.1:8766</p></div>';
+    });
+}
 fitTop();
-render();
+boot();
 </script>
 </body>
 </html>

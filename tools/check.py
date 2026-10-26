@@ -4,10 +4,11 @@ Run from the training root:
     uv run --no-project --with markdown python tools/check.py
 
 Checks:
-1. progress.js parses as JSON after the `window.DATA = ` prefix.
+1. record/progress.json parses as JSON.
 2. Every day has the required fields, and every `done` index points at a real check.
-3. lessons.js matches what tools/build_lessons.py would generate (no stale lessons).
-4. No em-dashes in lessons, plan or progress data.
+3. Every lesson file renders to non-empty HTML.
+4. Decisions have all fields; a day's `plan` has a valid status and an existing file.
+5. No em-dashes in lessons, plan or progress data.
 
 Exits non-zero on the first class of failure, with a one-line reason per problem.
 """
@@ -17,19 +18,20 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_lessons import ROOT, build  # noqa: E402
+from lessons import LESSON_NUMBERS, ROOT, lesson_file, render  # noqa: E402
 
 REQUIRED_DAY = {"n", "week", "date", "title", "file", "outcome", "checks", "done"}
+REQUIRED_DECISION = {"date", "day", "decision", "rejected", "why"}
+PLAN_STATUSES = {"draft", "approved", "built", "gated"}
 REQUIRED_TOP = {"updated", "plannedStart", "plannedEnd", "countdownStart", "countdownEnd", "log", "days"}
 
 
+PROGRESS = ROOT / "record" / "progress.json"
+
+
 def load_progress() -> dict:
-    """Parse progress.js into a dict."""
-    raw = (ROOT / "progress.js").read_text().strip()
-    prefix = "window.DATA = "
-    if not raw.startswith(prefix):
-        raise ValueError("progress.js must start with 'window.DATA = '")
-    return json.loads(raw[len(prefix):].rstrip(";"))
+    """Parse record/progress.json into a dict."""
+    return json.loads(PROGRESS.read_text())
 
 
 def problems() -> list[str]:
@@ -38,11 +40,11 @@ def problems() -> list[str]:
     try:
         data = load_progress()
     except (ValueError, json.JSONDecodeError) as e:
-        return [f"progress.js: {e}"]
+        return [f"progress.json: {e}"]
 
     missing = REQUIRED_TOP - data.keys()
     if missing:
-        out.append(f"progress.js: missing keys {sorted(missing)}")
+        out.append(f"progress.json: missing keys {sorted(missing)}")
     for d in data.get("days", []):
         gaps = REQUIRED_DAY - d.keys()
         if gaps:
@@ -53,14 +55,24 @@ def problems() -> list[str]:
             out.append(f"day {d['n']}: done indexes out of range {bad}")
         if not (ROOT / d["file"]).exists():
             out.append(f"day {d['n']}: lesson file {d['file']} not found")
+        plan = d.get("plan")
+        if plan is not None:
+            if plan.get("status") not in PLAN_STATUSES:
+                out.append(f"day {d['n']}: plan status must be one of {sorted(PLAN_STATUSES)}")
+            if not (ROOT / plan.get("file", "")).is_file():
+                out.append(f"day {d['n']}: plan file {plan.get('file')} not found")
+    for dec in data.get("decisions", []):
+        if not REQUIRED_DECISION <= dec.keys():
+            out.append(f"decision malformed: {dec}")
     for entry in data.get("log", []):
         if not {"date", "entry"} <= entry.keys():
             out.append(f"log entry malformed: {entry}")
 
-    if (ROOT / "lessons.js").read_text() != build():
-        out.append("lessons.js is stale: run tools/build_lessons.py")
+    for n in LESSON_NUMBERS:
+        if not render(n).strip():
+            out.append(f"{lesson_file(n)}: renders to nothing")
 
-    for name in ["00-plan.md", "progress.js", *[f"d{n:02d}.md" for n in range(1, 11)]]:
+    for name in ["record/progress.json", *[lesson_file(n) for n in LESSON_NUMBERS]]:
         if "—" in (ROOT / name).read_text():
             out.append(f"{name}: contains an em-dash")
     return out

@@ -379,6 +379,30 @@ Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 - Ideas, not built: remove near-twin incidents before filling the 3 recall slots. Labels that treat a whole failure pattern as correct, so meaning queries stop punishing correct hits.
 - Start: `make up`, then `resume day 4`.
 
+### Housekeeping (2026-10-26)
+
+- Deleted `docs/graph.md`. It was the Day 1 hand-drawn diagram, stale since `recall` and `investigate` were added, and nothing read it. `docs/architecture.html` is the live diagram. This closes the earlier "Open: `docs/graph.md` still lists the Day 1 state fields".
+- `ragas` 0.4.3 was added and reverted the same day (`make audit`: PYSEC-2026-3046, no fix). `pyproject.toml` and `uv.lock` are unchanged from Day 4.
+
+### One vocabulary for commands (2026-10-26)
+
+- Root `Makefile` (new): `help`, `setup`, `up`, `down`, `console`, `triage`, `test`, `eval-retrieval`, `ingest`, `audit`, `tracker`, `check`. Product targets hand off to `code/Makefile` with `make -C code`. `tracker` and `check` run the tools in `tools/`.
+- `code/Makefile`: added `setup`, `ingest`, `console`, `triage`, `test`, `eval-retrieval`. `setup` stops early if `.env` is missing or lacks `SMALL_MODEL` or `LARGE_MODEL`, never writes `.env`, and pulls the models named in it.
+- Checked: `make test` 371 passed, `make check` OK with 16 server tests and a clean scan, `make tracker` answers 200, `setup` guard stops in an empty folder with each message. `setup` itself was only dry-run (`make -n`) against the live setup.
+
+### `make ui` and a port fix (2026-10-26)
+
+- Root `Makefile`: `make ui` runs the live page (8765) and the tracker (8766) in one terminal. Ctrl-C stops both. Checked in its own process session: both answer 200, then both are down and `make` has exited after Ctrl-C.
+- The tracker's default port moved from 8765 to 8766. It collided with the console's.
+- Checked live through the console API: recall, small model, validation and route events arrive and the run finishes. The page itself was opened by the learner, not by an automated browser.
+
+### One landing page (2026-10-26)
+
+- `tracker.html` embeds the live visualization in a "Live visualization" panel at the top (open by default, remembered per browser). It probes the console first. If it is not running, the panel says to run `make ui`. "Open in its own tab" links to `:8765`.
+- `tools/serve.py`: CSP now allows `frame-src` and `connect-src` for the console origin only. Test added; removing the rule fails it.
+- `app/console.py` is unchanged: it sets no frame restrictions, so no change in `code/` was needed.
+- Not seen in a browser: the embedded panel. Checked: page carries the panel, headers carry the rule, both servers start and stop.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

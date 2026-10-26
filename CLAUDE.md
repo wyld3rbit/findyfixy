@@ -5,10 +5,10 @@ This folder is a 10-day course. The learner is an engineering leader learning th
 ## Layout
 
 - `00-plan.md`, `d01.md` to `d10.md`: the lessons. Read them. Never edit them unless the learner asks.
-- `tracker.html`: the page. Layout and behaviour only. Do not edit unless he asks for a page change.
-- `progress.js`: the progress record (`window.DATA`, strict JSON). You maintain it.
-- `lessons.js`: generated from the lesson files. Never hand-edit. Rebuild it.
-- `tools/build_lessons.py`, `tools/check.py`: the build and the validator.
+- `tracker.html`: the page. Code only, no data. Do not edit unless he asks for a page change.
+- `record/progress.json`: the single record of status, plans and decisions (strict JSON). You maintain it. `code/CHANGELOG.md` stays the record of the code.
+- Lessons are the `.md` files. `tools/serve.py` renders them for the page. There is no generated copy.
+- `tools/serve.py`, `tools/lessons.py`, `tools/check.py`: the local server, the renderer and the validator. Start the page with `uv run --no-project --with markdown python tools/serve.py`.
 - `code/`: the code. Everything you build goes here. Run commands from `code/`.
 
 ## When he says "start day N"
@@ -30,13 +30,13 @@ Check `notes/` and `git log`, tell him in one line where he stopped, then contin
 
 He runs the course with you alone. Keep the record true without being asked.
 
-- **When a self-check item passes**, add its index (0-based, in the order listed) to that day's `done` in `progress.js`. Only after the evidence is in `notes/dayN.md`.
-- **At the end of each session**, append one log entry to `progress.js`: `{"date": "YYYY-MM-DD", "entry": "<what was done, one or two sentences, with the numbers>"}`. Set `updated` to today. Run `date` for the date; never guess it.
+- **When a self-check item passes**, add its index (0-based, in the order listed) to that day's `done` in `record/progress.json`. Only after the evidence is in `notes/dayN.md`.
+- **At the end of each session**, append one log entry to `record/progress.json`: `{"date": "YYYY-MM-DD", "entry": "<what was done, one or two sentences, with the numbers>"}`. Set `updated` to today. Run `date` for the date; never guess it.
 - **If he changes the schedule**, update each day's `date`, `plannedEnd` and `countdownEnd`.
-- **If he asks to change a lesson**, edit the `.md` file, then rebuild: `uv run --no-project --with markdown python tools/build_lessons.py`.
+- **If he asks to change a lesson**, edit the `.md` file. The server renders it on request.
 - **Before every commit that touches these files**, run `uv run --no-project --with markdown python tools/check.py`. It must print `OK`. Fix anything it reports.
 - Tell him in one line what you changed in the record.
-- His own browser ticks are a convenience stored in that browser. `progress.js` is the record.
+- His own browser ticks are a convenience stored in that browser. `record/progress.json` is the record.
 
 ## Supply-chain security (every dependency change)
 
