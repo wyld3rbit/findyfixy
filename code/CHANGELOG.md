@@ -403,6 +403,17 @@ Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 - `app/console.py` is unchanged: it sets no frame restrictions, so no change in `code/` was needed.
 - Not seen in a browser: the embedded panel. Checked: page carries the panel, headers carry the rule, both servers start and stop.
 
+### Day 5: the evaluation harness (2026-10-26)
+
+- `app/golden.py`: 30 holdout cases built from `incidents.jsonl`, 20 with a twin (one per seeded pair, source alternating between the pair's members) and 10 without (seeded, spread over services and severities). The question is the first timeline line only. `make golden` prints the set for review. Differs from the plan: the plan said summary plus timeline. That leaks the cause and the fix (seen in g01), so it was changed on the learner's decision.
+- `app/judge.py`: `Judge` over Ollama, temperature 0, schema as `format`, Pydantic validation in code, one retry that carries the error, `JudgeError` otherwise. A timeout is not retried.
+- `app/metrics.py`: faithfulness, response relevancy and context recall in the RAGAS definitions, written here. `ragas` was rejected (PYSEC-2026-3046, no fix). A failed judge call gives `failed`, never 0. Prompt hashes in `PROMPT_VERSIONS`.
+- `app/eval_answers.py`: runs the graph per case with the source incident held out of recall (asks for k+1, drops the source), scores, bootstraps 95% intervals, stamps provenance (judge digest, prompt hashes, golden hash, models, threshold, git SHA), writes `reports/`, and gates against `evals/baseline.json` (floors, regression outside the interval, failure-rate cap, run errors, comparability). `--no-recall` is a negative control that can never become a baseline.
+- Make targets: `eval`, `eval-gate`, `eval-baseline`, `eval-negative`, `golden`. `pytest -m quality` runs the live gate; it is deselected by default like `integration`.
+- Tests: 455 pass by default (84 new). Mutations caught: golden (question leaks answer, summary back in the question), judge (retry drops the error text), metrics (unsupported counted as supported, count guard off), runner (holdout off, failures scored 0, regression ignores the interval, comparability off, baseline refusal off).
+- Process: A and B were built by subagents in worktrees and gated here. The worktrees branched from an older commit without Day 4 code, so C ran in the main checkout.
+- Open: the live baseline run (`make up`, then `make eval-baseline`). `evals/baseline.json` does not exist yet, so `make eval-gate` exits 2 until it does. Judge calibration (10 hand labels) is for the final lesson pass. Two missing Ollama digests compare equal; a known weak spot.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

@@ -56,8 +56,12 @@ testpaths = ["tests"]
 # Tests that call real models are deselected by default. They need a running
 # Ollama and are slow and non-deterministic. Run them with:
 #   uv run pytest -m integration
+# The quality gate (tests/test_quality.py) is deselected for the same reason: it
+# runs the whole golden set through live models and takes a long time. Run it with:
+#   uv run pytest -m quality
 # A -m on the command line overrides this one (the last -m wins).
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration and not quality'"
 markers = [
     "integration: needs a live service, Ollama or Postgres (run with `pytest -m integration`)",
+    "quality: the answer-quality release gate, live models, minutes long (run with `pytest -m quality`)",
 ]

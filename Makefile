@@ -6,19 +6,21 @@
 # its own, so the real commands stay readable in one place each.
 
 .DEFAULT_GOAL := help
-.PHONY: help setup up down console triage test eval-retrieval ingest audit tracker ui check
+.PHONY: help setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-negative golden ingest audit tracker ui check
 
 help:
 	@echo "First time:       make setup"
 	@echo "Start / stop:     make up   make down"
 	@echo "Run the product:  make console   make triage   make ingest"
 	@echo "Measure / test:   make test   make eval-retrieval"
+	@echo "Answer quality:   make eval   make eval-gate   make eval-baseline   make eval-negative"
+	@echo "See test cases:   make golden"
 	@echo "Tracker page:     make tracker"
 	@echo "Landing page:     make ui   (tracker with the visualization embedded)"
 	@echo "Before a commit:  make check   make audit"
 
 # Product targets: see code/Makefile for what each one runs.
-setup up down console triage test eval-retrieval ingest audit:
+setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-negative golden ingest audit:
 	$(MAKE) -C code $@
 
 # The tracker page at http://127.0.0.1:8766. Ctrl-C stops it.

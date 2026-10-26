@@ -7,7 +7,7 @@
 #      how a hijacked package can persist. Only the known shims are allowed.
 # On any finding, stop and read it. Do not upgrade or remove to make it pass.
 
-.PHONY: audit hooks scan up down setup ingest console triage test eval-retrieval
+.PHONY: audit hooks scan up down setup ingest console triage test eval-retrieval eval eval-gate eval-baseline eval-negative golden
 
 # Memory for the Colima VM, in GB. 6 on most days, 8 on Langfuse days:
 #   make up COLIMA_MEMORY=8
@@ -90,3 +90,26 @@ test:
 
 eval-retrieval:
 	uv run python -m app.eval_retrieval
+
+# Answer-quality evaluation (app/eval_answers.py). Needs make up and Ollama. Each
+# run takes many minutes. Reports land in code/reports/ (git-ignored).
+#   eval          run and print the scores, no gate
+#   eval-gate     the release gate: exit 1 if answers got worse vs evals/baseline.json
+#   eval-baseline freeze this run as the new baseline. Review the diff before committing.
+#   eval-negative the proof the gate works: run WITHOUT recall; it must fail
+eval:
+	uv run python -m app.eval_answers
+
+eval-gate:
+	uv run python -m app.eval_answers --gate
+
+eval-baseline:
+	uv run python -m app.eval_answers --write-baseline
+
+eval-negative:
+	uv run python -m app.eval_answers --no-recall --gate
+
+# golden: print the 30 golden cases (alert, expected severity, reference) to read
+# and check by eye. Read-only.
+golden:
+	uv run python -m app.golden --show

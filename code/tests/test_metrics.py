@@ -1,0 +1,237 @@
+"""Tests for the three metrics (app/metrics.py), with a fake judge and embedder.
+
+What these tests cover
+    Hand-computed scores, every failure path, empty-context behaviour, the
+    sentence splitter, cosine, and prompt hashes. Not judge quality: that is
+    an empirical question for a live run.
+
+How the fake judge works
+    Replies are scripted per schema type, in order. A reply that is a
+    `JudgeError` is raised. Every prompt is recorded, so a test can check what
+    the judge was actually asked.
+"""
+
+import math
+
+import pytest
+
+import app.metrics as metrics
+from app.judge import JudgeError
+from app.metrics import (
+    PROMPT_VERSIONS,
+    Claims,
+    Questions,
+    Verdict,
+    context_recall,
+    cosine,
+    faithfulness,
+    response_relevancy,
+    split_sentences,
+)
+
+
+class FakeJudge:
+    """Plays scripted replies by schema type and records prompts."""
+
+    def __init__(self, script):
+        self.script = {k: list(v) for k, v in script.items()}
+        self.prompts: list[tuple[type, str]] = []
+
+    def ask(self, prompt, schema):
+        self.prompts.append((schema, prompt))
+        reply = self.script[schema].pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+
+def verdicts(*flags):
+    """Build a list of `Verdict` from booleans."""
+    return [Verdict(supported=f, reason="r") for f in flags]
+
+
+# ---- faithfulness ----------------------------------------------------------
+
+
+def test_faithfulness_two_of_three_supported():
+    judge = FakeJudge(
+        {Claims: [Claims(claims=["a", "b", "c"])], Verdict: verdicts(True, False, True)}
+    )
+    result = faithfulness(judge, "ans", ["ctx one", "ctx two"])
+    assert result.failed is False
+    assert result.score == pytest.approx(2 / 3)
+    # one split call plus one call per claim
+    assert len(judge.prompts) == 4
+    # contexts are joined into every support prompt
+    assert "ctx one" in judge.prompts[1][1] and "ctx two" in judge.prompts[1][1]
+    assert "Claim: b" in judge.prompts[2][1]
+
+
+def test_faithfulness_all_unsupported_is_zero_not_failed():
+    judge = FakeJudge({Claims: [Claims(claims=["a"])], Verdict: verdicts(False)})
+    assert faithfulness(judge, "ans", ["c"]) == (0.0, False)
+
+
+def test_faithfulness_zero_claims_is_failed():
+    judge = FakeJudge({Claims: [Claims(claims=[])], Verdict: []})
+    assert faithfulness(judge, "ans", ["c"]) == (None, True)
+
+
+def test_faithfulness_blank_claims_count_as_zero_claims():
+    judge = FakeJudge({Claims: [Claims(claims=["  ", ""])], Verdict: []})
+    assert faithfulness(judge, "ans", ["c"]).failed is True
+
+
+def test_faithfulness_judge_error_on_split_fails():
+    judge = FakeJudge({Claims: [JudgeError("x")], Verdict: []})
+    assert faithfulness(judge, "ans", ["c"]) == (None, True)
+
+
+def test_faithfulness_judge_error_midway_fails_whole_metric():
+    judge = FakeJudge(
+        {
+            Claims: [Claims(claims=["a", "b", "c"])],
+            Verdict: [*verdicts(True), JudgeError("x")],
+        }
+    )
+    assert faithfulness(judge, "ans", ["c"]) == (None, True)
+
+
+def test_faithfulness_empty_contexts_is_scored_not_failed():
+    judge = FakeJudge(
+        {Claims: [Claims(claims=["a", "b"])], Verdict: verdicts(False, False)}
+    )
+    assert faithfulness(judge, "ans", []) == (0.0, False)
+    assert "Context:\n\n" in judge.prompts[1][1]
+
+
+# ---- response_relevancy ----------------------------------------------------
+
+
+def fake_embed(vectors):
+    """An embedder returning fixed vectors and recording what it was given."""
+    seen = []
+
+    def embed(texts):
+        seen.append(list(texts))
+        return vectors
+
+    embed.seen = seen
+    return embed
+
+
+def test_relevancy_mean_cosine_hand_computed():
+    # question vs generated: cos = 1.0, 0.0, 0.5 -> mean 0.5
+    s = math.sqrt(3) / 2
+    vectors = [[1.0, 0.0], [2.0, 0.0], [0.0, 3.0], [0.5, s]]
+    judge = FakeJudge({Questions: [Questions(questions=["q1", "q2", "q3"])]})
+    embed = fake_embed(vectors)
+    result = response_relevancy(judge, embed, "orig", "ans")
+    assert result.failed is False
+    assert result.score == pytest.approx(0.5)
+    assert embed.seen == [["orig", "q1", "q2", "q3"]]
+    assert "3 different questions" in judge.prompts[0][1]
+
+
+def test_relevancy_respects_n():
+    judge = FakeJudge({Questions: [Questions(questions=["q1", "q2"])]})
+    embed = fake_embed([[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    result = response_relevancy(judge, embed, "orig", "ans", n=2)
+    assert result.score == pytest.approx(0.5)
+
+
+def test_relevancy_wrong_question_count_fails_before_embedding():
+    judge = FakeJudge({Questions: [Questions(questions=["q1", "q2"])]})
+    embed = fake_embed([])
+    assert response_relevancy(judge, embed, "o", "a") == (None, True)
+    assert embed.seen == []
+
+
+def test_relevancy_judge_error_fails():
+    judge = FakeJudge({Questions: [JudgeError("x")]})
+    assert response_relevancy(judge, fake_embed([]), "o", "a") == (None, True)
+
+
+def test_relevancy_zero_vector_is_failure_not_crash():
+    judge = FakeJudge({Questions: [Questions(questions=["a", "b", "c"])]})
+    vectors = [[1.0, 0.0], [1.0, 0.0], [0.0, 0.0], [1.0, 0.0]]
+    assert response_relevancy(judge, fake_embed(vectors), "o", "a") == (None, True)
+
+
+def test_relevancy_zero_question_vector_is_failure():
+    judge = FakeJudge({Questions: [Questions(questions=["a", "b", "c"])]})
+    vectors = [[0.0, 0.0], [1.0, 0.0], [1.0, 0.0], [1.0, 0.0]]
+    assert response_relevancy(judge, fake_embed(vectors), "o", "a").failed is True
+
+
+def test_relevancy_embedder_wrong_count_fails():
+    judge = FakeJudge({Questions: [Questions(questions=["a", "b", "c"])]})
+    assert response_relevancy(judge, fake_embed([[1.0]]), "o", "a").failed is True
+
+
+# ---- context_recall --------------------------------------------------------
+
+
+def test_recall_one_of_two_sentences_attributed():
+    judge = FakeJudge({Verdict: verdicts(True, False)})
+    result = context_recall(judge, "First fact. Second fact.", ["ctx"])
+    assert result.failed is False
+    assert result.score == pytest.approx(0.5)
+    assert "Sentence: First fact." in judge.prompts[0][1]
+    assert "Sentence: Second fact." in judge.prompts[1][1]
+
+
+def test_recall_empty_reference_is_failed():
+    judge = FakeJudge({Verdict: []})
+    assert context_recall(judge, "   ", ["ctx"]) == (None, True)
+    assert judge.prompts == []
+
+
+def test_recall_judge_error_fails():
+    judge = FakeJudge({Verdict: [*verdicts(True), JudgeError("x")]})
+    assert context_recall(judge, "One. Two.", ["c"]) == (None, True)
+
+
+def test_recall_empty_contexts_is_zero_not_failed():
+    judge = FakeJudge({Verdict: verdicts(False, False)})
+    assert context_recall(judge, "One. Two.", []) == (0.0, False)
+
+
+# ---- helpers ---------------------------------------------------------------
+
+
+def test_split_sentences():
+    assert split_sentences("A b. C d!  E f?\nG h") == ["A b.", "C d!", "E f?", "G h"]
+    assert split_sentences("") == []
+
+
+def test_cosine_known_values_and_guards():
+    assert cosine([1, 0], [0, 1]) == 0.0
+    assert cosine([1, 1], [2, 2]) == pytest.approx(1.0)
+    with pytest.raises(ValueError):
+        cosine([0, 0], [1, 0])
+    with pytest.raises(ValueError):
+        cosine([1], [1, 0])
+
+
+# ---- prompt hashes ---------------------------------------------------------
+
+
+def test_prompt_versions_are_stable_hex_strings():
+    assert set(PROMPT_VERSIONS) == {
+        "faithfulness",
+        "response_relevancy",
+        "context_recall",
+    }
+    for digest in PROMPT_VERSIONS.values():
+        assert len(digest) == 64 and int(digest, 16) >= 0
+    assert len(set(PROMPT_VERSIONS.values())) == 3
+    assert metrics._sha(metrics.QUESTIONS_PROMPT) == PROMPT_VERSIONS["response_relevancy"]
+
+
+def test_prompt_hash_changes_when_a_template_changes(monkeypatch):
+    before = metrics._sha(metrics.CLAIMS_PROMPT, metrics.SUPPORT_PROMPT)
+    monkeypatch.setattr(metrics, "SUPPORT_PROMPT", metrics.SUPPORT_PROMPT + " ")
+    after = metrics._sha(metrics.CLAIMS_PROMPT, metrics.SUPPORT_PROMPT)
+    assert before == PROMPT_VERSIONS["faithfulness"]
+    assert after != before

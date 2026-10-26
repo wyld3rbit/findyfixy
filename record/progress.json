@@ -96,6 +96,10 @@
     {
       "date": "2026-10-26",
       "entry": "Day 5 planned, not built: ragas 0.4.3 rejected after make audit found PYSEC-2026-3046 with no fix (31 new packages), reverted; plan in notes/plans/day5-eval-harness.md awaits approval. Record moved to record/progress.json, page is code only, tools/serve.py added (16 tests, 2 mutations caught). README rewritten."
+    },
+    {
+      "date": "2026-10-26",
+      "entry": "Day 5 built, baseline not yet run: golden set (30 alert-only cases, 20 twin and 10 no_twin), judge and three metrics, eval runner with bootstrap intervals, provenance and a baseline gate, 455 tests pass (84 new, mutations caught in each package). Subagents in worktrees built A and B; C ran in the main checkout because worktrees branch from an older commit."
     }
   ],
   "decisions": [
@@ -168,6 +172,20 @@
       "decision": "Day 5 plan approved. Work packages A (golden set) and B (judge and metrics) run in parallel as subagents in worktrees. C and D follow in sequence. The lead runs the gate before any merge.",
       "rejected": "One agent building all four in sequence",
       "why": "A and B share no code. Parallel work shortens the critical path, and the lead-run gate keeps each package honest."
+    },
+    {
+      "date": "2026-10-26",
+      "day": 5,
+      "decision": "Golden questions are the alert line only (the first timeline entry).",
+      "rejected": "Summary plus timeline; summary plus alert",
+      "why": "The summary and later timeline lines are written with hindsight and state the cause and the fix, so the agent would read the answer. Cost: recall has little to match on, so a low twin-recall rate is a real finding."
+    },
+    {
+      "date": "2026-10-26",
+      "day": 5,
+      "decision": "A --no-recall negative control exists, is stamped in the report, and can never be saved as a baseline.",
+      "rejected": "Only proving the gate with fakes",
+      "why": "The lesson's proof that a gate works is to break the system and watch it fail. The control makes that repeatable and safe."
     }
   ],
   "days": [
@@ -263,7 +281,7 @@
       ],
       "done": [],
       "plan": {
-        "status": "approved",
+        "status": "built",
         "file": "notes/plans/day5-eval-harness.md"
       }
     },
