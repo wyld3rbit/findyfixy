@@ -414,6 +414,13 @@ Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 - Process: A and B were built by subagents in worktrees and gated here. The worktrees branched from an older commit without Day 4 code, so C ran in the main checkout.
 - Open: the live baseline run (`make up`, then `make eval-baseline`). `evals/baseline.json` does not exist yet, so `make eval-gate` exits 2 until it does. Judge calibration (10 hand labels) is for the final lesson pass. Two missing Ollama digests compare equal; a known weak spot.
 
+### Day 5 finding and fix: recalled incidents now carry their severity (2026-10-26)
+
+- First live evaluation (report `eval-20261026T215238Z`, 30 cases, small model only): severity right in 7 of 30 (0.23, interval 0.10 to 0.40). Always answering sev2 would score 14 of 30. The paired incident was recalled for 19 of 20 twin cases, so retrieval worked and the answer was in the prompt's recalled incidents, except that `Prior` carried no severity. No case escalated (confidence was never below 0.7).
+- Change: `Severity` is one shared `Literal` in `app/triage.py`. `Prior` and `Passage` gain a required `severity` field, validated at construction (a bad database row stops loading; a closed set cannot carry injected text into a prompt). `format_prior` writes it in the header (`- INC-0073 (auth, sev2): ...`), so the length cap never cuts it. The SQL reads the stored column, so no re-ingest was needed: all 800 stored chunks pass the check against the live database (sev1 148, sev2 452, sev3 200).
+- Tests: 467 pass by default (10 new). Four mutations caught: severity dropped from the prompt line, `Prior` check off, `Passage` check off, `brief` ignoring the stored severity.
+- The prompt wording is unchanged on purpose, so the before and after differ only by the severity field.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

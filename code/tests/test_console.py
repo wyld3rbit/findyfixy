@@ -787,7 +787,7 @@ def test_a_live_run_uses_the_hubs_recall_and_a_hub_without_one_has_no_step(monke
 
     def recall(question):
         seen.append(question)
-        return [Prior("INC-9", "auth", "s", "c")]
+        return [Prior("INC-9", "auth", "sev2", "s", "c")]
 
     srv, port = _serve(RunHub(live_models=("s", "l"), recall=recall, sleep=lambda s: None, fake_delay=0))
     try:

@@ -36,11 +36,18 @@ Cost and failure modes (read before trusting this at scale)
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, Field, ValidationError
 
 from app.events import Emit, no_emit
+
+
+# The closed set of severities. One definition, used by the triage record, the
+# recalled incidents and the passages loaded from the database. Because it is a
+# closed set, a severity can never carry injected text into a prompt, unlike a
+# summary or a root cause.
+Severity = Literal["sev1", "sev2", "sev3", "sev4"]
 
 
 class Triage(BaseModel):
@@ -53,7 +60,7 @@ class Triage(BaseModel):
     carries the bounds, but it is not relied on to enforce them.
     """
 
-    severity: Literal["sev1", "sev2", "sev3", "sev4"]
+    severity: Severity
     component: str = Field(description="service or subsystem most likely at fault")
     next_action: str = Field(description="one concrete first step")
     confidence: float = Field(
@@ -146,12 +153,24 @@ _MAX_ECHO_CHARS = 500
 
 @dataclass(frozen=True)
 class Prior:
-    """One past incident shown to the model: what happened and why."""
+    """One past incident shown to the model: what happened, why, and how severe.
+
+    Severity is the field a recalled incident teaches best: the same failure
+    was rated the same way last time. Without it the model sees the story but
+    not the rating, and has to guess the rating from the alert alone.
+    """
 
     incident_id: str
     service: str
+    severity: Severity
     summary: str
     root_cause: str
+
+    def __post_init__(self) -> None:
+        """Reject an unknown severity. Type hints are not enforced at run time,
+        and this value can come from the database, so check it here."""
+        if self.severity not in get_args(Severity):
+            raise ValueError(f"unknown severity {self.severity!r} for {self.incident_id}")
 
 
 def format_prior(items: Sequence[Prior]) -> str:
@@ -159,11 +178,15 @@ def format_prior(items: Sequence[Prior]) -> str:
 
     Empty input gives an empty string, so a run with no recall has exactly the
     prompt it had before. The cap cuts the cause first, because the summary
-    says which incident it is.
+    says which incident it is. The severity sits in the header, so the cap
+    never cuts it.
     """
     lines = []
     for item in items:
-        line = f"- {item.incident_id} ({item.service}): {item.summary} Cause: {item.root_cause}"
+        line = (
+            f"- {item.incident_id} ({item.service}, {item.severity}): "
+            f"{item.summary} Cause: {item.root_cause}"
+        )
         lines.append(line if len(line) <= MAX_PRIOR_CHARS else line[: MAX_PRIOR_CHARS - 3] + "...")
     return "\n".join(lines)
 

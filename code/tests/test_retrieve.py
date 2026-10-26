@@ -16,8 +16,10 @@ from app.retrieve import (
 )
 
 
-def passage(incident: str, section: str, body: str, service: str = "auth") -> Passage:
-    return Passage(f"{incident}:{section}", incident, section, service, body)
+def passage(
+    incident: str, section: str, body: str, service: str = "auth", severity: str = "sev2"
+) -> Passage:
+    return Passage(f"{incident}:{section}", incident, section, service, severity, body)
 
 
 # Four incidents. A is the host-name incident, B and C are about meaning, D is
@@ -156,3 +158,20 @@ def test_brief_gives_the_summary_and_the_root_cause() -> None:
 def test_an_empty_corpus_is_refused() -> None:
     with pytest.raises(ValueError):
         Retriever([], lambda q, n, s: [])
+
+
+def test_brief_carries_the_severity_of_its_incident() -> None:
+    passages = [
+        passage("X", "summary", "Disk filled on the host.", severity="sev1"),
+        passage("X", "root_cause", "Logs were never rotated.", severity="sev1"),
+    ]
+    retriever = Retriever(passages, lambda q, n, s: [], lambda q, p: [0.0] * len(p))
+    assert retriever.brief("X").severity == "sev1"
+
+
+@pytest.mark.parametrize("bad", ["sev9", "", "critical"])
+def test_a_passage_with_an_unknown_severity_stops_loading(bad: str) -> None:
+    """The column is plain text. A bad row must fail at load, not reach a prompt."""
+    with pytest.raises(ValueError, match="unknown severity"):
+        Passage("X:summary", "X", "summary", "auth", bad, "body")  # type: ignore[arg-type]
+

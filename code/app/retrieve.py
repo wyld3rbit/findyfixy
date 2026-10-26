@@ -64,14 +64,14 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, get_args
 
 from pgvector import Vector
 from rank_bm25 import BM25Okapi
 
 from app.ingest import Embedder
 from app.search import embed_query
-from app.triage import Prior
+from app.triage import Prior, Severity
 
 if TYPE_CHECKING:
     from psycopg import Connection
@@ -109,7 +109,14 @@ class Passage:
     incident_id: str
     section: str
     service: str
+    severity: Severity
     body: str
+
+    def __post_init__(self) -> None:
+        """Reject an unknown severity from the database. The column is plain
+        text, so a bad row must stop loading, not reach a prompt."""
+        if self.severity not in get_args(Severity):
+            raise ValueError(f"unknown severity {self.severity!r} in {self.chunk_id}")
 
     @property
     def text(self) -> str:
@@ -213,12 +220,13 @@ class Retriever:
     # -- what the graph needs -------------------------------------------------
 
     def brief(self, incident_id: str) -> Prior:
-        """The summary and root cause of one incident, for a prompt."""
+        """The severity, summary and root cause of one incident, for a prompt."""
         sections = self._by_incident[incident_id]
         any_passage = next(iter(sections.values()))
         return Prior(
             incident_id=incident_id,
             service=any_passage.service,
+            severity=any_passage.severity,
             summary=sections["summary"].body if "summary" in sections else "",
             root_cause=sections["root_cause"].body if "root_cause" in sections else "",
         )
@@ -271,7 +279,7 @@ def _check(query: str, k: int) -> None:
 
 # -- the real seams -----------------------------------------------------------
 
-_PASSAGES_SQL = "SELECT id, incident_id, section, service, body FROM chunks ORDER BY id"
+_PASSAGES_SQL = "SELECT id, incident_id, section, service, severity, body FROM chunks ORDER BY id"
 
 # `%s::text IS NULL OR service = %s` makes the filter optional in one query.
 _VECTOR_SQL = """
