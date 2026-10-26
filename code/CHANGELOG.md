@@ -448,8 +448,8 @@ Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 - Metrics keep their evidence. `MetricResult.trace` holds each claim or reference sentence with the judge's verdict and reason (reason capped at 300 characters), or each generated question with its similarity. The report now also stores each case's `answer` and `contexts` (what the model and the judge saw). Failed results have an empty trace.
 - `make case ID=g07` (or `--show-case`, optional `--report`) prints one case end to end from the newest saved report: alert, reference, recalled incidents, the context, the answer and every judge decision. It tolerates run errors, failed metrics and older reports without traces.
 - `make eval-freeze REPORT=reports/eval-<timestamp>.json` (or `--baseline-from`) freezes a saved report as the baseline without running anything, so the baseline is exactly the reviewed numbers. It refuses a run with run errors, a high judge failure rate, recall disabled, or a dirty working tree (the code would not be traceable). Report files are size-capped before reading.
-- Tests: 495 pass. Breaks caught: dirty-tree refusal off, size limit off, answer not stored, trace marking everything supported, reason cap off. A new viewer test found a real crash (a record missing a metric); fixed.
-- The two temperature-0 reports from earlier (`T2` series) predate traces. A fresh run is needed before a case can be hand-checked.
+- Tests: 502 pass. Breaks caught: dirty-tree refusal off, size limit off, answer not stored, trace marking everything supported, reason cap off. A new viewer test found a real crash (a record missing a metric); fixed.
+- The two temperature-0 reports made just before this change (made at commit 36f5999) have no traces, so they cannot be hand-checked. A fresh run is needed.
 
 ### Next
 
