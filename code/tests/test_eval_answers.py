@@ -7,6 +7,7 @@ retriever (a database) and the judge (a model). Everything else is real code.
 import copy
 import json
 import os
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -540,3 +541,105 @@ def test_provenance_records_whether_recall_was_enabled() -> None:
         large_model="l", git=lambda: ("abc", False), now=lambda: NOW, recall_enabled=False,
     )
     assert prov["recall_enabled"] is False
+
+
+# ---- Parallel workers -------------------------------------------------------
+
+
+def many_cases(n: int) -> list[GoldenCase]:
+    return [case(f"g{i}", f"S{i}", twin=f"T{i}" if i % 2 else None) for i in range(n)]
+
+
+def test_parallel_and_serial_runs_give_the_same_records_in_the_same_order() -> None:
+    cases = many_cases(8)
+    serial = run(cases, workers=1)
+    parallel = run(cases, workers=4)
+    strip = lambda r: [{k: v for k, v in c.items() if k != "latency_s"} for c in r["cases"]]  # noqa: E731
+    assert strip(parallel) == strip(serial)
+    assert [c["id"] for c in parallel["cases"]] == [c.id for c in cases]
+    assert parallel["aggregates"]["overall"]["scores"] == serial["aggregates"]["overall"]["scores"]
+
+
+def test_workers_really_overlap_cases() -> None:
+    """Two cases wait for each other at a barrier. Only concurrent execution passes it."""
+    barrier = threading.Barrier(2, timeout=5)
+    plain = graph_factory()
+
+    def make_graph(recall: Any):
+        graph = plain(recall)
+        original = graph.invoke
+
+        def invoke(state: dict[str, Any]) -> dict[str, Any]:
+            barrier.wait()
+            return original(state)
+
+        graph.invoke = invoke  # type: ignore[method-assign]
+        return graph
+
+    report = run(many_cases(2), make_graph=make_graph, workers=2)
+    assert report["aggregates"]["overall"]["n_run_errors"] == 0
+
+
+def test_one_worker_does_not_overlap_cases() -> None:
+    """The same barrier with one worker is never released: both cases record a run error."""
+    barrier = threading.Barrier(2, timeout=0.2)
+    plain = graph_factory()
+
+    def make_graph(recall: Any):
+        graph = plain(recall)
+        original = graph.invoke
+
+        def invoke(state: dict[str, Any]) -> dict[str, Any]:
+            barrier.wait()
+            return original(state)
+
+        graph.invoke = invoke  # type: ignore[method-assign]
+        return graph
+
+    report = run(many_cases(2), make_graph=make_graph, workers=1)
+    assert report["aggregates"]["overall"]["n_run_errors"] == 2
+
+
+def test_each_case_keeps_its_own_holdout_and_context_under_parallel_load() -> None:
+    """Shared state would show up as one case seeing another's recalled incidents."""
+    cases = many_cases(12)
+    ranked = [prior(f"S{i}") for i in range(12)] + [prior("T1"), prior("X")]
+    judge = FakeJudge()
+    report = run(cases, candidates=FakeCandidates(ranked), judge=judge, workers=4)
+    for record in report["cases"]:
+        assert record["source_id"] not in record["recalled_ids"]
+        assert len(record["recalled_ids"]) == 3
+
+
+def test_progress_counts_each_case_once_even_in_parallel() -> None:
+    lines: list[str] = []
+    run(many_cases(10), workers=4, progress=lines.append)
+    assert sorted(int(line.split("/")[0][1:]) for line in lines) == list(range(1, 11))
+
+
+@pytest.mark.parametrize("bad", [0, -1, 5, 100])
+def test_workers_outside_the_cap_are_refused(bad: int) -> None:
+    with pytest.raises(ValueError, match="workers must be between"):
+        run(many_cases(1), workers=bad)
+
+
+def test_the_report_records_workers_and_throughput() -> None:
+    ticks = iter([0.0, 12.0])
+    report = run(many_cases(6), workers=2, timer=lambda: next(ticks, 12.0))
+    assert report["timing"] == {"workers": 2, "wall_s": 12.0, "cases_per_min": 30.0}
+
+
+def test_main_passes_workers_only_when_above_one_and_rejects_values_over_the_cap(tmp_path: Path) -> None:
+    seen: list[dict] = []
+
+    def runner(progress, **kwargs):
+        seen.append(kwargs)
+        return report_with(GOOD)
+
+    kw = dict(now=lambda: NOW, reports_dir=tmp_path / "r", baseline_path=tmp_path / "b.json")
+    main([], runner=runner, **kw)
+    main(["--workers", "3"], runner=runner, **kw)
+    assert seen == [{}, {"workers": 3}]
+    with pytest.raises(SystemExit):
+        main(["--workers", "9"], runner=runner, **kw)
+

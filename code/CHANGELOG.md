@@ -421,6 +421,13 @@ Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 - Tests: 467 pass by default (10 new). Four mutations caught: severity dropped from the prompt line, `Prior` check off, `Passage` check off, `brief` ignoring the stored severity.
 - The prompt wording is unchanged on purpose, so the before and after differ only by the severity field.
 
+### Parallel workers for the evaluation runner (2026-10-26)
+
+- Correction: the Ollama models run 100% on the Apple GPU (`ollama ps`). Two comments that said "CPU" were wrong and are fixed. The embedder and reranker run on the CPU by design (Day 3 and 4).
+- `app/eval_answers.py`: `--workers N` (1 to 4, hard cap) runs cases in a thread pool. Records keep case order. The report gains a `timing` section (workers, wall seconds, cases per minute). The live wiring puts the retriever, database connection and embedder behind one lock; the lock covers retrieval and embedding only, never the model calls. Per-case latency under more than one worker includes queueing and is not comparable with a serial run.
+- Operator note: start the model server with `OLLAMA_NUM_PARALLEL` set to match, or requests queue and nothing speeds up. The code does not set it.
+- Tests: 478 pass (11 new). Breaks caught: pool of one thread, cap check off, records out of case order, timing dropped. Not unit-tested: the lock in the live wiring (it needs the real database and models); it is covered by the live comparison runs.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

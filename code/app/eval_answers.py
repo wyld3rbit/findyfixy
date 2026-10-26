@@ -48,9 +48,12 @@ Statistics, so nobody over-reads a number
     failure. With n = 0 or 1 there is no interval (None).
 
 What changes at scale
-    Sequential on purpose: one CPU box, one Ollama. Cost is about ten judge
-    calls per case. With more cases, run cases in parallel against a
-    judge server, cache by (prompt, schema) and use paired comparison
+    Sequential for now: one Ollama on one Apple GPU, with the models loaded
+    in shared 16 GB memory. Cost is about ten judge calls per case. Parallel
+    cases are possible (Ollama batches concurrent requests on the GPU) but
+    need a thread-safe database connection, memory for one more KV cache per
+    slot, and they distort the latency numbers. With more cases, run them in
+    parallel against a judge server, cache by (prompt, schema) and use paired comparison
     (same cases, both systems) for a tighter test than two separate CIs.
 """
 
@@ -66,8 +69,10 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -338,6 +343,12 @@ def run_case(
     return record
 
 
+# A hard cap, not a suggestion. Each worker holds one more conversation in the
+# model server's memory (its KV cache), and every extra request queues on the
+# same GPU. Past a few workers the machine swaps and the run gets slower.
+MAX_WORKERS = 4
+
+
 def run_eval(
     cases: Sequence[GoldenCase],
     *,
@@ -350,14 +361,27 @@ def run_eval(
     seed: int = BOOTSTRAP_SEED,
     timer: Callable[[], float] = time.perf_counter,
     progress: Callable[[str], None] = lambda _msg: None,
+    workers: int = 1,
 ) -> Report:
-    """Run every case, sequentially, and return the report dict. No I/O.
+    """Run every case and return the report dict. No I/O.
 
     Everything that touches a model, the database or the clock is injected,
     so the whole pipeline runs in tests with fakes.
+
+    `workers` > 1 runs cases in a thread pool. Threads are enough: nearly all
+    the time is spent waiting on the model server, not on Python. The caller
+    must pass thread-safe `candidates` and `embed` (the live wiring puts both
+    behind a lock). Records keep the order of `cases`, so a parallel report
+    has the same shape as a serial one. Per-case latency under `workers` > 1
+    includes queueing, so it is not comparable with a serial run's.
     """
-    records = []
-    for n, case in enumerate(cases, start=1):
+    if not 1 <= workers <= MAX_WORKERS:
+        raise ValueError(f"workers must be between 1 and {MAX_WORKERS}, got {workers}")
+    progress_lock = threading.Lock()
+    finished = 0
+
+    def work(case: GoldenCase) -> dict[str, Any]:
+        nonlocal finished
         record = run_case(
             case,
             make_graph=make_graph,
@@ -367,13 +391,33 @@ def run_eval(
             k=k,
             timer=timer,
         )
-        records.append(record)
         status = record["run_error"] or f"severity_match={record['severity_match']}"
-        progress(f"[{n}/{len(cases)}] {case.id} {status} ({record['latency_s']:.1f}s)")
+        with progress_lock:
+            finished += 1
+            progress(f"[{finished}/{len(cases)}] {case.id} {status} ({record['latency_s']:.1f}s)")
+        return record
+
+    start = timer()
+    if workers == 1:
+        records = [work(case) for case in cases]
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            records = list(pool.map(work, cases))
+    wall_s = timer() - start
     aggregates = {"overall": aggregate(records, seed=seed)}
     for group in GROUPS:
         aggregates[group] = aggregate([r for r in records if r["group"] == group], seed=seed)
-    return {"provenance": dict(provenance), "aggregates": aggregates, "cases": records}
+    timing = {
+        "workers": workers,
+        "wall_s": round(wall_s, 1),
+        "cases_per_min": round(60 * len(cases) / wall_s, 2) if wall_s > 0 else None,
+    }
+    return {
+        "provenance": dict(provenance),
+        "timing": timing,
+        "aggregates": aggregates,
+        "cases": records,
+    }
 
 
 # ---- Provenance -------------------------------------------------------------
@@ -658,7 +702,9 @@ def format_table(report: Mapping[str, Any]) -> str:
 # ---- Live wiring (only main calls these) ------------------------------------
 
 
-def live_run(progress: Callable[[str], None], *, recall_enabled: bool = True) -> Report:
+def live_run(
+    progress: Callable[[str], None], *, recall_enabled: bool = True, workers: int = 1
+) -> Report:
     """Build the real dependencies and run the eval. Needs Ollama and the database.
 
     Environment: SMALL_MODEL and LARGE_MODEL (required), JUDGE_MODEL (default
@@ -670,6 +716,13 @@ def live_run(progress: Callable[[str], None], *, recall_enabled: bool = True) ->
     `recall_enabled=False` builds the graph without the recall step. It is the
     negative control: scores must fall and the gate must fail. The report says
     so in its provenance and cannot be saved as a baseline.
+
+    `workers` > 1 runs cases in parallel. Start the model server with
+    OLLAMA_NUM_PARALLEL set to match, or its requests queue and nothing speeds
+    up. The retriever, the database connection and the embedder are shared,
+    and neither is safe to call from two threads at once, so each sits behind
+    a lock. The lock covers only retrieval and embedding (well under a second
+    per case), never the model calls, which are where the time goes.
     """
     import psycopg
     from dotenv import load_dotenv
@@ -691,10 +744,18 @@ def live_run(progress: Callable[[str], None], *, recall_enabled: bool = True) ->
             load_passages(conn), postgres_vector_search(conn, embedder), make_reranker()
         )
 
+        shared = threading.Lock()
+
         def candidates(question: str, n: int) -> list[Prior]:
-            """Top n incidents by hybrid + rerank, as prompt-ready briefs."""
-            found = retriever.hybrid_rerank(question, n)
-            return [retriever.brief(f.incident_id) for f in found]
+            """Top n incidents by hybrid + rerank, as prompt-ready briefs. Thread-safe."""
+            with shared:
+                found = retriever.hybrid_rerank(question, n)
+                return [retriever.brief(f.incident_id) for f in found]
+
+        def embed_locked(texts: Sequence[str]) -> list[list[float]]:
+            """The embedder behind a lock: a loaded model is not safe to share across threads."""
+            with shared:
+                return embedder(texts)
 
         candidates(cases[0].question, 1)  # warm-up, not measured
 
@@ -722,9 +783,10 @@ def live_run(progress: Callable[[str], None], *, recall_enabled: bool = True) ->
             make_graph=make_graph,
             candidates=candidates,
             judge=make_ollama_judge(judge_model),
-            embed=embedder,
+            embed=embed_locked,
             provenance=provenance,
             progress=progress,
+            workers=workers,
         )
 
 
@@ -746,6 +808,14 @@ def main(
     parser.add_argument("--gate", action="store_true", help="compare to the baseline, exit 1 on problems")
     parser.add_argument("--write-baseline", action="store_true", help="freeze this run as the baseline")
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        choices=range(1, MAX_WORKERS + 1),
+        metavar=f"1..{MAX_WORKERS}",
+        help="cases to run in parallel. Set OLLAMA_NUM_PARALLEL on the server to match.",
+    )
+    parser.add_argument(
         "--no-recall",
         action="store_true",
         help="negative control: run without the recall step. Never saved as a baseline.",
@@ -761,7 +831,9 @@ def main(
             return 2
 
     try:
-        extra = {"recall_enabled": False} if args.no_recall else {}
+        extra: dict[str, Any] = {"recall_enabled": False} if args.no_recall else {}
+        if args.workers != 1:
+            extra["workers"] = args.workers
         report = runner(lambda msg: print(msg, file=sys.stderr, flush=True), **extra)
     except KeyError as err:
         print(f"error: set the environment variable {err}", file=sys.stderr)
@@ -770,6 +842,12 @@ def main(
     print(format_table(report))
     shown = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
     print(f"report: {shown}")
+    timing = report.get("timing")
+    if timing:
+        print(
+            f"timing: {timing['wall_s']} s wall, {timing['workers']} worker(s), "
+            f"{timing['cases_per_min']} cases/min"
+        )
 
     code = 0
     if baseline is not None:

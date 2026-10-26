@@ -9,7 +9,7 @@ What it does
 
 Why it is opt-in
     It needs Ollama and the database, and it takes many minutes: about 10 judge
-    calls per case, sequential, on a CPU. A default `pytest` run would be slow
+    calls per case, run one case at a time. A default `pytest` run would be slow
     and would fail on a machine with the services off. Run it before a release:
 
         make up
