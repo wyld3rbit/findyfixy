@@ -73,7 +73,7 @@ from app.investigate import build_investigator
 from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
 from app.tools import make_deploys_tool
 from app.graph import QUESTIONS, THRESHOLD, Recall, build_graph, ollama_ask
-from app.triage import Ask, Prior, TriageError
+from app.triage import Ask, Prior, TriageError, answer_options
 
 Mode = Literal["live", "fake"]
 Scenario = Literal[
@@ -857,7 +857,7 @@ def main(argv: list[str] | None = None) -> None:
 
         tool = make_deploys_tool()
         investigator = build_investigator(
-            ChatOllama(model=small).bind_tools([tool]), tool
+            ChatOllama(model=small, **answer_options()).bind_tools([tool]), tool
         )
     hub = RunHub(
         live_models=(small, large) if small and large else None,

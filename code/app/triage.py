@@ -36,7 +36,7 @@ Cost and failure modes (read before trusting this at scale)
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -91,6 +91,32 @@ class Reply(str):
         obj = super().__new__(cls, text)
         obj.served_by = served_by
         return obj
+
+
+# How the answering model is called, defined once for every place that builds it
+# (graph.ollama_ask, the stress variant, the investigator).
+#
+# Temperature 0 is greedy decoding: the most likely token every time. The same
+# alert then gets the same triage, which an on-call tool needs for trust and
+# audit, and which makes a quality gate reproducible. Without it Ollama samples
+# at its own default, and the same eval scored 9, 11 and 16 of 30 on severity.
+# Floating-point differences between runs or machines can still change a token,
+# so this is "repeatable in practice", not a guarantee.
+#
+# The timeout stops a hung model server from hanging the graph. It applies to
+# each read from the server, not to the whole call, so a long answer that keeps
+# streaming is not cut off, but a stalled one is. 120 s covers a cold load of
+# the 7B model. A timeout raises, and the run fails loudly.
+ANSWER_TEMPERATURE = 0
+ANSWER_TIMEOUT_S = 120.0
+
+
+def answer_options() -> dict[str, Any]:
+    """Keyword arguments for the answering `ChatOllama`. A fresh dict each call."""
+    return {
+        "temperature": ANSWER_TEMPERATURE,
+        "client_kwargs": {"timeout": ANSWER_TIMEOUT_S},
+    }
 
 
 # The one seam to the outside world: (model name, prompt) in, raw reply text

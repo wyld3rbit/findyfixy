@@ -436,6 +436,13 @@ Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 - Also noted: `ollama_ask` has no request timeout (its docstring says so). A hung model call would hang the graph.
 - Open: decide whether the product should answer at temperature 0. Until then a single run cannot support a regression gate.
 
+### Greedy decoding and a timeout for every answering model (2026-10-26)
+
+- `app/triage.py`: `ANSWER_TEMPERATURE = 0`, `ANSWER_TIMEOUT_S = 120.0` and `answer_options()`, defined once. `ollama_ask`, the stress variants (`make_ollama_ask`) and the console's investigator all use it, so a later change cannot fix one and miss the others. The timeout applies to each read from the server, so a long streaming answer continues and a stalled one fails loudly.
+- Why: the same evaluation scored 9, 11 and 16 of 30 on severity at the old default sampling. Same alert, same triage is also the right behaviour for an on-call tool. Repeatable in practice, not guaranteed: floating-point differences can still change a token.
+- Tests: 485 pass (7 new). Breaks caught: temperature back to 0.8 (6 fail), timeout dropped (6), stress path losing the options (4), `ollama_ask` losing them (1). Not unit-tested: the investigator's construction in `console.py` (it is built inside the live start-up path).
+- Left unchanged on purpose: `direct_run.py` and `mcp_run.py`, the Day 2 measurement scripts. Changing them would change how the recorded Day 2 numbers were produced.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

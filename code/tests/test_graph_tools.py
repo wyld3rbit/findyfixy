@@ -289,7 +289,7 @@ def test_ollama_ask_keeps_the_model_name_ollama_reports(monkeypatch):
     import app.graph as g
 
     class FakeChat:
-        def __init__(self, model, format):
+        def __init__(self, model, format, **kwargs):
             self.model = model
 
         def invoke(self, prompt):
@@ -304,7 +304,7 @@ def test_ollama_ask_without_metadata_gives_unknown_not_the_asked_name(monkeypatc
     import app.graph as g
 
     class FakeChat:
-        def __init__(self, model, format):
+        def __init__(self, model, format, **kwargs):
             pass
 
         def invoke(self, prompt):
@@ -324,3 +324,25 @@ def test_the_tool_step_reports_which_model_the_server_says_answered(tool):
     graph.invoke({"question": "q"})
     exited = next(e for e in events if e.kind == "node_exited")
     assert exited.data["served_by"] == ["tool-model"]  # once, not once per turn
+
+
+def test_ollama_ask_is_greedy_and_has_a_read_timeout(monkeypatch):
+    """Same alert, same triage; and a stalled server cannot hang the graph."""
+    import app.graph as g
+    from app.triage import ANSWER_TEMPERATURE, ANSWER_TIMEOUT_S
+
+    built = {}
+
+    class FakeChat:
+        def __init__(self, model, **kwargs):
+            built.update(kwargs)
+
+        def invoke(self, prompt):
+            return AIMessage(content=reply(0.9))
+
+    monkeypatch.setattr(g, "ChatOllama", FakeChat)
+    g.ollama_ask("m", "prompt")
+    assert built["temperature"] == ANSWER_TEMPERATURE == 0
+    assert built["client_kwargs"] == {"timeout": ANSWER_TIMEOUT_S}
+    assert built["format"]  # the schema is still passed
+

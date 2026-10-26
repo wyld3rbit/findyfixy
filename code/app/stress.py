@@ -59,6 +59,7 @@ from app.triage import (
     Ask,
     Reply,
     Triage,
+    answer_options,
 )
 
 Stress = Literal["none", "no_format", "vague_prompt", "percent_log", "small_context"]
@@ -114,9 +115,11 @@ def make_ollama_ask(
     schema = Triage.model_json_schema()
 
     def ask(model: str, prompt: str) -> Reply:
-        kwargs: dict[str, Any] = {"format": schema}
+        # Every stress keeps temperature 0 and the timeout, so the one thing that
+        # differs from the normal path is the stress itself.
+        kwargs: dict[str, Any] = {"format": schema, **answer_options()}
         if stress == "no_format":
-            kwargs = {}
+            kwargs = answer_options()
         elif stress == "small_context":
             kwargs["num_ctx"] = SMALL_CONTEXT_TOKENS
         if stress == "vague_prompt":

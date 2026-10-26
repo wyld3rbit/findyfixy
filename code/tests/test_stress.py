@@ -128,3 +128,20 @@ def test_the_reply_still_reports_which_model_the_server_says_answered():
 def test_a_typo_raises_instead_of_silently_running_unstressed(typo):
     with pytest.raises(ValueError):
         make_ollama_ask(typo, chat=FakeChat)
+
+
+@pytest.mark.parametrize("stress", STRESSES)
+def test_every_stress_keeps_temperature_zero_and_the_timeout(stress) -> None:
+    """Only the stress may differ from the normal path, never the sampling."""
+    make_ollama_ask(stress, chat=FakeChat)("m", "prompt")
+    built = FakeChat.built[-1]
+    assert built["temperature"] == 0
+    assert built["client_kwargs"]["timeout"] > 0
+
+
+def test_no_format_removes_only_the_format() -> None:
+    make_ollama_ask("no_format", chat=FakeChat)("m", "prompt")
+    assert "format" not in FakeChat.built[-1]
+    make_ollama_ask("none", chat=FakeChat)("m", "prompt")
+    assert "format" in FakeChat.built[-1]
+
