@@ -1,4 +1,20 @@
 #!/bin/sh
-# Blocks a commit that stages PII or secrets. See tools/scan_private.py.
+# Blocks a commit that stages PII or secrets, or that breaks the project checks.
 # Install once per clone with: make hooks   (run from code/)
-exec uv run --no-project python "$(git rev-parse --show-toplevel)/tools/scan_private.py" --staged
+#
+# 1. The privacy scan of the staged content. Always runs. See tools/scan_private.py.
+# 2. `make check` (tracker data, tracker server tests, privacy scan of the tree).
+# 3. `make test` (the product tests), only when files under code/ are staged.
+# Steps 2 and 3 run only where a Makefile exists, so a bare repository that
+# borrows this hook (the scanner's own tests do) is not asked for a project.
+# There is no bypass variable on purpose. `git commit --no-verify` still skips
+# this hook, and the pre-push hook runs the same checks again.
+set -e
+root=$(git rev-parse --show-toplevel)
+uv run --no-project python "$root/tools/scan_private.py" --staged
+if [ -f "$root/Makefile" ]; then
+    make -C "$root" --no-print-directory check
+    if git diff --cached --name-only | grep -q '^code/'; then
+        make -C "$root" --no-print-directory test
+    fi
+fi

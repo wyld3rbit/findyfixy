@@ -8,7 +8,8 @@ Checks:
 2. Every day has the required fields, and every `done` index points at a real check.
 3. Every lesson file renders to non-empty HTML.
 4. Decisions have all fields; a day's `plan` has a valid status and an existing file.
-5. No em-dashes in lessons, plan or progress data.
+5. The README and CLAUDE.md name only make targets and files that exist (tools/check_docs.py).
+6. No em-dashes in lessons, plan or progress data.
 
 Exits non-zero on the first class of failure, with a one-line reason per problem.
 """
@@ -18,6 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import check_docs  # noqa: E402
 from lessons import LESSON_NUMBERS, ROOT, lesson_file, render  # noqa: E402
 
 REQUIRED_DAY = {"n", "week", "date", "title", "file", "outcome", "checks", "done"}
@@ -67,6 +69,8 @@ def problems() -> list[str]:
     for entry in data.get("log", []):
         if not {"date", "entry"} <= entry.keys():
             out.append(f"log entry malformed: {entry}")
+
+    out.extend(check_docs.problems())
 
     for n in LESSON_NUMBERS:
         if not render(n).strip():

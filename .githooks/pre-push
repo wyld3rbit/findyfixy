@@ -1,4 +1,11 @@
 #!/bin/sh
-# Blocks a push whose commits contain PII or secrets, in files or in metadata.
+# Blocks a push whose commits contain PII or secrets, in files or in metadata,
+# or whose tree fails the project checks. Catches a commit made with --no-verify.
 # git passes the refs being pushed on stdin; the scanner reads them.
-exec uv run --no-project python "$(git rev-parse --show-toplevel)/tools/scan_private.py" --pre-push "$1"
+set -e
+root=$(git rev-parse --show-toplevel)
+uv run --no-project python "$root/tools/scan_private.py" --pre-push "$1"
+if [ -f "$root/Makefile" ]; then
+    make -C "$root" --no-print-directory check
+    make -C "$root" --no-print-directory test
+fi

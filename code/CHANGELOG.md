@@ -463,6 +463,31 @@ Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
   - Colima memory default: 6 GB today. A 2 GB VM was tested and works for the current stack (retrieval numbers identical to Day 4, Postgres uses about 60 MiB). Langfuse day needs 8 GB. Option: 2 GB by default, `COLIMA_MEMORY=8` on that day.
   - A test that fails if a compose file publishes a port without the `127.0.0.1:` prefix. Checked by hand on 2026-10-26: every project port listens on loopback only, and the LAN address refused 5432, 8080 and 11434. The database password is `dev`, safe only because of that binding.
 
+### Working agreement updated from Anthropic's guidance (2026-10-26)
+
+- Sources: Anthropic's Claude Code best-practices guide and its prompting guide (agentic coding sections).
+- `CLAUDE.md`: new "The checks" block with the four commands; new rules (read the code before claiming, minimal scope, general solutions never special-cased to pass a test, reversible actions without asking and ask before destructive ones, interview him until the spec is clear, restart from a fresh plan after two failed corrections, `/code-review` before committing substantial code, spread not single runs); communication rule changed to plain connected prose; duplicated and discoverable text trimmed. Net length is longer than before (about 1,780 words against 1,590) because the new rules outweigh the trimming.
+- Enforcement, not prose: `.githooks/pre-commit` now also runs `make check`, and `make test` when `code/` is staged. `.githooks/pre-push` runs the privacy scan, `make check` and `make test`, so a commit made with `--no-verify` is still caught at push. Both run the project checks only where a Makefile exists, because the scanner's own tests borrow the hook in a bare repository (and a commit that runs tests that make commits would otherwise loop). There is no bypass variable. Known cost: the hooks call `uv run --with markdown`, which needs the package cache or network.
+
+### Model comparison result (2026-10-26)
+
+One model answers all 30 golden cases (no routing), temperature 0, thinking off, judge fixed at `qwen2.5:7b`. Reports `eval-20261027T03*`.
+
+| Model | Severity right | Sev1 caught | Faithfulness | Median per case | Memory |
+|---|---|---|---|---|---|
+| `qwen3:4b-instruct` | 25 of 30 | 6 of 8 | 0.59 | 4.6 s | 2.5 GB |
+| `qwen3:8b` | 26 of 30 | 7 of 8 | 0.66 | 7.9 s | 5.2 GB |
+| `qwen2.5:7b` | 20 of 30 | 2 of 8 | 0.48 | 3.4 s | 4.7 GB |
+| `qwen2.5:1.5b` (earlier run) | 10 of 30 | 2 of 8 | 0.35 | 1.5 s | 1.1 GB |
+
+- The 4B-instruct is within the noise of the 8B (one case apart; 30 cases cannot separate them) at about 58 percent of the time. Qwen2.5 7B answers fastest of the 7B+ models but misses six of eight sev1 cases, the costly error. Qwen2.5 7B was also its own judge here, so its faithfulness may be flattered.
+- Open: which model becomes the answering model and which the judge. The router (small first, escalate on low confidence) has not been tested with the Qwen3 models; the 1.5B's confidence never flagged its mistakes.
+
+### Housekeeping: docs, files, hooks (2026-10-26)
+
+- `tools/check_docs.py` (in `make check`): the README and `CLAUDE.md` may name only make targets and files that exist, and no volatile counts. 37 tool tests; it caught a deliberately re-stale README in a test of the real hook.
+- Fixed stale docs: `00-plan.md` (deleted `progress.js`, double-click advice), the README test count, the Day 5 plan status and its description of the question format. Removed two leftover agent worktrees after checking they held only already-merged files.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

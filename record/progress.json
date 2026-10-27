@@ -104,6 +104,10 @@
     {
       "date": "2026-10-26",
       "entry": "Correction: the earlier claim that adding severity to recalled incidents helped (7 to 11 of 30) is not supported. Three runs of the same configuration scored 11, 16 and 9 of 30 because the answering model samples at Ollama's default temperature. Forcing every case to the 7B model scored 23 of 30 in one run (interval 0.60 to 0.90), a large gap, but a single sample. Retrieval returned the paired incident in 19 of 20 twin cases in every run."
+    },
+    {
+      "date": "2026-10-26",
+      "entry": "Model comparison, one model answering all 30 cases, temperature 0, thinking off, same judge: Qwen3 4B-instruct 25 of 30 severity (sev1 caught 6 of 8, median 4.6 s, 2.5 GB), Qwen3 8B 26 of 30 (7 of 8, 7.9 s, 5.2 GB), Qwen2.5 7B 20 of 30 (2 of 8, 3.4 s), Qwen2.5 1.5B 10 of 30 (2 of 8). The 4B-instruct is within noise of the 8B at 58 percent of the time and half the memory. Also: parallel workers gave no speedup on this machine; a 2 GB Colima VM works; docs drift check and commit hooks added; independent architecture review done, refactor awaiting approval."
     }
   ],
   "decisions": [
@@ -197,6 +201,20 @@
       "decision": "Keep the --workers option, default 1. On this machine two workers with OLLAMA_NUM_PARALLEL=2 gave no speedup (428.1 s serial, 431.7 s parallel, per-case time doubled): the GPU is already saturated.",
       "rejected": "Making parallel the default",
       "why": "It adds locks and a thread pool for no gain here. It may pay off on a bigger or dedicated GPU, which is why the option stays, capped at 4."
+    },
+    {
+      "date": "2026-10-26",
+      "day": 5,
+      "decision": "Enforce the checks in git hooks and add a documentation drift check to make check. Pre-commit runs make check, and make test when code/ is staged. Pre-push runs the privacy scan, make check and make test.",
+      "rejected": "Rules written only in CLAUDE.md",
+      "why": "Anthropic's guidance: a rule that cannot have exceptions belongs in a hook. A commit with a wrong test count had already slipped through on prose rules alone."
+    },
+    {
+      "date": "2026-10-26",
+      "day": 5,
+      "decision": "Lift the fixed Qwen2.5 pair for a measured comparison: Qwen3 4B-instruct and 8B allowed (Apache-2.0), thinking off, temperature 0, 120 s read timeout.",
+      "rejected": "Keeping Qwen2.5 1.5B and 7B",
+      "why": "At temperature 0 the 1.5B scored 10 of 30 on severity and its confidence never flagged its errors."
     }
   ],
   "days": [

@@ -39,7 +39,7 @@ make console          # live page: watch each step run
 make ui               # one landing page: http://127.0.0.1:8766
 make triage           # triage five fixed questions
 make eval-retrieval   # compare the three retrievers
-make test             # 371 tests
+make test             # the product tests
 make up               # start the database (make down stops it)
 make help             # everything else
 ```

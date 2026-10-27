@@ -7,9 +7,17 @@ This folder is a 10-day course. The learner is an engineering leader learning th
 - `00-plan.md`, `d01.md` to `d10.md`: the lessons. Read them. Never edit them unless the learner asks.
 - `tracker.html`: the page. Code only, no data. Do not edit unless he asks for a page change.
 - `record/progress.json`: the single record of status, plans and decisions (strict JSON). You maintain it. `code/CHANGELOG.md` stays the record of the code.
-- Lessons are the `.md` files. `tools/serve.py` renders them for the page. There is no generated copy.
-- `tools/serve.py`, `tools/lessons.py`, `tools/check.py`: the local server, the renderer and the validator. Start the page with `uv run --no-project --with markdown python tools/serve.py`.
-- `code/`: the code. Everything you build goes here. Run commands from `code/`.
+- `tools/`: the tracker server, the lesson renderer and the validators. The lessons are the `.md` files; there is no generated copy. Start the page with `make ui` from this folder.
+- `code/`: the code. Everything you build goes here.
+
+## The checks
+
+Run these from this folder. Show the command and its real output as evidence. A pre-commit hook blocks a commit unless `make check` passes, and `make test` too when `code/` is staged.
+
+- `make test`: the product tests. Fakes only, about a minute.
+- `make check`: the tracker data, the tracker server tests and the privacy scan.
+- `make audit`: known vulnerabilities and startup hooks. Required after any change to `uv.lock`.
+- `make eval-gate`: the answer-quality gate. Live models, many minutes.
 
 ## When he says "start day N"
 
@@ -34,7 +42,7 @@ He runs the course with you alone. Keep the record true without being asked.
 - **At the end of each session**, append one log entry to `record/progress.json`: `{"date": "YYYY-MM-DD", "entry": "<what was done, one or two sentences, with the numbers>"}`. Set `updated` to today. Run `date` for the date; never guess it.
 - **If he changes the schedule**, update each day's `date`, `plannedEnd` and `countdownEnd`.
 - **If he asks to change a lesson**, edit the `.md` file. The server renders it on request.
-- **Before every commit that touches these files**, run `uv run --no-project --with markdown python tools/check.py`. It must print `OK`. Fix anything it reports.
+- **Before every commit that touches these files**, `make check` must pass. Fix anything it reports.
 - Tell him in one line what you changed in the record.
 - His own browser ticks are a convenience stored in that browser. `record/progress.json` is the record.
 
@@ -43,18 +51,18 @@ He runs the course with you alone. Keep the record true without being asked.
 Fresh releases are where hijacks land. The LiteLLM PyPI compromise in March 2026 was live for hours. Treat every new package and image as untrusted until checked.
 
 - **Release cooldown.** `code/pyproject.toml` carries `[tool.uv] exclude-newer = "<UTC timestamp>"`, about 7 days before today (run `date`). uv ignores anything published after it. Move it forward deliberately, never to today, and tell him in one line when you do. Add it the first time you touch `pyproject.toml` if it is missing.
-- **Before adding a package.** Exact name (no typosquats), OSI license, active maintainers, real download volume. Say all four in the plan.
+- **Before adding a package.** Say in the plan: exact name (no typosquats), OSI license, active maintainers, download volume.
 - **`make audit` after every change to `uv.lock`, and before every commit that touches dependencies.** Create it on first need. It runs two checks:
   1. Known vulnerabilities, without installing anything: `uv export --frozen --format requirements-txt --no-emit-project -o .audit-req.txt`, then `uvx pip-audit --disable-pip --require-hashes -r .audit-req.txt`. Git-ignore `.audit-req.txt`. If flags have drifted, fix them and say what changed.
   2. Startup hooks: list every `.pth` file in `code/.venv`. Allow only the known ones (uv or virtualenv shims, `distutils-precedence.pth`, this project's own editable install). Anything else: stop and show him its contents.
 - **On any finding, stop.** Show package, version, advisory ID and fixed version. Do not upgrade or remove without his approval.
-- **Container images.** Pin by digest: `image:tag@sha256:...`. Before first use, scan with Grype run as a container against the registry, not the Docker socket: `docker run --rm anchore/grype:<pinned tag> registry:<image>@sha256:<digest>`. Report critical and high findings. Do not use Trivy: reports tie the LiteLLM breach to a compromised Trivy in its CI.
+- **Container images.** Pin by digest: `image:tag@sha256:...`. Before first use, scan with Grype as a container against the registry, not the Docker socket: `docker run --rm anchore/grype:<pinned tag> registry:<image>@sha256:<digest>`. Report critical and high findings. Do not use Trivy (reports tie the LiteLLM breach to a compromised Trivy).
 - **Models.** After `ollama pull`, record the model ID from `ollama list` in `notes/models.md`, so a silent swap is visible.
 - Never pipe a remote script into a shell (`curl ... | sh`).
 
 ## Machine
 
-16 GB Mac. Models start as Qwen2.5 1.5B (small) and 7B (large). On 2026-10-26 the learner lifted the fixed pair for a measured comparison: Qwen3 4B-instruct and 8B are allowed (Apache-2.0, recorded in `notes/models.md`). Any model must have an OSI license, be at most 8B parameters, and be recorded in `notes/models.md` after pulling. Container runtime at 6 GB, 8 GB on Langfuse days. Do not pull models larger than 8B.
+16 GB Mac. Models start as Qwen2.5 1.5B (small) and 7B (large). Since 2026-10-26 Qwen3 4B-instruct and 8B are allowed for a measured comparison. Any model needs an OSI license, at most 8B parameters, and an entry in `notes/models.md` after pulling. Container runtime at 6 GB, 8 GB on Langfuse days.
 
 ## Plan before code
 
@@ -70,26 +78,35 @@ Commands that only check or download (version checks, `ollama pull`, `docker com
 ## Rules
 
 - Explain theory plainly and technically, at staff+ depth: the mechanism, the trade-off, the failure mode, what changes at scale. No analogies or simplifications in place of the mechanism.
-- Short steps. Short sentences. One fact per line. He may be dyslexic: no walls of text, no dense paragraphs.
-- No em-dashes. Bottom line first. No filler.
+- Write in plain, connected prose: short paragraphs, short sentences, bottom line first, jargon defined where it first appears. Use a list or table only for reference data. He may be dyslexic: no walls of text. End with one clear question when you need a decision, with your recommendation.
+- No em-dashes. No filler.
 - Library drift is expected. When an import or signature fails, check the installed version, fix it, and tell him in one line what changed.
 - Never ask him to paste an API key or secret into chat. He edits `.env` himself. `.env` is in `.gitignore`.
-- Never invent a result. Numbers in notes come from runs he actually did.
-- Do not delete files without asking.
-- No new system installs. He already has uv, Python, Docker Compose and Ollama. Never run `brew install` or install anything outside `code/`. Python lives only in the project virtual environment, `code/.venv`. Add packages with `uv add`, run everything with `uv run`. Never `pip install`, `pip install --user`, `sudo`, or install into system or Homebrew Python. If a tool needs Python and is not a project dependency, use `uvx` (isolated, no global install). Services run as containers from compose files in `code/`.
+- Never invent a result. Numbers in notes come from runs he actually did. One run is an anecdote: give the spread, and say when a difference is inside the noise.
+- Read the code before making claims about it. Never speculate about a file you have not opened.
+- Keep the scope minimal: only what was asked or clearly necessary. No extra features, abstractions, or defensive code for cases that cannot happen. Validate at system boundaries.
+- Write a general solution. Never hard-code a value or special-case a test to make it pass. If a test looks wrong, say so.
+- Local, reversible actions need no permission. Ask before anything destructive, hard to reverse, or visible to others. Never bypass a check (for example `--no-verify`) to get past an obstacle. Do not delete files without asking.
+- When requirements are unclear, interview him with multiple-choice questions until you could write the spec, then plan.
+- If two corrections in a row have not fixed something, stop, say what you learned, and restart the step from a fresh plan instead of a third patch.
+- Before committing substantial code, run `/code-review`. A fresh agent that did not write it is not swayed by your reasoning.
+- No installs outside `code/`: never `brew install`, `pip install` (also `--user`), or `sudo`, and nothing into system or Homebrew Python. He already has uv, Python, Docker Compose and Ollama. Python lives in `code/.venv`: `uv add` and `uv run`, and `uvx` for a one-off tool. Services run as containers from compose files in `code/`.
 - Open source only. Every dependency must be OSI-licensed. Check the license before adding anything not in the bill of materials in `00-plan.md`, and tell him. Use the container runtime he already has. No Llama or Qwen2.5 3B/72B models. A hosted model API is allowed only for the optional Day 8 comparison.
 - Pin versions. Commit `uv.lock`. Never install `litellm` 1.82.7 or 1.82.8. Pin container image tags.
+- Before any push (only when he asks), re-read `README.md` against the code and the latest results and fix what drifted. `make check` rejects docs that name a make target or file that does not exist.
+- Docs hold no stale, redundant or wrong information, and the repo holds no needless files. Put numbers that change in `notes/` or a report, never in prose. Remove temporary artifacts you created (worktrees, scratch files) once merged.
+- Design for the long run: dependencies point inward (domain logic never imports the HTTP layer or a vendor client), one composition root builds the real wiring, config is read at the edge, no wiring is duplicated, and each module has one reason to change.
 - Keep the demo in mind: everything must start with `make demo` by Day 10.
 - Synthetic data only. Nothing from a past employer goes in the repo.
 - If a step is taking more than 20 minutes, say so and offer a simpler path to the same outcome.
 
 ## Rules added during Day 1
 
-- This training must run from any clone, on any machine. Every path is relative to the folder Claude Code starts in (the one that holds this file). The code lives in `code/`, so commands say `cd code`. In code, resolve files from the project root (for example `Path(__file__).resolve().parents[1]`), never from a hardcoded path or an assumed current directory.
-- No absolute local paths, usernames or emails in any file or in git commit metadata. Scan for them before every commit. Lesson text that contains a path is not copied into `code/`.
+- This must run from any clone. In code, resolve files from the project root (`Path(__file__).resolve().parents[1]`), never from a hardcoded path or the current directory.
+- No absolute local paths, usernames or emails in any file or in git commit metadata. The pre-commit hook scans for them. Lesson text that contains a path is not copied into `code/`.
 - Document all generated code for a learner at staff+ depth. A module docstring (what and why). A docstring on every function and class. Comments that explain trade-offs, failure modes and what changes at scale. Short sentences.
-- Write idiomatic code as a staff+ engineer would. Inject dependencies. No work at import time. Precise types (`Literal`, not `str`). Small pure functions. Tests next to the code. A lesson skeleton may be improved. Say so in one line.
-- Test logic with fakes, not live models. Prove a test can fail: break the code on purpose once, see it fail, restore.
-- Python is pinned to 3.13. `sentence-transformers` and `ragas` do not resolve on 3.15. Do not raise it without a dry-run resolve.
+- Write idiomatic code as a staff+ engineer would. Inject dependencies. No work at import time. Precise types (`Literal`, not `str`). Small pure functions. A lesson skeleton may be improved. Say so in one line.
+- Test logic with fakes, not live models, with tests next to the code. Prove a test can fail: break the code on purpose once, see it fail, restore.
+- Python is pinned to 3.13. `sentence-transformers` does not resolve on 3.15. Do not raise it without a dry-run resolve.
 - Where a lesson conflicts with these rules, these rules win. Say so in one line. Known conflicts are listed in `code/CHANGELOG.md` under "Decisions for later days".
 - Keep `code/CHANGELOG.md` current after each step: what was done, what differs from the lesson, what is open. Read it first when resuming.

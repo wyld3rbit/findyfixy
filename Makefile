@@ -51,5 +51,5 @@ ui:
 # check: the tracker data, the tracker server, and the privacy scan of the tree.
 check:
 	uv run --no-project --with markdown python tools/check.py
-	uv run --no-project --with markdown --with pytest pytest tools/test_serve.py -q
+	uv run --no-project --with markdown --with pytest pytest tools -q
 	python3 tools/scan_private.py --tree

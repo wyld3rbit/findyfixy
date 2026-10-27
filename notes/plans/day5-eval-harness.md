@@ -1,6 +1,16 @@
 # Plan: Day 5 eval harness
 
-Status: APPROVED 2026-10-26.
+Status: BUILT 2026-10-26. The baseline is not frozen yet.
+
+## What differs from this plan, as built
+
+- Questions are the alert line only (the first timeline entry). The plan said summary plus timeline, which leaks the cause and the fix.
+- The answering model runs at temperature 0 with thinking off and a 120 s read timeout, defined once in `app/triage.py`. The plan did not cover this; the first evaluations showed run-to-run swings of 9 to 16 of 30 on severity without it.
+- Recalled incidents carry their severity (`Prior` and `Passage` gained a validated `severity` field).
+- The runner gained `--workers` (default 1; no speedup on this machine), `--no-recall`, `--show-case`, `--baseline-from`; reports store each case's answer, contexts and the judge's per-claim decisions.
+- Work package C ran in the main checkout, not a worktree: worktrees branched from an older commit without the Day 4 code.
+
+The sections below are the original plan, kept as the record of what was approved.
 
 ## Goal
 
