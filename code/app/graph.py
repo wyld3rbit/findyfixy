@@ -46,12 +46,10 @@ Run it:   uv run python -m app.graph
 Test it:  uv run pytest
 """
 
-import os
 import time
 from collections.abc import Callable, Sequence
 from typing import Literal, TypedDict
 
-from dotenv import load_dotenv
 from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -60,6 +58,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMe
 
 from app.events import Emit, no_emit
 from app.investigate import analyse, content_text, format_evidence, investigation_prompt
+from app.settings import MissingEnvironment, load_env, read_models
 from app.triage import (
     Ask,
     Prior,
@@ -380,17 +379,18 @@ def main() -> None:
     Escalation rate (runs that reach `large`, divided by total runs) is the
     number to watch. Count it from the `model:` lines.
 
-    This is the only place that reads `.env` and the environment.
-    `os.environ[...]` raises KeyError if a name is missing. That is on
-    purpose: a missing model name should stop the run loudly, not fall back
-    to a silent default. `load_dotenv()` does not override variables that are
-    already set, so CI or a container can set them without editing `.env`.
+    Configuration comes from `app.settings`. A missing model name stops the run
+    loudly with the variable's name, not with a silent default.
     """
-    load_dotenv()
+    load_env()
+    try:
+        models = read_models()
+    except MissingEnvironment as err:
+        raise SystemExit(f"error: set the environment variable {err}") from None
     graph = build_graph(
         ollama_ask,
-        small_model=os.environ["SMALL_MODEL"],
-        large_model=os.environ["LARGE_MODEL"],
+        small_model=models.small,
+        large_model=models.large,
     )
     for q in QUESTIONS:
         start = time.perf_counter()

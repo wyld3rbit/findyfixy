@@ -82,6 +82,8 @@ from app.golden import GoldenCase, load_golden
 from app.graph import THRESHOLD, Recall
 from app.judge import Judge
 from app.paths import EVALS, REPORTS, ROOT
+from app.settings import MissingEnvironment, load_env, read_models
+from app.wiring import RECALL_K, build_retriever, connect
 from app.metrics import (
     PROMPT_VERSIONS,
     Embed,
@@ -94,11 +96,6 @@ from app.triage import Prior, Triage, format_prior
 
 REPORTS_DIR = REPORTS
 BASELINE_PATH = EVALS / "baseline.json"
-
-# Same value the console uses for the prompt (app/console.py RECALL_K). Kept
-# here as a literal so this module does not import the HTTP server; a test
-# pins the two together.
-RECALL_K = 3
 
 BOOTSTRAP_SEED = 17
 BOOTSTRAP_RESAMPLES = 1000
@@ -718,22 +715,6 @@ def _cell(stat: Mapping[str, Any]) -> str:
 MAX_REPORT_BYTES = 20_000_000
 
 
-class MissingEnvironment(Exception):
-    """A required environment variable is not set. The message is its name."""
-
-
-def require_env(name: str) -> str:
-    """The value of a required environment variable, or `MissingEnvironment`.
-
-    Only this lookup is translated into "set the environment variable". A
-    KeyError from a bug elsewhere must keep its traceback.
-    """
-    try:
-        return os.environ[name]
-    except KeyError:
-        raise MissingEnvironment(name) from None
-
-
 class ReportInvalid(ValueError):
     """The file is not a report this module wrote."""
 
@@ -913,25 +894,17 @@ def live_run(
     a lock. The lock covers only retrieval and embedding (well under a second
     per case), never the model calls, which are where the time goes.
     """
-    import psycopg
-    from dotenv import load_dotenv
-    from pgvector.psycopg import register_vector
-
     from app.graph import build_graph, ollama_ask
-    from app.ingest import database_url, make_embedder
+    from app.ingest import make_embedder
     from app.judge import make_ollama_judge
-    from app.retrieve import Retriever, load_passages, make_reranker, postgres_vector_search
 
-    load_dotenv()
-    small, large = require_env("SMALL_MODEL"), require_env("LARGE_MODEL")
-    judge_model = os.environ.get("JUDGE_MODEL", "qwen2.5:7b")
+    load_env()
+    models = read_models()
+    small, large, judge_model = models.small, models.large, models.judge
     cases = load_golden()
     embedder = make_embedder()
-    with psycopg.connect(database_url(), autocommit=True) as conn:
-        register_vector(conn)
-        retriever = Retriever(
-            load_passages(conn), postgres_vector_search(conn, embedder), make_reranker()
-        )
+    with connect() as conn:
+        retriever = build_retriever(conn, embedder)
 
         shared = threading.Lock()
 

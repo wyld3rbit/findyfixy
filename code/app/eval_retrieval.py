@@ -133,20 +133,11 @@ def main() -> None:
     Loads the embedding model and the reranker (about 1.3 GB of weights on the
     first run), and needs the database from `make up` with Day 3 ingested.
     """
-    import psycopg
-    from pgvector.psycopg import register_vector
-
-    from app.ingest import database_url, make_embedder
-    from app.retrieve import Retriever, load_passages, make_reranker, postgres_vector_search
+    from app.wiring import build_retriever, connect
 
     queries = load_queries()
-    with psycopg.connect(database_url(), autocommit=True) as conn:
-        register_vector(conn)
-        retriever = Retriever(
-            load_passages(conn),
-            postgres_vector_search(conn, make_embedder()),
-            make_reranker(),
-        )
+    with connect() as conn:
+        retriever = build_retriever(conn)
 
         def ids(method: Callable[..., list]) -> Search:
             return lambda query, k: [f.incident_id for f in method(query, k)]

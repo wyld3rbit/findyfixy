@@ -70,6 +70,8 @@ from app.dev_reload import fingerprint, snapshot
 from app.events import Emit, Event, make_emit
 from app.incidents import DEFAULT_PATH, Incident, load_incidents
 from app.paths import DOCS, ROOT
+from app.settings import load_env, optional_models
+from app.wiring import RECALL_K, lazy_recall
 from app.investigate import build_investigator
 from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
 from app.tools import make_deploys_tool
@@ -97,10 +99,6 @@ _MAX_QUESTION = 8000
 _KEEPALIVE_SECONDS = 10.0
 
 _FORCE_THRESHOLD = 1.01
-
-# How many prior incidents go into the prompt. Three is the lesson's number: more
-# costs prompt tokens and, with a 1.5B model, starts to distract it.
-RECALL_K = 3
 
 # What the page shows for the recall step in a fake run: fixed, invented, and
 # marked as such by its IDs. A fake run must never need a database or a model.
@@ -788,43 +786,6 @@ def parse_args(argv: list[str]) -> tuple[bool, int]:
     return reload, port
 
 
-def lazy_recall() -> Recall:
-    """The real recall step, built on first use instead of at startup.
-
-    Building it loads two models (about 1.3 GB) and opens the database. Doing
-    that at startup would slow every start and fail it when the database is
-    off, though fake mode needs neither. On first use a failure becomes a
-    `run_failed` event, which the page shows. The retriever is kept after
-    the first build. One lock keeps two runs from building it twice.
-    """
-    import psycopg
-    from pgvector.psycopg import register_vector
-
-    from app.ingest import database_url, make_embedder
-    from app.retrieve import Retriever, load_passages, make_reranker, postgres_vector_search
-
-    lock = threading.Lock()
-    built: list[Retriever] = []
-
-    def recall(question: str) -> list[Prior]:
-        with lock:
-            if not built:
-                conn = psycopg.connect(database_url(), autocommit=True)
-                register_vector(conn)
-                built.append(
-                    Retriever(
-                        load_passages(conn),
-                        postgres_vector_search(conn, make_embedder()),
-                        make_reranker(),
-                    )
-                )
-            retriever = built[0]
-            found = retriever.hybrid_rerank(question, RECALL_K)
-            return [retriever.brief(f.incident_id) for f in found]
-
-    return recall
-
-
 def main(argv: list[str] | None = None) -> None:
     """Read the environment, build the hub, serve until Ctrl-C.
 
@@ -844,23 +805,21 @@ def main(argv: list[str] | None = None) -> None:
         dev_reload.run(ROOT, port)
         return
 
-    from dotenv import load_dotenv
-
-    load_dotenv()
-    small, large = os.environ.get("SMALL_MODEL"), os.environ.get("LARGE_MODEL")
+    load_env()
+    models = optional_models()
     investigator = None
-    if small and large:
+    if models:
         from langchain_ollama import ChatOllama
 
         tool = make_deploys_tool()
         investigator = build_investigator(
-            ChatOllama(model=small, **answer_options()).bind_tools([tool]), tool
+            ChatOllama(model=models.small, **answer_options()).bind_tools([tool]), tool
         )
     hub = RunHub(
-        live_models=(small, large) if small and large else None,
+        live_models=(models.small, models.large) if models else None,
         incidents=load_incidents(DEFAULT_PATH),
         investigator=investigator,
-        recall=lazy_recall() if small and large else None,
+        recall=lazy_recall(RECALL_K) if models else None,
     )
     dev = ROOT if os.environ.get("FINDYFIXY_DEV") else None
     server = serve(hub, port=port, dev_root=dev)

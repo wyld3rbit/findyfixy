@@ -56,3 +56,29 @@ def test_there_are_no_import_cycles_inside_app() -> None:
 
     for module in sorted(graph):
         visit(module, [])
+
+
+# Entry points build the real thing. Domain code takes its dependencies as
+# arguments and must not reach for the composition root or for configuration.
+ENTRY_POINTS = {"console", "eval_answers", "eval_retrieval", "graph", "direct_run", "mcp_run"}
+
+
+def _importers(target: str) -> set[str]:
+    found = set()
+    for p in APP.glob("*.py"):
+        for node in ast.walk(ast.parse(p.read_text())):
+            if isinstance(node, ast.ImportFrom) and node.module == f"app.{target}":
+                found.add(p.stem)
+    return found
+
+
+def test_only_entry_points_import_the_composition_root_and_settings() -> None:
+    """Domain code (triage, retrieve, metrics, judge, golden...) gets its dependencies passed in.
+
+    If a deep module imported wiring, it could quietly open a database or load a
+    model, and its tests would need one too.
+    """
+    for target in ("wiring", "settings"):
+        extra = _importers(target) - ENTRY_POINTS - {"wiring", "settings"}
+        assert extra == set(), f"{sorted(extra)} import app.{target} but are not entry points"
+

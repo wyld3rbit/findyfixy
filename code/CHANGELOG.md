@@ -507,6 +507,14 @@ A fresh agent that had not seen the work reviewed `eval_answers.py`, `metrics.py
 
 From the independent architecture review (see the review summary in `record/progress.json`). `app/paths.py` defines `ROOT`, `DATA`, `DOCS`, `EVALS` and `REPORTS` once. The ten modules that worked out the root for themselves now import it. `tests/test_architecture.py` fails if any other module computes the root again, and if the `app` modules form an import cycle (there are none today). Behavior unchanged; 525 tests pass. Breaks caught: a module re-deriving the root, a cycle between `events` and `triage`.
 
+### Architecture step 2: one composition root and one settings module (2026-10-26)
+
+- `app/settings.py`: environment access in one place (`load_env`, `require_env`, `read_models`, `optional_models`, `MissingEnvironment`). The default judge model is defined once. `app/wiring.py`: `connect()`, `build_retriever()`, `lazy_recall()` and `RECALL_K`, replacing three hand-built copies of "connect, register, load passages, build embedder and reranker" in the console, the answer evaluation and the retrieval evaluation. `RECALL_K` is defined once; the duplicate literal and the test that pinned it to the console are gone.
+- Dependency rule, enforced by `tests/test_architecture.py`: only entry points may import `app.wiring` or `app.settings`; domain modules receive what they need as arguments. Break caught: `metrics` importing the composition root.
+- Tests: 539 pass (14 new). Breaks caught: lock removed from `lazy_recall` (the eight-thread build-once test fails), domain module importing `wiring`. Checked live: `lazy_recall()` returned INC-0009, INC-0087 and INC-0015 for a real alert against the real database.
+- `direct_run.py` and `mcp_run.py` (Day 2 measurement scripts) still read the environment themselves; left alone on purpose so the recorded Day 2 numbers stay reproducible.
+- Observed, not changed: the first recall call took 82 s cold, including a Hugging Face hub request without a token on each model load. The weights are pinned by revision and cached, so a runtime network call is avoidable (`HF_HUB_OFFLINE=1`). Candidate for the wrap-up.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

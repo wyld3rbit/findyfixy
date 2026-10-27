@@ -35,6 +35,7 @@ from app.eval_answers import (
     write_report,
 )
 from app.golden import GoldenCase
+from app.settings import MissingEnvironment, require_env
 from app.judge import JudgeError
 from app.metrics import PROMPT_VERSIONS, Claims, Questions, Verdict
 from app.triage import MAX_PRIOR_CHARS, Prior, Triage, format_prior
@@ -176,7 +177,7 @@ def test_the_source_never_reaches_the_graph_even_when_ranked_first() -> None:
 
 
 def test_recall_k_matches_the_console() -> None:
-    from app.console import RECALL_K
+    from app.wiring import RECALL_K
 
     assert ea.RECALL_K == RECALL_K
 
@@ -826,7 +827,7 @@ def test_only_a_missing_environment_variable_says_set_the_variable(tmp_path: Pat
     kw = dict(now=lambda: NOW, reports_dir=tmp_path / "r", baseline_path=tmp_path / "b.json")
 
     def missing(progress, **kwargs):
-        raise ea.MissingEnvironment("SMALL_MODEL")
+        raise MissingEnvironment("SMALL_MODEL")
 
     assert main([], runner=missing, **kw) == 2
     assert "set the environment variable SMALL_MODEL" in capsys.readouterr().err
@@ -840,10 +841,10 @@ def test_only_a_missing_environment_variable_says_set_the_variable(tmp_path: Pat
 
 def test_require_env_names_the_missing_variable(monkeypatch) -> None:
     monkeypatch.delenv("NOT_SET_ANYWHERE", raising=False)
-    with pytest.raises(ea.MissingEnvironment, match="NOT_SET_ANYWHERE"):
-        ea.require_env("NOT_SET_ANYWHERE")
+    with pytest.raises(MissingEnvironment, match="NOT_SET_ANYWHERE"):
+        require_env("NOT_SET_ANYWHERE")
     monkeypatch.setenv("SET_HERE", "x")
-    assert ea.require_env("SET_HERE") == "x"
+    assert require_env("SET_HERE") == "x"
 
 
 def test_the_case_record_is_self_contained() -> None:
