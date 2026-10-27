@@ -144,7 +144,7 @@ PRIOR_PROMPT = (
 
 # One prior incident is capped, so three of them stay a small part of the 4096
 # token window that Ollama enforces by silently cutting the prompt's start.
-MAX_PRIOR_CHARS = 400
+MAX_PRIOR_CHARS = 480
 
 # How many past incidents go into the prompt. Three keeps it small: each one
 # costs prompt tokens and, with a small model, starts to distract it. Together
@@ -158,11 +158,14 @@ _MAX_ECHO_CHARS = 500
 
 @dataclass(frozen=True)
 class Prior:
-    """One past incident shown to the model: what happened, why, and how severe.
+    """One past incident shown to the model: what happened, why, how severe, what fixed it.
 
     Severity is the field a recalled incident teaches best: the same failure
     was rated the same way last time. Without it the model sees the story but
     not the rating, and has to guess the rating from the alert alone.
+
+    The remediation is what lets the model propose a concrete next action from
+    the archive instead of a generic "investigate the logs".
     """
 
     incident_id: str
@@ -170,6 +173,7 @@ class Prior:
     severity: Severity
     summary: str
     root_cause: str
+    remediation: str
 
     def __post_init__(self) -> None:
         """Reject an unknown severity. Type hints are not enforced at run time,
@@ -182,15 +186,15 @@ def format_prior(items: Sequence[Prior]) -> str:
     """Render prior incidents as short lines, each capped. Pure.
 
     Empty input gives an empty string, so a run with no recall has exactly the
-    prompt it had before. The cap cuts the cause first, because the summary
-    says which incident it is. The severity sits in the header, so the cap
-    never cuts it.
+    prompt it had before. The cap cuts from the end, so an over-long line loses
+    its fix first. The summary and the severity come first, so they always stay.
+    The longest line in the corpus is 433 characters, under the cap of 480.
     """
     lines = []
     for item in items:
         line = (
             f"- {item.incident_id} ({item.service}, {item.severity}): "
-            f"{item.summary} Cause: {item.root_cause}"
+            f"{item.summary} Cause: {item.root_cause} Fix: {item.remediation}"
         )
         lines.append(line if len(line) <= MAX_PRIOR_CHARS else line[: MAX_PRIOR_CHARS - 3] + "...")
     return "\n".join(lines)

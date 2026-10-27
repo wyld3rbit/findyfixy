@@ -45,7 +45,7 @@ NOW = datetime(2026, 10, 26, 12, 30, 5, tzinfo=timezone.utc)
 
 
 def prior(incident_id: str, summary: str = "s", cause: str = "c") -> Prior:
-    return Prior(incident_id, "auth", "sev2", summary, cause)
+    return Prior(incident_id, "auth", "sev2", summary, cause, "r")
 
 
 def case(

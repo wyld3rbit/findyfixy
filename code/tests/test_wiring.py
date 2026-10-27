@@ -23,7 +23,7 @@ class FakeRetriever:
         return [FakeFound("INC-1"), FakeFound("INC-2")]
 
     def brief(self, incident_id: str) -> Prior:
-        return Prior(incident_id, "auth", "sev2", "summary", "cause")
+        return Prior(incident_id, "auth", "sev2", "summary", "cause", "fix")
 
 
 def install(monkeypatch, builds: list[int], fail_first: bool = False, delay: float = 0.0) -> FakeRetriever:

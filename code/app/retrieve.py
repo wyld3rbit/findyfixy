@@ -229,6 +229,7 @@ class Retriever:
             severity=any_passage.severity,
             summary=sections["summary"].body if "summary" in sections else "",
             root_cause=sections["root_cause"].body if "root_cause" in sections else "",
+            remediation=sections["remediation"].body if "remediation" in sections else "",
         )
 
     # -- internals ------------------------------------------------------------

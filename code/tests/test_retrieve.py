@@ -169,6 +169,21 @@ def test_brief_carries_the_severity_of_its_incident() -> None:
     assert retriever.brief("X").severity == "sev1"
 
 
+def test_brief_carries_the_remediation_of_its_incident() -> None:
+    passages = [
+        passage("X", "summary", "Disk filled on the host."),
+        passage("X", "root_cause", "Logs were never rotated."),
+        passage("X", "remediation", "Rotate logs daily and alert at 80 percent."),
+    ]
+    retriever = Retriever(passages, lambda q, n, s: [], lambda q, p: [0.0] * len(p))
+    assert retriever.brief("X").remediation == "Rotate logs daily and alert at 80 percent."
+
+
+def test_a_missing_remediation_section_gives_an_empty_fix_not_a_crash() -> None:
+    retriever = Retriever([passage("X", "summary", "s")], lambda q, n, s: [], lambda q, p: [0.0] * len(p))
+    assert retriever.brief("X").remediation == ""
+
+
 @pytest.mark.parametrize("bad", ["sev9", "", "critical"])
 def test_a_passage_with_an_unknown_severity_stops_loading(bad: str) -> None:
     """The column is plain text. A bad row must fail at load, not reach a prompt."""

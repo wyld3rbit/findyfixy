@@ -31,9 +31,9 @@ Scenario = Literal[
 # What the page shows for the recall step in a fake run: fixed, invented, and
 # marked as such by its IDs. A fake run must never need a database or a model.
 FAKE_RECALL: tuple[Prior, ...] = (
-    Prior("FAKE-1", "auth", "sev2", "Latency rose after a certificate rotation.", "Peers lacked the new intermediate authority."),
-    Prior("FAKE-2", "auth", "sev3", "Slow logins after a rotation.", "Trust was not tested before cutover."),
-    Prior("FAKE-3", "gateway", "sev2", "Saturation at the daily peak.", "The autoscaler floor was too low."),
+    Prior("FAKE-1", "auth", "sev2", "Latency rose after a certificate rotation.", "Peers lacked the new intermediate authority.", "Test trust chains before every rotation."),
+    Prior("FAKE-2", "auth", "sev3", "Slow logins after a rotation.", "Trust was not tested before cutover.", "Add a trust check to the rotation runbook."),
+    Prior("FAKE-3", "gateway", "sev2", "Saturation at the daily peak.", "The autoscaler floor was too low.", "Raise the autoscaler floor ahead of the daily peak."),
 )
 
 

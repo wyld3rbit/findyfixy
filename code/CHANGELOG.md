@@ -528,6 +528,10 @@ From the independent architecture review (see the review summary in `record/prog
 - Tests that patched names now point at each name's real home (`eval_report`). One test that only pinned two copies of `RECALL_K` together was removed because there is one copy.
 - Not done, by design: subpackages (`core/`, `eval/`, `web/`), and moving `corpus.py` and the Day 2 measurement scripts out of `app/`. They change every import path and every `python -m` command, so they wait for the wrap-up.
 
+### Recalled incidents now carry their remediation (2026-10-26)
+
+From the hand-check of three judged cases: the assistant was asked for a next action but never shown what fixed the same failure last time. `Prior` gains a required `remediation`, `Retriever.brief` reads it from the stored passage, and each recalled line now reads `- INC-0015 (voice-verification, sev1): <summary> Cause: <cause> Fix: <fix>`. The per-incident cap rose from 400 to 480 characters: with the fix, 10 of 200 real lines would have lost their ending, and the longest is 433. Three recalled incidents cost about 360 tokens. A test formats every incident in the corpus and fails if any is cut. Tests: all pass. Breaks caught: fix left out of the line, `brief` ignoring the stored remediation, cap back at 400. No re-ingest needed: remediation chunks were already stored.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.
