@@ -40,6 +40,7 @@ from pgvector import Vector
 from pgvector.psycopg import register_vector
 
 from app.ingest import Embedder, database_url, make_embedder
+from app.paths import DATA
 
 if TYPE_CHECKING:
     from psycopg import Connection
@@ -140,8 +141,7 @@ def main(argv: list[str] | None = None) -> None:
     """Search the local database and print the top 5 for the query in `argv`."""
     words = sys.argv[1:] if argv is None else argv
     query = " ".join(words) or DEFAULT_QUERY
-    root = Path(__file__).resolve().parents[1]
-    pairs = load_twin_pairs(root / "data" / "incidents.jsonl")
+    pairs = load_twin_pairs(DATA / "incidents.jsonl")
     print(f"query: {query}\n")
     with psycopg.connect(database_url(), autocommit=True) as conn:
         register_vector(conn)

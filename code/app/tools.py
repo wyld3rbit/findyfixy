@@ -38,9 +38,10 @@ from typing import Literal
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
+from app.paths import DATA
 
 # Resolved from this file, so it works from any working directory.
-DEFAULT_DEPLOYS_PATH = Path(__file__).resolve().parents[1] / "data" / "deploys.json"
+DEFAULT_DEPLOYS_PATH = DATA / "deploys.json"
 
 # One week. A longer window is almost certainly a mistake, and an unbounded
 # window on a real API is an expensive query.

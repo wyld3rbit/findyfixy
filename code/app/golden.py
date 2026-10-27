@@ -56,11 +56,11 @@ from typing import Literal, get_args
 from pydantic import BaseModel
 
 from app.corpus import Incident
+from app.paths import DATA
 from app.triage import Severity
 
-ROOT = Path(__file__).resolve().parents[1]
-INCIDENTS_PATH = ROOT / "data" / "incidents.jsonl"
-DEFAULT_PATH = ROOT / "data" / "golden.jsonl"
+INCIDENTS_PATH = DATA / "incidents.jsonl"
+DEFAULT_PATH = DATA / "golden.jsonl"
 
 TWIN_CASES = 20
 NO_TWIN_CASES = 10

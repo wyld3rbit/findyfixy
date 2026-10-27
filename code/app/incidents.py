@@ -37,9 +37,10 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
+from app.paths import DATA
 
 # Resolved from this file, never from the current directory.
-DEFAULT_PATH = Path(__file__).resolve().parents[1] / "data" / "incidents.json"
+DEFAULT_PATH = DATA / "incidents.json"
 
 # About 1,000 tokens of log text. The retry prompt doubles it and adds the
 # instructions and the bad reply, which still fits in 4096.

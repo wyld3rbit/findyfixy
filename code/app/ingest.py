@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING, Literal, get_args
 
 import psycopg
 from pgvector import Vector
+from app.paths import DATA
 
 if TYPE_CHECKING:
     from psycopg import Connection
@@ -336,8 +337,7 @@ def main() -> None:
 
     The data path is resolved from this file, not the working directory.
     """
-    root = Path(__file__).resolve().parents[1]
-    chunks = read_chunks(root / "data" / "incidents.jsonl")
+    chunks = read_chunks(DATA / "incidents.jsonl")
     with psycopg.connect(database_url(), autocommit=True) as conn:
         ensure_schema(conn)
         # Registering after the extension exists lets psycopg send `Vector` values.

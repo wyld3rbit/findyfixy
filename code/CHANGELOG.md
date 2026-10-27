@@ -503,6 +503,10 @@ A fresh agent that had not seen the work reviewed `eval_answers.py`, `metrics.py
 - Documented, not changed: the flat 0.05 floor margin. The interval measures how 30 cases sample; a floor guards a rerun of the same code, and temperature-0 judge means moved under 0.003 between reruns. Reasoning added to `write_baseline`.
 - Tests: 518 pass. Breaks caught: failed gate rewriting the baseline, every exception hidden as a failure, viewer ignoring the record, unknown judges equal, untraceable baseline accepted, any KeyError reported as a missing variable, judge asked with no context, splitter ignoring line breaks, client rebuilt per call, severity set drifting.
 
+### Architecture step 1: one home for paths (2026-10-26)
+
+From the independent architecture review (see the review summary in `record/progress.json`). `app/paths.py` defines `ROOT`, `DATA`, `DOCS`, `EVALS` and `REPORTS` once. The ten modules that worked out the root for themselves now import it. `tests/test_architecture.py` fails if any other module computes the root again, and if the `app` modules form an import cycle (there are none today). Behavior unchanged; 525 tests pass. Breaks caught: a module re-deriving the root, a cycle between `events` and `triage`.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

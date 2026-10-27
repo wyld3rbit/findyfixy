@@ -69,6 +69,7 @@ from pydantic import BaseModel, Field, ValidationError
 from app.dev_reload import fingerprint, snapshot
 from app.events import Emit, Event, make_emit
 from app.incidents import DEFAULT_PATH, Incident, load_incidents
+from app.paths import DOCS, ROOT
 from app.investigate import build_investigator
 from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
 from app.tools import make_deploys_tool
@@ -85,13 +86,9 @@ Scenario = Literal[
     "tool_wrong_window",
 ]
 
-# The project root (code/). Resolved from this file, never from the current
-# directory.
-ROOT = Path(__file__).resolve().parents[1]
-
-# The page lives next to the docs. Resolved from this file, never from the
-# current directory, so the server works from any clone.
-PAGE = Path(__file__).resolve().parents[1] / "docs" / "architecture.html"
+# The page lives next to the docs (app/paths.py resolves from the file, never
+# from the current directory, so the server works from any clone).
+PAGE = DOCS / "architecture.html"
 
 # Realistic incidents are log excerpts of a few thousand characters (see
 # app/incidents.py), so the question cap is far above a one-line question.

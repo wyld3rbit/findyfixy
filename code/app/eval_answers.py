@@ -81,6 +81,7 @@ from app.golden import DEFAULT_PATH as GOLDEN_PATH
 from app.golden import GoldenCase, load_golden
 from app.graph import THRESHOLD, Recall
 from app.judge import Judge
+from app.paths import EVALS, REPORTS, ROOT
 from app.metrics import (
     PROMPT_VERSIONS,
     Embed,
@@ -91,9 +92,8 @@ from app.metrics import (
 )
 from app.triage import Prior, Triage, format_prior
 
-ROOT = Path(__file__).resolve().parents[1]
-REPORTS_DIR = ROOT / "reports"
-BASELINE_PATH = ROOT / "evals" / "baseline.json"
+REPORTS_DIR = REPORTS
+BASELINE_PATH = EVALS / "baseline.json"
 
 # Same value the console uses for the prompt (app/console.py RECALL_K). Kept
 # here as a literal so this module does not import the HTTP server; a test

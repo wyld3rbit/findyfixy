@@ -30,14 +30,14 @@ Environment
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
+from app.paths import ROOT
 
-# code/ : the folder that holds `app/`. Resolved from this file.
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# code/ : the folder that holds `app/` (see app/paths.py).
+PROJECT_ROOT = ROOT
 SERVER_NAME = "deploys"
 
 

@@ -39,6 +39,7 @@ from dataclasses import asdict, dataclass, field, replace
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Literal, get_args
+from app.paths import DATA
 
 CorpusService = Literal[
     "auth",
@@ -681,8 +682,7 @@ def main() -> None:
     The path is resolved from this file, not from the current directory, so it
     works from any clone and any working directory.
     """
-    root = Path(__file__).resolve().parents[1]
-    count = write_jsonl(build_corpus(), root / "data" / "incidents.jsonl")
+    count = write_jsonl(build_corpus(), DATA / "incidents.jsonl")
     print(f"wrote {count} synthetic incidents")
 
 

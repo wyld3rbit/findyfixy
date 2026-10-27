@@ -45,10 +45,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
+from app.paths import DATA
 
-ROOT = Path(__file__).resolve().parents[1]
-INCIDENTS_PATH = ROOT / "data" / "incidents.jsonl"
-EVAL_PATH = ROOT / "data" / "retrieval_eval.jsonl"
+INCIDENTS_PATH = DATA / "incidents.jsonl"
+EVAL_PATH = DATA / "retrieval_eval.jsonl"
 
 # Text fields a hostname can appear in. The same fields the chunks are made of.
 TEXT_FIELDS = ("summary", "timeline", "root_cause", "remediation")
