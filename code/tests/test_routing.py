@@ -136,3 +136,19 @@ def test_graph_drawing_shows_both_branches():
     edges = {(e.source, e.target) for e in graph.get_graph().edges}
     assert ("small", "large") in edges
     assert ("small", "__end__") in edges
+
+
+@pytest.mark.parametrize("confidence", [0.0, 0.3, 0.69, 0.95])
+def test_one_model_never_escalates_to_itself(confidence: float) -> None:
+    """Same name for both tiers means one model: asking it again adds latency, not information."""
+    calls: list[str] = []
+
+    def fake_ask(model: str, prompt: str) -> str:
+        calls.append(model)
+        return reply(confidence)
+
+    graph = build_graph(fake_ask, small_model=SMALL, large_model=SMALL)
+    state = graph.invoke({"question": "anything"})
+    assert calls == [SMALL]
+    assert state["model_used"] == SMALL
+

@@ -61,16 +61,17 @@ scan:
 	uv run --no-project python ../tools/scan_private.py --tree
 	uv run --no-project python ../tools/scan_private.py --history
 
-# setup: once per clone. Installs the locked packages into .venv, pulls the two
-# models named in .env, starts the database and loads the incidents. It stops
-# early, and says why, if .env is missing or does not name both models. It never
-# writes .env: that file is yours. Every step is safe to run again: uv sync and
+# setup: once per clone. Installs the locked packages into .venv, pulls the models
+# named in .env (answering models and the judge, each once), starts the database
+# and loads the incidents. It stops early, and says why, if .env is missing or
+# does not name both models. It never writes .env: that file is yours. Every step is safe to run again: uv sync and
 # ollama pull skip what is current, and ingest writes 0 when nothing changed.
 setup:
-	@test -f .env || { echo "code/.env is missing. Create it with SMALL_MODEL=... and LARGE_MODEL=..."; exit 1; }
+	@test -f .env || { echo "code/.env is missing. Copy it: cp .env.example .env"; exit 1; }
 	@grep -q '^SMALL_MODEL=.' .env && grep -q '^LARGE_MODEL=.' .env || { echo "code/.env must set SMALL_MODEL and LARGE_MODEL"; exit 1; }
 	uv sync
-	@set -a; . ./.env; set +a; ollama pull "$$SMALL_MODEL" && ollama pull "$$LARGE_MODEL"
+	@set -a; . ./.env; set +a; \
+	  for m in "$$SMALL_MODEL" "$$LARGE_MODEL" "$${JUDGE_MODEL:-qwen2.5:7b}"; do echo "$$m"; done | sort -u | while read -r m; do ollama pull "$$m" || exit 1; done
 	$(MAKE) up
 	$(MAKE) ingest
 

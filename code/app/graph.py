@@ -315,12 +315,19 @@ def build_graph(
         A missing record always escalates. Otherwise the comparison is `>=`,
         so exactly 0.7 stays on the small model.
 
+        One model, no second tier: when `small_model` and `large_model` are the
+        same, escalating would ask the same model the same question again and
+        double the latency for no new information. The run ends instead. This
+        is how a single answering model is configured (set both names alike).
+
         The return annotation is load-bearing. LangGraph reads it to learn
         where this edge can go. With a bare `str` it cannot, and its diagram
         drops the `small -> large` edge. Runtime routing would still work,
         because routing uses the returned value. The annotation exists for
         tooling and for the reader. `tests/test_routing.py` pins it.
         """
+        if small_model == large_model:
+            return END
         triage = state["triage"]
         if triage is None or triage.confidence < threshold:
             return "large"

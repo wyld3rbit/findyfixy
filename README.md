@@ -15,9 +15,8 @@ It runs on a 16 GB laptop with open-source parts. No data leaves the machine.
 You need [uv](https://docs.astral.sh/uv/), Docker Compose with a runtime (Colima or Docker) and [Ollama](https://ollama.com/).
 
 ```bash
-echo "SMALL_MODEL=qwen2.5:1.5b" >> code/.env
-echo "LARGE_MODEL=qwen2.5:7b" >> code/.env
-make setup      # once per clone
+cp code/.env.example code/.env    # model names; edit if you use other models
+make setup                        # once per clone
 ```
 
 > `make setup` installs packages, pulls the two models (about 6 GB), starts the database and loads the incidents. It is safe to run again.
