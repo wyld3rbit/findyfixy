@@ -98,5 +98,6 @@ def test_pure_modules_import_no_vendor_client() -> None:
             elif isinstance(node, ast.Import):
                 modules = [a.name for a in node.names]
             for module in modules:
-                assert module.split(".")[0] not in VENDOR_CLIENTS, f"{name}.py imports {module}"
+                # startswith: "langchain_ollama" and "langchain_core" are langchain too.
+                assert not module.split(".")[0].startswith(VENDOR_CLIENTS), f"{name}.py imports {module}"
 

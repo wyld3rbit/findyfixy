@@ -517,7 +517,7 @@ From the independent architecture review (see the review summary in `record/prog
 
 ### Architecture step 3: the model call moves out of the router (2026-10-26)
 
-`app/llm.py` now holds `ollama_ask` and the answering-model settings (`answer_options`, temperature 0, thinking off, read timeout). `app.triage` is back to pure domain code: it imports no vendor client. `graph`, `stress`, the console's investigator and the evaluation all take their settings from `llm`. `tests/test_architecture.py` fails if `triage`, `events`, `metrics`, `golden`, `paths` or `settings` import a vendor client (break caught). Behavior unchanged; 538 tests pass.
+`app/llm.py` now holds `ollama_ask` and the answering-model settings (`answer_options`, temperature 0, thinking off, read timeout). `app.triage` is back to pure domain code: it imports no vendor client. `graph`, `stress`, the console's investigator and the evaluation all take their settings from `llm`. `tests/test_architecture.py` fails if `triage`, `events`, `metrics`, `golden`, `paths` or `settings` import a vendor client. The first version of that test compared the whole top-level module name, so `langchain_ollama` slipped past a rule for `langchain`; the deliberate break showed "5 passed" and exposed it. Fixed to match by prefix, and re-proven against `triage`, `metrics`, `golden` and `events`. Behavior unchanged; 538 tests pass.
 
 ### Next
 
