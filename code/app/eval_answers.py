@@ -3,8 +3,9 @@
 What it does
     1. Runs the triage graph once per golden case, with that case's own
        incident held out of recall (the holdout).
-    2. Scores each answer: severity match (exact), faithfulness, response
-       relevancy and context recall (app/metrics.py, model-graded).
+    2. Scores each answer: severity match (exact), then four model-graded
+       metrics (app/metrics.py): faithfulness, response relevancy, context
+       recall and action quality.
     3. Aggregates overall and per group with seeded bootstrap 95% confidence
        intervals, stamps provenance, and writes `reports/eval-<UTC>.json`.
     4. `gate` compares a report to a committed baseline
@@ -94,7 +95,14 @@ from app.eval_stats import BOOTSTRAP_SEED, GROUPS, Report, aggregate
 from app.golden import DEFAULT_PATH as GOLDEN_PATH, GoldenCase, load_golden
 from app.graph import Recall
 from app.judge import Judge
-from app.metrics import Embed, MetricResult, context_recall, faithfulness, response_relevancy
+from app.metrics import (
+    Embed,
+    MetricResult,
+    action_quality,
+    context_recall,
+    faithfulness,
+    response_relevancy,
+)
 from app.paths import ROOT
 from app.settings import MissingEnvironment, load_env, read_models
 from app.triage import RECALL_K, Prior, Triage, format_prior
@@ -246,6 +254,9 @@ def run_case(
             lambda: response_relevancy(judge, embed, case.question, answer)
         ),
         "context_recall": _safe_metric(lambda: context_recall(judge, case.reference, contexts)),
+        "action_quality": _safe_metric(
+            lambda: action_quality(judge, triage.next_action, case.reference)
+        ),
     }
     # The answer, what the judge was shown, and the judge's own decisions are
     # kept so a score can be audited and hand-checked (`--show-case`).

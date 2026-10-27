@@ -18,10 +18,13 @@ import pytest
 import app.metrics as metrics
 from app.judge import JudgeError
 from app.metrics import (
+    ACTION_SCORES,
     PROMPT_VERSIONS,
+    ActionRating,
     Claims,
     Questions,
     Verdict,
+    action_quality,
     context_recall,
     cosine,
     faithfulness,
@@ -233,10 +236,11 @@ def test_prompt_versions_are_stable_hex_strings():
         "faithfulness",
         "response_relevancy",
         "context_recall",
+        "action_quality",
     }
     for digest in PROMPT_VERSIONS.values():
         assert len(digest) == 64 and int(digest, 16) >= 0
-    assert len(set(PROMPT_VERSIONS.values())) == 3
+    assert len(set(PROMPT_VERSIONS.values())) == 4
     assert metrics._sha(metrics.QUESTIONS_PROMPT) == PROMPT_VERSIONS["response_relevancy"]
 
 
@@ -324,4 +328,38 @@ def test_the_splitter_is_part_of_the_context_recall_version():
 
     expected = hashlib.sha256("\x1f".join([ATTRIBUTION_PROMPT, _SENTENCE_END.pattern]).encode()).hexdigest()
     assert PROMPT_VERSIONS["context_recall"] == expected
+
+
+# ---- action_quality ------------------------------------------------------------
+
+
+@pytest.mark.parametrize("rating,score", [("helpful", 1.0), ("partial", 0.5), ("unhelpful", 0.0)])
+def test_action_quality_maps_the_three_ratings_to_scores(rating: str, score: float) -> None:
+    judge = FakeJudge({ActionRating: [ActionRating(rating=rating, reason="because")]})
+    result = action_quality(judge, "Roll back the config", "Root cause: bad config.\nRemediation: validate in CI.")
+    assert (result.score, result.failed, result.error) == (score, False, None)
+    assert result.trace == ({"action": "Roll back the config", "rating": rating, "reason": "because"},)
+
+
+def test_action_quality_shows_the_judge_the_reference_and_the_action_only() -> None:
+    judge = FakeJudge({ActionRating: [ActionRating(rating="helpful")]})
+    action_quality(judge, "Check the deploy", "Root cause: X.\nRemediation: Y.")
+    ((_, prompt),) = judge.prompts
+    assert "Check the deploy" in prompt and "Root cause: X." in prompt and "Remediation: Y." in prompt
+
+
+def test_action_quality_fails_with_a_reason_when_there_is_no_action_or_the_judge_errors() -> None:
+    assert "no next action" in action_quality(FakeJudge({}), "   ", "ref").error
+    down = FakeJudge({ActionRating: [JudgeError("timed out")]})
+    result = action_quality(down, "do it", "ref")
+    assert result.failed and "timed out" in result.error and result.trace == ()
+
+
+def test_an_unknown_rating_is_rejected_by_the_schema() -> None:
+    with pytest.raises(ValueError):
+        ActionRating(rating="great")  # type: ignore[arg-type]
+
+
+def test_action_scores_cover_every_rating() -> None:
+    assert set(ACTION_SCORES) == {"helpful", "partial", "unhelpful"}
 

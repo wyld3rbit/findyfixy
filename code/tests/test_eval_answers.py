@@ -38,7 +38,7 @@ from app.eval_stats import aggregate, bootstrap_ci
 from app.golden import GoldenCase
 from app.settings import MissingEnvironment, require_env
 from app.judge import JudgeError
-from app.metrics import PROMPT_VERSIONS, Claims, Questions, Verdict
+from app.metrics import PROMPT_VERSIONS, ActionRating, Claims, Questions, Verdict
 from app.triage import MAX_PRIOR_CHARS, Prior, Triage, format_prior
 
 NOW = datetime(2026, 10, 26, 12, 30, 5, tzinfo=timezone.utc)
@@ -124,6 +124,8 @@ class FakeJudge:
             return Claims(claims=["it is auth"])
         if schema is Questions:
             return Questions(questions=["q1", "q2", "q3"])
+        if schema is ActionRating:
+            return ActionRating(rating="helpful" if self.supported else "unhelpful", reason="fake")
         return Verdict(supported=self.supported)
 
 
@@ -241,7 +243,7 @@ def rec(group: str, sev_ok: bool, faith: float | None, twin: str | None = None, 
             "twin_recalled": hit, "model_used": "small", "latency_s": latency, "severity": "sev2",
             "severity_match": sev_ok, "run_error": error,
             "metrics": {} if error else {"faithfulness": m(faith), "response_relevancy": m(0.8),
-                                         "context_recall": m(0.4)}}
+                                         "context_recall": m(0.4), "action_quality": m(0.5)}}
 
 
 def test_aggregate_by_hand_excludes_failures_and_never_scores_them_zero() -> None:
@@ -366,7 +368,8 @@ def report_with(means: dict[str, tuple[float, list[float]]], rate: float = 0.0, 
 
 
 GOOD = {"severity_match": (0.8, [0.7, 0.9]), "faithfulness": (0.8, [0.7, 0.9]),
-        "response_relevancy": (0.8, [0.7, 0.9]), "context_recall": (0.8, [0.7, 0.9])}
+        "response_relevancy": (0.8, [0.7, 0.9]), "context_recall": (0.8, [0.7, 0.9]),
+        "action_quality": (0.8, [0.7, 0.9])}
 
 
 def baseline_for(report: dict[str, Any], tmp_path: Path) -> dict[str, Any]:
@@ -847,4 +850,27 @@ def test_the_case_record_is_self_contained() -> None:
     assert record["question"] == "question g1"
     assert record["reference"].startswith("Root cause")
     assert record["expected_severity"] == "sev1"
+
+
+# ---- action quality in the runner and the viewer -------------------------------
+
+
+def test_the_runner_scores_action_quality_and_keeps_the_judges_reasoning() -> None:
+    record = run([case("g1", "S", "T")])["cases"][0]
+    m = record["metrics"]["action_quality"]
+    assert m["score"] == 1.0 and m["trace"][0]["rating"] == "helpful"
+    assert m["trace"][0]["action"] == "roll back"  # the action, not the whole answer
+
+
+def test_the_viewer_prints_the_action_rating() -> None:
+    record = run([case("g1", "S", "T")])["cases"][0]
+    text = er.format_case(record, None)
+    assert "action_quality: 1.000" in text and "helpful  -- fake" in text
+
+
+def test_the_gate_fails_when_action_quality_drops_below_its_floor(tmp_path: Path) -> None:
+    good = report_with(GOOD)
+    baseline = baseline_for(good, tmp_path)
+    worse = report_with({**GOOD, "action_quality": (0.3, [0.2, 0.4])})
+    assert any("action_quality" in p for p in gate(worse, baseline))
 

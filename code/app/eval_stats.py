@@ -22,8 +22,13 @@ BOOTSTRAP_SEED = 17
 BOOTSTRAP_RESAMPLES = 1000
 CONFIDENCE = 0.95
 
-MetricName = Literal["faithfulness", "response_relevancy", "context_recall"]
-METRIC_NAMES: tuple[MetricName, ...] = ("faithfulness", "response_relevancy", "context_recall")
+MetricName = Literal["faithfulness", "response_relevancy", "context_recall", "action_quality"]
+METRIC_NAMES: tuple[MetricName, ...] = (
+    "faithfulness",
+    "response_relevancy",
+    "context_recall",
+    "action_quality",
+)
 # severity_match is a rate scored the same way, so it shares the layout.
 SCORE_NAMES: tuple[str, ...] = ("severity_match", *METRIC_NAMES)
 GROUPS: tuple[Literal["twin", "no_twin"], ...] = ("twin", "no_twin")

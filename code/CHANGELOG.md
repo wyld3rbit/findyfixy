@@ -532,6 +532,10 @@ From the independent architecture review (see the review summary in `record/prog
 
 From the hand-check of three judged cases: the assistant was asked for a next action but never shown what fixed the same failure last time. `Prior` gains a required `remediation`, `Retriever.brief` reads it from the stored passage, and each recalled line now reads `- INC-0015 (voice-verification, sev1): <summary> Cause: <cause> Fix: <fix>`. The per-incident cap rose from 400 to 480 characters: with the fix, 10 of 200 real lines would have lost their ending, and the longest is 433. Three recalled incidents cost about 360 tokens. A test formats every incident in the corpus and fails if any is cut. Tests: all pass. Breaks caught: fix left out of the line, `brief` ignoring the stored remediation, cap back at 400. No re-ingest needed: remediation chunks were already stored.
 
+### A fourth metric: action quality (2026-10-26)
+
+Faithfulness asks whether each claim is supported by the recalled incidents. Advice ("check the credentials") is never in them, so a sensible triage scored near zero by construction. `action_quality` in `app/metrics.py` asks the useful question: given the reference root cause and fix, is the proposed first action `helpful`, `partial` or `unhelpful` (scored 1, 0.5, 0)? One judge call per case; three steps, because a 7B judge cannot separate a 6 from a 7 and a person can check three steps by eye. It joins `METRIC_NAMES`, so the table, the baseline floors, the regression rule and the failure-rate cap all cover it. `make case` prints the rating and the judge's reason. Its prompt hash is in `PROMPT_VERSIONS`. Tests: all pass. Breaks caught: unhelpful scored as helpful, the whole answer passed instead of the action, an empty action sent to the judge, the metric left out of the gate. Cost: one more judge call per case, so about 11 per case.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

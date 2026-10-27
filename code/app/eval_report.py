@@ -318,6 +318,7 @@ def format_case(record: Mapping[str, Any], golden: GoldenCase | None) -> str:
         ("faithfulness", "claim"),
         ("response_relevancy", "question"),
         ("context_recall", "sentence"),
+        ("action_quality", "action"),
     ):
         m = record.get("metrics", {}).get(name, {})
         if not m:
@@ -330,6 +331,8 @@ def format_case(record: Mapping[str, Any], golden: GoldenCase | None) -> str:
         trace = m.get("trace", [])
         if name == "response_relevancy":
             lines.extend(f"    {row['similarity']:.2f}  {row['question']}" for row in trace)
+        elif name == "action_quality":
+            lines.extend(f"    {row['rating']}  -- {row.get('reason', '')}" for row in trace)
         else:
             lines.extend(_verdict_rows(trace, key))
     return "\n".join(lines)

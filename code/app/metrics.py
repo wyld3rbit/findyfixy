@@ -1,12 +1,16 @@
-"""Day 5: three model-graded metrics as pure functions over injected seams.
+"""Day 5: four model-graded metrics as pure functions over injected seams.
 
 What it does
     - `faithfulness`: is every claim in the answer supported by the contexts?
     - `response_relevancy`: does the answer address the question asked?
     - `context_recall`: do the contexts contain what the reference answer says?
-    The definitions follow RAGAS (Retrieval-Augmented Generation Assessment),
+    - `action_quality`: would the proposed first action help, judged against the
+      reference cause and fix? Advice cannot be "supported by the context" like a
+      fact, so faithfulness scores it low by construction; this scores it directly.
+    The first three follow RAGAS (Retrieval-Augmented Generation Assessment),
     so scores stay comparable to published numbers. We implement them here
-    because the project rejected the `ragas` dependency.
+    because the project rejected the `ragas` dependency. `action_quality` is
+    ours and has no published counterpart.
 
 Seams
     `judge` is a `Judge` (app/judge.py). `embed` is an `Embedder`. Both are
@@ -43,7 +47,7 @@ import hashlib
 import math
 import re
 from collections.abc import Callable, Sequence
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, Field
 
@@ -126,6 +130,28 @@ ATTRIBUTION_PROMPT = (
 )
 
 
+# Rates the proposed first action against the reference. Advice cannot be
+# "supported by the context" the way a fact can, so faithfulness scores it
+# badly by construction. This asks the question that matters for a triage tool:
+# would the action help the engineer who receives it?
+ACTION_PROMPT = (
+    "You are checking the first action proposed for an incident. Use only the "
+    "reference below, which states the real root cause and the real fix.\n\n"
+    "Reference:\n{reference}\n\n"
+    "Proposed next action: {action}\n\n"
+    "Rate how useful the proposed action would be to an engineer handling this "
+    "incident:\n"
+    "- helpful: it addresses the real cause or the real fix, or is a direct "
+    "step toward them.\n"
+    "- partial: it is related and sensible but generic, vague, or only "
+    "indirectly useful.\n"
+    "- unhelpful: it is unrelated, wrong, or would not move the incident toward "
+    "resolution.\n\n"
+    "Reply with JSON: rating (helpful, partial or unhelpful) and reason (one "
+    "short sentence)."
+)
+
+
 def _sha(*texts: str) -> str:
     """SHA-256 hex of the templates joined with a separator that cannot clash."""
     return hashlib.sha256("\x1f".join(texts).encode("utf-8")).hexdigest()
@@ -145,6 +171,7 @@ PROMPT_VERSIONS: dict[str, str] = {
     "response_relevancy": _sha(QUESTIONS_PROMPT),
     # The splitter decides what a "sentence" is, so it is part of the metric.
     "context_recall": _sha(ATTRIBUTION_PROMPT, _SENTENCE_END.pattern),
+    "action_quality": _sha(ACTION_PROMPT),
 }
 
 
@@ -168,6 +195,18 @@ class Questions(BaseModel):
     """Questions the answer appears to address."""
 
     questions: list[str]
+
+
+class ActionRating(BaseModel):
+    """How useful a proposed action is, in three steps, with a reason."""
+
+    rating: Literal["helpful", "partial", "unhelpful"]
+    reason: str = Field(default="", description="one short sentence")
+
+
+# Three steps, not a 1 to 10 scale: a 7B judge cannot tell a 6 from a 7, and the
+# three steps are what a person reading the report can check by eye.
+ACTION_SCORES: dict[str, float] = {"helpful": 1.0, "partial": 0.5, "unhelpful": 0.0}
 
 
 # ---- Pure helpers. ----------------------------------------------------------
@@ -308,3 +347,22 @@ def context_recall(
     except JudgeError as err:
         return _failed(f"judge: {err}")
     return MetricResult(score, False, trace)
+
+
+def action_quality(judge: Judge, next_action: str, reference: str) -> MetricResult:
+    """How useful the proposed first action is against the reference, 0 to 1.
+
+    One judge call. Helpful is 1.0, partial 0.5, unhelpful 0.0. Failed when the
+    answer has no action or the judge errors. This is not faithfulness: it does
+    not ask whether the action appears in the recalled incidents, only whether
+    it would help.
+    """
+    if not next_action.strip():
+        return _failed("the answer has no next action")
+    try:
+        verdict = judge.ask(ACTION_PROMPT.format(reference=reference, action=next_action), ActionRating)
+    except JudgeError as err:
+        return _failed(f"judge: {err}")
+    trace = ({"action": next_action, "rating": verdict.rating, "reason": _cap(verdict.reason)},)
+    return MetricResult(ACTION_SCORES[verdict.rating], False, trace)
+
