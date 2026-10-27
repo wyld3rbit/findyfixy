@@ -32,6 +32,8 @@ Failure modes (read before trusting a score)
       cost lever: a judge metric costs several calls per sample.
 """
 
+import json
+import threading
 from collections.abc import Callable
 from typing import Any, Protocol, TypeVar
 
@@ -84,19 +86,32 @@ def ollama_chat(timeout_s: float) -> ChatFn:
     decoding. A timeout is set on the HTTP client. Needs Ollama running and the
     model pulled; otherwise the call raises, and the judge maps that to
     `JudgeError`.
+
+    One client is built per (model, schema) and reused. A run makes about ten
+    judge calls per case, and building a client each time sets up a fresh HTTP
+    connection pool and throws away keep-alive. The schema is part of the key
+    because Ollama takes it as a constructor argument. The cache is guarded by a
+    lock because parallel workers share it; invoking a built client from
+    several threads is safe.
     """
+    clients: dict[tuple[str, str], Any] = {}
+    guard = threading.Lock()
 
     def chat(model: str, prompt: str, json_schema: dict[str, Any]) -> str:
         """One Ollama call. Returns the raw reply text."""
         from langchain_ollama import ChatOllama
 
-        llm = ChatOllama(
-            model=model,
-            temperature=0,
-            reasoning=False,
-            format=json_schema,
-            client_kwargs={"timeout": timeout_s},
-        )
+        key = (model, json.dumps(json_schema, sort_keys=True))
+        with guard:
+            llm = clients.get(key)
+            if llm is None:
+                llm = clients[key] = ChatOllama(
+                    model=model,
+                    temperature=0,
+                    reasoning=False,
+                    format=json_schema,
+                    client_kwargs={"timeout": timeout_s},
+                )
         content = llm.invoke(prompt).content
         return content if isinstance(content, str) else str(content)
 

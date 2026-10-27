@@ -72,16 +72,21 @@ class MetricResult(NamedTuple):
     verdict, or the generated questions and their similarities. A score you
     cannot trace to its parts cannot be audited or hand-checked. It is empty
     for a failed result.
+
+    `error` says why a result failed, in a few words (a timeout, bad output, no
+    claims). Without it a timeout, a malformed reply and a bug all look the same
+    in a report. It is None for a result that has a score.
     """
 
     score: float | None
     failed: bool
     trace: tuple[dict[str, Any], ...] = ()
+    error: str | None = None
 
 
-def _failed() -> MetricResult:
+def _failed(reason: str) -> MetricResult:
     """The failed result. One constructor so the invariant has one home."""
-    return MetricResult(None, True)
+    return MetricResult(None, True, (), _cap(reason))
 
 
 # ---- Prompt templates. Module-level so they can be hashed. -----------------
@@ -126,11 +131,20 @@ def _sha(*texts: str) -> str:
     return hashlib.sha256("\x1f".join(texts).encode("utf-8")).hexdigest()
 
 
+# Split after . ! or ? followed by spaces, and at every line break.
+# Deterministic and model-free. The line break matters: a reference written as
+# "Root cause: X" on one line and "Remediation: Y" on the next is two points
+# whether or not X ends in a full stop, so the score has the same resolution
+# for every case. Known limit: abbreviations ("e.g. ") split wrongly. Acceptable
+# for short synthetic references; a real corpus would need a sentence tokenizer.
+_SENTENCE_END = re.compile(r"(?<=[.!?])[ \t]+|\s*\n+\s*")
+
 # Metric name -> hash of the template text(s) it uses. Computed, never typed.
 PROMPT_VERSIONS: dict[str, str] = {
     "faithfulness": _sha(CLAIMS_PROMPT, SUPPORT_PROMPT),
     "response_relevancy": _sha(QUESTIONS_PROMPT),
-    "context_recall": _sha(ATTRIBUTION_PROMPT),
+    # The splitter decides what a "sentence" is, so it is part of the metric.
+    "context_recall": _sha(ATTRIBUTION_PROMPT, _SENTENCE_END.pattern),
 }
 
 
@@ -157,12 +171,6 @@ class Questions(BaseModel):
 
 
 # ---- Pure helpers. ----------------------------------------------------------
-
-# Split after . ! or ? followed by whitespace. Deterministic and model-free.
-# Known limit: abbreviations ("e.g. ") split wrongly. Acceptable for short
-# synthetic references; a real corpus would need a proper sentence tokenizer.
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
-
 
 def split_sentences(text: str) -> list[str]:
     """Split text into non-empty, stripped sentences. Pure."""
@@ -209,6 +217,18 @@ def _fraction_supported(
     return supported / len(items), tuple(trace)
 
 
+def _nothing_to_stand_on(key: str, items: Sequence[str]) -> tuple[float, tuple[dict[str, Any], ...]]:
+    """Score 0.0 without asking the judge, when no context was retrieved.
+
+    Every item is unsupported by definition. Asking would cost about one judge
+    call per item and could only add error: a lenient judge told to check a
+    claim against an empty block may still say "supported" from its own
+    knowledge, which would let a run without recall keep a passing score.
+    """
+    reason = "no context was retrieved"
+    return 0.0, tuple({key: item, "supported": False, "reason": reason} for item in items)
+
+
 # ---- Metrics. ---------------------------------------------------------------
 
 
@@ -219,18 +239,22 @@ def faithfulness(
 
     Zero claims means failed (nothing to score). Any `JudgeError` fails the
     whole metric: dropping one claim would silently change the denominator.
-    Empty contexts: every claim is unsupported, so the score is 0.0, not failed.
+    Empty contexts: every claim is unsupported, so the score is 0.0, not failed,
+    and the judge is not asked about them (one call to split the answer only).
     """
     try:
         raw = judge.ask(CLAIMS_PROMPT.format(answer=answer), Claims).claims
         claims = [c.strip() for c in raw if c.strip()]
         if not claims:
-            return _failed()
-        score, trace = _fraction_supported(
-            judge, SUPPORT_PROMPT, "claim", claims, _join(contexts)
-        )
-    except JudgeError:
-        return _failed()
+            return _failed("the judge found no claims in the answer")
+        if not contexts:
+            score, trace = _nothing_to_stand_on("claim", claims)
+        else:
+            score, trace = _fraction_supported(
+                judge, SUPPORT_PROMPT, "claim", claims, _join(contexts)
+            )
+    except JudgeError as err:
+        return _failed(f"judge: {err}")
     return MetricResult(score, False, trace)
 
 
@@ -247,17 +271,17 @@ def response_relevancy(
         generated = judge.ask(
             QUESTIONS_PROMPT.format(answer=answer, n=n), Questions
         ).questions
-    except JudgeError:
-        return _failed()
+    except JudgeError as err:
+        return _failed(f"judge: {err}")
     if len(generated) != n:
-        return _failed()
+        return _failed(f"the judge wrote {len(generated)} questions, expected {n}")
     vectors = embed([question, *generated])
     if len(vectors) != n + 1:
-        return _failed()
+        return _failed(f"the embedder returned {len(vectors)} vectors, expected {n + 1}")
     try:
         sims = [cosine(vectors[0], v) for v in vectors[1:]]
-    except ValueError:
-        return _failed()
+    except ValueError as err:
+        return _failed(f"embedding: {err}")
     trace = tuple({"question": q, "similarity": s} for q, s in zip(generated, sims))
     return MetricResult(sum(sims) / n, False, trace)
 
@@ -268,15 +292,19 @@ def context_recall(
     """Fraction of reference sentences the contexts support.
 
     Measures retrieval, not generation: did we fetch what the right answer
-    needs? Empty reference means failed. Empty contexts give 0.0, not failed.
+    needs? Empty reference means failed. Empty contexts give 0.0, not failed,
+    without asking the judge.
     """
     sentences = split_sentences(reference)
     if not sentences:
-        return _failed()
+        return _failed("the reference has no sentences")
+    if not contexts:
+        score, trace = _nothing_to_stand_on("sentence", sentences)
+        return MetricResult(score, False, trace)
     try:
         score, trace = _fraction_supported(
             judge, ATTRIBUTION_PROMPT, "sentence", sentences, _join(contexts)
         )
-    except JudgeError:
-        return _failed()
+    except JudgeError as err:
+        return _failed(f"judge: {err}")
     return MetricResult(score, False, trace)

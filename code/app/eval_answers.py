@@ -269,16 +269,18 @@ def aggregate(cases: Sequence[Mapping[str, Any]], *, seed: int = BOOTSTRAP_SEED)
 
 
 def _safe_metric(compute: Callable[[], MetricResult]) -> MetricResult:
-    """Run one metric. Any exception becomes a failed result, never an abort.
+    """Run one metric. An expected fault becomes a failed result with its reason.
 
     The metrics already map `JudgeError` to failed. This also covers an
-    embedder fault. The cost: a programming error here is counted as a
-    failure too, but it then shows up in the failure rate and fails the gate.
+    embedder or network fault (OSError, ValueError, RuntimeError). Anything else,
+    such as a KeyError or TypeError, is a bug in our code, so it propagates and
+    stops the run with a traceback. Scoring a bug as a "judge failure" would
+    hide it behind a failure-rate number.
     """
     try:
         return compute()
-    except Exception:
-        return MetricResult(None, True)
+    except (OSError, ValueError, RuntimeError) as err:
+        return MetricResult(None, True, (), f"{type(err).__name__}: {str(err)[:200]}")
 
 
 def run_case(
@@ -308,6 +310,11 @@ def run_case(
         "latency_s": 0.0,
         "severity": None,
         "severity_match": None,
+        # Copied from the golden set so a saved report is self-contained: the
+        # golden file can be rebuilt later without changing what this report shows.
+        "question": case.question,
+        "reference": case.reference,
+        "expected_severity": case.expected_severity,
         "answer": None,
         "contexts": [],
         "metrics": {},
@@ -346,7 +353,12 @@ def run_case(
     record["answer"] = answer
     record["contexts"] = list(contexts)
     record["metrics"] = {
-        n: {"score": r.score, "failed": r.failed, "trace": [dict(row) for row in r.trace]}
+        n: {
+            "score": r.score,
+            "failed": r.failed,
+            "error": r.error,
+            "trace": [dict(row) for row in r.trace],
+        }
         for n, r in results.items()
     }
     return record
@@ -570,6 +582,9 @@ def baseline_refusals(report: Mapping[str, Any], max_failure_rate: float) -> lis
         reasons.append("recall was disabled for this run (negative control)")
     if report["provenance"].get("git_dirty") is True:
         reasons.append("the working tree had uncommitted changes, so the code is not traceable")
+    for key in ("judge_digest", "git_sha"):
+        if report["provenance"].get(key) in (None, "unknown"):
+            reasons.append(f"{key} is unknown, so this baseline could not be traced or compared later")
     if overall["n_run_errors"]:
         reasons.append(f"{overall['n_run_errors']} case(s) had a run error")
     for name in METRIC_NAMES:
@@ -593,6 +608,12 @@ def write_baseline(
     baseline. Refuses a run with run errors or a failure rate above the cap,
     because the numbers would not be trustworthy. A score with no mean gets
     no floor.
+
+    Why the margin is a flat 0.05 and not tied to the confidence interval: the
+    interval describes how 30 cases happen to sample, which is wide (about
+    0.15). A floor guards against a rerun of the same code, and at temperature
+    0 the judge-based means moved by less than 0.003 between reruns (measured
+    2026-10-26). The interval-based test is the regression rule, not this one.
     """
     reasons = baseline_refusals(report, max_failure_rate)
     if reasons:
@@ -617,7 +638,10 @@ def comparability_problems(report: Mapping[str, Any], baseline: Mapping[str, Any
     problems = []
     for key in COMPARABLE_KEYS:
         now, then = report["provenance"].get(key), baseline["provenance"].get(key)
-        if now != then:
+        if key == "judge_digest" and (now in (None, "unknown") or then in (None, "unknown")):
+            # Two unknowns are not equal: neither side shows which judge scored.
+            problems.append("judge_digest is unknown, so the judge cannot be shown to be the same")
+        elif now != then:
             problems.append(f"{key} differs from the baseline")
     if problems:
         problems.append(
@@ -694,6 +718,22 @@ def _cell(stat: Mapping[str, Any]) -> str:
 MAX_REPORT_BYTES = 20_000_000
 
 
+class MissingEnvironment(Exception):
+    """A required environment variable is not set. The message is its name."""
+
+
+def require_env(name: str) -> str:
+    """The value of a required environment variable, or `MissingEnvironment`.
+
+    Only this lookup is translated into "set the environment variable". A
+    KeyError from a bug elsewhere must keep its traceback.
+    """
+    try:
+        return os.environ[name]
+    except KeyError:
+        raise MissingEnvironment(name) from None
+
+
 class ReportInvalid(ValueError):
     """The file is not a report this module wrote."""
 
@@ -735,16 +775,19 @@ def format_case(record: Mapping[str, Any], golden: GoldenCase | None) -> str:
     Tolerates a run error and reports saved before traces existed.
     """
     verdict = {True: "MATCH", False: "MISS", None: "-"}[record.get("severity_match")]
+    question = record.get("question") or (golden.question if golden else "?")
+    reference = record.get("reference") or (golden.reference if golden else "")
+    expected = record.get("expected_severity") or (golden.expected_severity if golden else "?")
     head = (
         f"{record['id']}  {record['group']}  source {record['source_id']}  "
-        f"expected {golden.expected_severity if golden else '?'}  "
+        f"expected {expected}  "
         f"answered {record.get('severity')}  {verdict}  "
         f"model {record.get('model_used')}  {record.get('latency_s', 0):.1f}s"
     )
     twin = record.get("twin_id")
-    lines = [head, f"ALERT      {golden.question if golden else '?'}"]
-    if golden:
-        lines.append("REFERENCE  " + golden.reference.replace("\n", "\n           "))
+    lines = [head, f"ALERT      {question}"]
+    if reference:
+        lines.append("REFERENCE  " + reference.replace("\n", "\n           "))
     recalled = ", ".join(
         f"{i} (twin)" if i == twin else i for i in record.get("recalled_ids", [])
     )
@@ -765,7 +808,7 @@ def format_case(record: Mapping[str, Any], golden: GoldenCase | None) -> str:
             lines.append(f"{name}: not recorded")
             continue
         if m.get("failed") or m.get("score") is None:
-            lines.append(f"{name}: FAILED (the judge gave no usable result)")
+            lines.append(f"{name}: FAILED ({m.get('error') or 'no reason recorded'})")
             continue
         lines.append(f"{name}: {m['score']:.3f}")
         trace = m.get("trace", [])
@@ -788,7 +831,17 @@ def show_case(case_id: str, report_path: Path | None, reports_dir: Path) -> int:
         known = ", ".join(r.get("id", "?") for r in report["cases"])
         print(f"error: no case {case_id!r} in that report. Cases: {known}", file=sys.stderr)
         return 2
-    golden = {c.id: c for c in load_golden()}.get(case_id)
+    golden = None
+    if "question" not in record:
+        # An older report holds only the id, so the question and reference come
+        # from the golden file as it is now. Say so if that file has changed.
+        try:
+            golden = {c.id: c for c in load_golden()}.get(case_id)
+            if report["provenance"].get("golden_sha256") != file_sha256(GOLDEN_PATH):
+                print("warning: the golden set changed after this report was made; "
+                      "the alert and reference below may not be what was scored", file=sys.stderr)
+        except OSError:
+            print("warning: the golden file is missing; alert and reference are not shown", file=sys.stderr)
     print(format_case(record, golden))
     return 0
 
@@ -870,7 +923,7 @@ def live_run(
     from app.retrieve import Retriever, load_passages, make_reranker, postgres_vector_search
 
     load_dotenv()
-    small, large = os.environ["SMALL_MODEL"], os.environ["LARGE_MODEL"]
+    small, large = require_env("SMALL_MODEL"), require_env("LARGE_MODEL")
     judge_model = os.environ.get("JUDGE_MODEL", "qwen2.5:7b")
     cases = load_golden()
     embedder = make_embedder()
@@ -984,7 +1037,7 @@ def main(
         if args.workers != 1:
             extra["workers"] = args.workers
         report = runner(lambda msg: print(msg, file=sys.stderr, flush=True), **extra)
-    except KeyError as err:
+    except MissingEnvironment as err:
         print(f"error: set the environment variable {err}", file=sys.stderr)
         return 2
     path = write_report(report, now(), reports_dir)
@@ -1005,7 +1058,11 @@ def main(
             print(f"GATE FAIL: {problem}")
         print("gate: FAIL" if problems else "gate: pass")
         code = 1 if problems else 0
-    if args.write_baseline:
+    if args.write_baseline and code:
+        # The gate just failed. Writing this run as the baseline would turn the
+        # regression into the new standard, and the next gate would pass.
+        print("baseline not written: the gate failed in this same run", file=sys.stderr)
+    elif args.write_baseline:
         try:
             write_baseline(report, baseline_path)
             print(f"baseline written: {baseline_path.name}")

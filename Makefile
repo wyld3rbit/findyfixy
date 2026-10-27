@@ -48,8 +48,18 @@ ui:
 	uv run --no-project --with markdown python tools/serve.py & \
 	wait
 
-# check: the tracker data, the tracker server, and the privacy scan of the tree.
+# check: the tracker data, the tracker server, the documentation drift check and
+# the privacy scan of the tree.
+#
+# The two uv lines prefer uv's local cache (--offline) and go to the network only
+# when the cache lacks the package (uv exits 2 for that). Without --offline, uv
+# asks PyPI whether the index metadata is fresh, so a flaky connection would
+# refuse a commit that has nothing wrong with it. Exit 1 from the tool itself is
+# a real failure and is passed through.
+UV_TOOLS = uv run --no-project --with markdown
 check:
-	uv run --no-project --with markdown python tools/check.py
-	uv run --no-project --with markdown --with pytest pytest tools -q
+	@$(UV_TOOLS) --offline python tools/check.py; rc=$$?; \
+	  if [ $$rc -eq 2 ]; then echo "(cache miss, retrying online)"; $(UV_TOOLS) python tools/check.py; else exit $$rc; fi
+	@$(UV_TOOLS) --offline --with pytest pytest tools -q; rc=$$?; \
+	  if [ $$rc -eq 2 ]; then echo "(cache miss, retrying online)"; $(UV_TOOLS) --with pytest pytest tools -q; else exit $$rc; fi
 	python3 tools/scan_private.py --tree

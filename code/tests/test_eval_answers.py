@@ -129,7 +129,7 @@ def embed(texts: Any) -> list[list[float]]:
     return [[1.0, 0.0] for _ in texts]
 
 
-PROV = {"judge_digest": "d1", "prompt_versions": {"m": "h"}, "golden_sha256": "g1"}
+PROV = {"judge_digest": "d1", "prompt_versions": {"m": "h"}, "golden_sha256": "g1", "git_sha": "abc1234"}
 
 
 def run(cases, candidates=None, judge=None, make_graph=None, **kw):
@@ -228,7 +228,8 @@ def test_a_metric_that_raises_is_a_failed_metric_not_an_abort() -> None:
     report = run_eval([case("g1", "S")], make_graph=graph_factory(),
                       candidates=FakeCandidates([prior("A")] * 4), judge=FakeJudge(),
                       embed=bad_embed, provenance=PROV)
-    assert report["cases"][0]["metrics"]["response_relevancy"] == {"score": None, "failed": True, "trace": []}
+    assert report["cases"][0]["metrics"]["response_relevancy"] == {
+        "score": None, "failed": True, "error": "OSError: embedder down", "trace": []}
     assert report["cases"][0]["run_error"] is None
 
 
@@ -738,4 +739,116 @@ def test_baseline_from_refuses_a_dirty_tree_and_a_no_recall_run(tmp_path: Path, 
     no_recall = saved_report(other, recall_enabled=False)
     assert main(["--baseline-from", str(no_recall)], baseline_path=baseline) == 1
     assert "negative control" in capsys.readouterr().err
+
+
+# ---- Fixes from the independent review ---------------------------------------
+
+
+def test_a_bug_in_a_metric_is_not_hidden_as_a_judge_failure() -> None:
+    """Expected faults become failed results; a KeyError is our bug and must stop the run."""
+    def buggy_embed(texts: Any) -> list[list[float]]:
+        raise KeyError("oops")
+
+    with pytest.raises(KeyError):
+        run_eval([case("g1", "S")], make_graph=graph_factory(),
+                 candidates=FakeCandidates([prior("A")] * 4), judge=FakeJudge(),
+                 embed=buggy_embed, provenance=PROV)
+
+
+def test_a_failed_gate_never_rewrites_the_baseline(tmp_path: Path, capsys) -> None:
+    baseline = tmp_path / "evals" / "baseline.json"
+    good = run([case("g1", "S", "T")], provenance=provenance())
+    write_baseline(good, baseline)
+    before = baseline.read_bytes()
+    worse = run([case("g1", "S", "T", severity="sev1")], provenance=provenance())  # answer sev2 vs expected sev1
+    code = main(["--gate", "--write-baseline"], runner=runner_for(worse), now=lambda: NOW,
+                reports_dir=tmp_path / "r", baseline_path=baseline)
+    assert code == 1
+    assert baseline.read_bytes() == before
+    assert "gate failed in this same run" in capsys.readouterr().err
+
+
+def test_a_saved_report_shows_what_was_scored_even_if_the_golden_set_changed(tmp_path: Path, capsys, monkeypatch) -> None:
+    path = saved_report(tmp_path)
+    changed = case("g1", "S", "T")
+    changed = changed.model_copy(update={"question": "A DIFFERENT QUESTION", "reference": "A DIFFERENT REFERENCE"})
+    monkeypatch.setattr(ea, "load_golden", lambda: [changed])
+    assert main(["--show-case", "g1", "--report", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert "question g1" in out and "DIFFERENT" not in out
+
+
+def test_an_old_report_without_the_question_warns_when_the_golden_set_changed(tmp_path: Path, capsys, monkeypatch) -> None:
+    path = saved_report(tmp_path)
+    report = json.loads(path.read_text())
+    for c in report["cases"]:
+        for key in ("question", "reference", "expected_severity"):
+            c.pop(key)
+    report["provenance"]["golden_sha256"] = "an-old-hash"
+    path.write_text(json.dumps(report))
+    monkeypatch.setattr(ea, "load_golden", lambda: [case("g1", "S", "T")])
+    assert main(["--show-case", "g1", "--report", str(path)]) == 0
+    assert "golden set changed" in capsys.readouterr().err
+
+
+def test_a_missing_golden_file_does_not_crash_the_viewer_for_an_old_report(tmp_path: Path, capsys, monkeypatch) -> None:
+    path = saved_report(tmp_path)
+    report = json.loads(path.read_text())
+    for c in report["cases"]:
+        c.pop("question")
+    path.write_text(json.dumps(report))
+
+    def gone():
+        raise FileNotFoundError("golden.jsonl")
+
+    monkeypatch.setattr(ea, "load_golden", gone)
+    assert main(["--show-case", "g1", "--report", str(path)]) == 0
+    assert "golden file is missing" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("key", ["judge_digest", "git_sha"])
+def test_a_baseline_from_an_untraceable_run_is_refused(tmp_path: Path, key: str) -> None:
+    report = report_with(GOOD, prov={**PROV, key: "unknown"})
+    with pytest.raises(ea.BaselineRefused, match=f"{key} is unknown"):
+        write_baseline(report, tmp_path / "b.json")
+
+
+def test_two_unknown_judge_digests_are_not_the_same_judge(tmp_path: Path) -> None:
+    prov = {**PROV, "judge_digest": "unknown"}
+    report = report_with(GOOD, prov=prov)
+    baseline = baseline_for(report_with(GOOD), tmp_path)
+    baseline["provenance"]["judge_digest"] = "unknown"
+    problems = gate(report, baseline)
+    assert any("judge_digest is unknown" in p for p in problems)
+
+
+def test_only_a_missing_environment_variable_says_set_the_variable(tmp_path: Path, capsys) -> None:
+    kw = dict(now=lambda: NOW, reports_dir=tmp_path / "r", baseline_path=tmp_path / "b.json")
+
+    def missing(progress, **kwargs):
+        raise ea.MissingEnvironment("SMALL_MODEL")
+
+    assert main([], runner=missing, **kw) == 2
+    assert "set the environment variable SMALL_MODEL" in capsys.readouterr().err
+
+    def bug(progress, **kwargs):
+        raise KeyError("some_record_key")
+
+    with pytest.raises(KeyError):
+        main([], runner=bug, **kw)
+
+
+def test_require_env_names_the_missing_variable(monkeypatch) -> None:
+    monkeypatch.delenv("NOT_SET_ANYWHERE", raising=False)
+    with pytest.raises(ea.MissingEnvironment, match="NOT_SET_ANYWHERE"):
+        ea.require_env("NOT_SET_ANYWHERE")
+    monkeypatch.setenv("SET_HERE", "x")
+    assert ea.require_env("SET_HERE") == "x"
+
+
+def test_the_case_record_is_self_contained() -> None:
+    record = run([case("g1", "S", "T", severity="sev1")])["cases"][0]
+    assert record["question"] == "question g1"
+    assert record["reference"].startswith("Root cause")
+    assert record["expected_severity"] == "sev1"
 

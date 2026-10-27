@@ -103,11 +103,13 @@ def test_faithfulness_judge_error_midway_fails_whole_metric():
 
 
 def test_faithfulness_empty_contexts_is_scored_not_failed():
-    judge = FakeJudge(
-        {Claims: [Claims(claims=["a", "b"])], Verdict: verdicts(False, False)}
-    )
-    assert pair(faithfulness(judge, "ans", [])) == (0.0, False)
-    assert "Context:\n\n" in judge.prompts[1][1]
+    """No context: every claim is unsupported. Only the claim split asks the judge."""
+    judge = FakeJudge({Claims: [Claims(claims=["a", "b"])], Verdict: []})
+    result = faithfulness(judge, "ans", [])
+    assert pair(result) == (0.0, False)
+    assert [schema for schema, _ in judge.prompts] == [Claims]
+    assert [row["supported"] for row in result.trace] == [False, False]
+    assert result.trace[0]["reason"] == "no context was retrieved"
 
 
 # ---- response_relevancy ----------------------------------------------------
@@ -198,8 +200,12 @@ def test_recall_judge_error_fails():
 
 
 def test_recall_empty_contexts_is_zero_not_failed():
-    judge = FakeJudge({Verdict: verdicts(False, False)})
-    assert pair(context_recall(judge, "One. Two.", [])) == (0.0, False)
+    """No context: nothing is attributable, and the judge is never asked."""
+    judge = FakeJudge({Verdict: []})
+    result = context_recall(judge, "One. Two.", [])
+    assert pair(result) == (0.0, False)
+    assert judge.prompts == []
+    assert len(result.trace) == 2
 
 
 # ---- helpers ---------------------------------------------------------------
@@ -288,4 +294,34 @@ def test_a_runaway_judge_reason_is_capped_before_it_is_stored():
     judge = FakeJudge({Claims: [Claims(claims=["a"])], Verdict: [Verdict(supported=True, reason="x" * 5000)]})
     (row,) = faithfulness(judge, "ans", ["c"]).trace
     assert len(row["reason"]) == MAX_REASON_CHARS and row["reason"].endswith("...")
+
+
+# ---- why a result failed, and the sentence splitter -------------------------
+
+
+def test_every_failure_says_why():
+    """A timeout, a bad count and an empty answer must not look the same in a report."""
+    judge_down = FakeJudge({Claims: [JudgeError("timed out")]})
+    assert "timed out" in faithfulness(judge_down, "ans", ["c"]).error
+    assert "no claims" in faithfulness(FakeJudge({Claims: [Claims(claims=[])]}), "a", ["c"]).error
+    wrong_count = FakeJudge({Questions: [Questions(questions=["only one"])]})
+    assert "1 questions, expected 3" in response_relevancy(wrong_count, fake_embed([]), "q", "a").error
+    assert "no sentences" in context_recall(FakeJudge({}), "   ", ["c"]).error
+    assert faithfulness(FakeJudge({Claims: [Claims(claims=["a"])], Verdict: verdicts(True)}), "a", ["c"]).error is None
+
+
+def test_a_reference_split_is_the_same_whether_or_not_a_line_ends_in_a_full_stop():
+    with_stop = "Root cause: A typo passed review.\nRemediation: Add bounds."
+    without = "Root cause: A typo passed review\nRemediation: Add bounds"
+    assert len(split_sentences(with_stop)) == len(split_sentences(without)) == 2
+
+
+def test_the_splitter_is_part_of_the_context_recall_version():
+    """Change how sentences are cut and the report must show the metric changed."""
+    import hashlib
+
+    from app.metrics import ATTRIBUTION_PROMPT, PROMPT_VERSIONS, _SENTENCE_END
+
+    expected = hashlib.sha256("\x1f".join([ATTRIBUTION_PROMPT, _SENTENCE_END.pattern]).encode()).hexdigest()
+    assert PROMPT_VERSIONS["context_recall"] == expected
 

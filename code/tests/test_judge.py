@@ -122,3 +122,29 @@ def test_default_chat_sets_temperature_zero_schema_and_timeout(monkeypatch):
     assert seen["format"] == Answer.model_json_schema()
     assert seen["client_kwargs"] == {"timeout": 7.5}
     assert seen["model"] == "m"
+
+
+def test_the_real_chat_reuses_one_client_per_model_and_schema(monkeypatch):
+    built = []
+
+    class FakeLLM:
+        def __init__(self, **kwargs):
+            built.append(kwargs["format"])
+
+        def invoke(self, prompt):
+            return type("M", (), {"content": GOOD})()
+
+    import langchain_ollama
+
+    monkeypatch.setattr(langchain_ollama, "ChatOllama", FakeLLM)
+    judge = make_ollama_judge("m")
+    for _ in range(3):
+        judge.ask("p", Answer)
+    assert len(built) == 1  # three calls, one client
+
+    class Other(BaseModel):
+        ok: bool
+
+    judge.ask("p", Other)
+    assert len(built) == 2  # a different schema needs its own client
+

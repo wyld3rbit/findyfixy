@@ -488,6 +488,21 @@ One model answers all 30 golden cases (no routing), temperature 0, thinking off,
 - `tools/check_docs.py` (in `make check`): the README and `CLAUDE.md` may name only make targets and files that exist, and no volatile counts. 37 tool tests; it caught a deliberately re-stale README in a test of the real hook.
 - Fixed stale docs: `00-plan.md` (deleted `progress.js`, double-click advice), the README test count, the Day 5 plan status and its description of the question format. Removed two leftover agent worktrees after checking they held only already-merged files.
 
+### Fixes from the independent review of the Day 5 code (2026-10-26)
+
+A fresh agent that had not seen the work reviewed `eval_answers.py`, `metrics.py`, `judge.py` and `golden.py`. Eleven findings; three were checked by hand first and all were real. Ten fixed, one documented.
+
+- Gate integrity: `--gate --write-baseline` no longer rewrites the baseline when the gate failed in the same run (it used to launder a regression into the new standard).
+- Baseline traceability: a baseline is refused when the judge fingerprint or git SHA is unknown, and two unknown judge fingerprints are no longer treated as the same judge.
+- Self-contained reports: each case record now stores its question, reference and expected severity, so rebuilding the golden set cannot change what `make case` shows for an old report. Older reports fall back to the current golden file with a warning if its hash differs, and a missing golden file no longer crashes the viewer.
+- Failures say why: `MetricResult.error` records the reason (judge timeout, wrong question count, embedder fault) and the viewer prints it. Only expected faults (OSError, ValueError, RuntimeError) become failed results; any other exception is a bug and now stops the run with a traceback instead of hiding behind a failure rate.
+- Only a missing environment variable says "set the environment variable"; other KeyErrors keep their traceback.
+- Empty context: the judge is no longer asked about claims or reference sentences when nothing was retrieved. The score is exactly 0.0 and about ten judge calls per case are saved. This makes the no-recall control exact; a lenient judge can no longer keep it above the floor.
+- Reference sentence splitting now also splits at line breaks, so "Root cause" and "Remediation" are two units whether or not the first line ends in a full stop. The splitter's pattern is part of the `context_recall` version hash.
+- The golden set reuses `app.triage.Severity`. The judge reuses one client per model and schema.
+- Documented, not changed: the flat 0.05 floor margin. The interval measures how 30 cases sample; a floor guards a rerun of the same code, and temperature-0 judge means moved under 0.003 between reruns. Reasoning added to `write_baseline`.
+- Tests: 518 pass. Breaks caught: failed gate rewriting the baseline, every exception hidden as a failure, viewer ignoring the record, unknown judges equal, untraceable baseline accepted, any KeyError reported as a missing variable, judge asked with no context, splitter ignoring line breaks, client rebuilt per call, severity set drifting.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

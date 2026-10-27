@@ -51,11 +51,12 @@ import random
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel
 
 from app.corpus import Incident
+from app.triage import Severity
 
 ROOT = Path(__file__).resolve().parents[1]
 INCIDENTS_PATH = ROOT / "data" / "incidents.jsonl"
@@ -68,8 +69,9 @@ SEED = 5
 # The triage prompt caps input at 3500 characters. Stay clear of the cap.
 MAX_QUESTION_CHARS = 3000
 
-Severity = Literal["sev1", "sev2", "sev3", "sev4"]
-VALID_SEVERITIES: tuple[str, ...] = ("sev1", "sev2", "sev3", "sev4")
+# One definition of severity for the whole app (app.triage). Redefining it here
+# would let the golden set and the triage record drift apart.
+VALID_SEVERITIES: tuple[str, ...] = get_args(Severity)
 
 
 class GoldenCase(BaseModel):

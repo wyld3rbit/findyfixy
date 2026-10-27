@@ -159,3 +159,14 @@ def test_show_prints_every_case_with_its_question_and_reference(cases, capsys) -
 def test_unknown_argument_is_refused() -> None:
     with pytest.raises(SystemExit):
         main(["--nope"])
+
+
+def test_the_golden_set_uses_the_one_shared_severity_type() -> None:
+    """A severity added in app.triage must be accepted here without a second edit."""
+    from typing import get_args
+
+    from app.triage import Severity
+
+    assert VALID_SEVERITIES == get_args(Severity)
+    assert GoldenCase.model_fields["expected_severity"].annotation == Severity
+
