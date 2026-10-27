@@ -286,7 +286,7 @@ def test_without_an_investigator_the_graph_is_the_old_router():
 
 
 def test_ollama_ask_keeps_the_model_name_ollama_reports(monkeypatch):
-    import app.graph as g
+    import app.llm as g
 
     class FakeChat:
         def __init__(self, model, format, **kwargs):
@@ -301,7 +301,7 @@ def test_ollama_ask_keeps_the_model_name_ollama_reports(monkeypatch):
 
 
 def test_ollama_ask_without_metadata_gives_unknown_not_the_asked_name(monkeypatch):
-    import app.graph as g
+    import app.llm as g
 
     class FakeChat:
         def __init__(self, model, format, **kwargs):
@@ -328,8 +328,8 @@ def test_the_tool_step_reports_which_model_the_server_says_answered(tool):
 
 def test_ollama_ask_is_greedy_and_has_a_read_timeout(monkeypatch):
     """Same alert, same triage; and a stalled server cannot hang the graph."""
-    import app.graph as g
-    from app.triage import ANSWER_TEMPERATURE, ANSWER_TIMEOUT_S
+    import app.llm as g
+    from app.llm import ANSWER_TEMPERATURE, ANSWER_TIMEOUT_S
 
     built = {}
 

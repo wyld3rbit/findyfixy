@@ -894,7 +894,8 @@ def live_run(
     a lock. The lock covers only retrieval and embedding (well under a second
     per case), never the model calls, which are where the time goes.
     """
-    from app.graph import build_graph, ollama_ask
+    from app.graph import build_graph
+    from app.llm import ollama_ask
     from app.ingest import make_embedder
     from app.judge import make_ollama_judge
 

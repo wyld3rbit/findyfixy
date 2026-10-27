@@ -82,3 +82,21 @@ def test_only_entry_points_import_the_composition_root_and_settings() -> None:
         extra = _importers(target) - ENTRY_POINTS - {"wiring", "settings"}
         assert extra == set(), f"{sorted(extra)} import app.{target} but are not entry points"
 
+
+# Pure domain code: rules and data shapes with no vendor client. These modules
+# can then be tested with plain values and reused with any model server.
+PURE_MODULES = ("triage", "events", "metrics", "golden", "paths", "settings")
+VENDOR_CLIENTS = ("langchain", "ollama", "psycopg", "pgvector", "sentence_transformers", "mcp")
+
+
+def test_pure_modules_import_no_vendor_client() -> None:
+    for name in PURE_MODULES:
+        for node in ast.walk(ast.parse((APP / f"{name}.py").read_text())):
+            modules = []
+            if isinstance(node, ast.ImportFrom) and node.module:
+                modules = [node.module]
+            elif isinstance(node, ast.Import):
+                modules = [a.name for a in node.names]
+            for module in modules:
+                assert module.split(".")[0] not in VENDOR_CLIENTS, f"{name}.py imports {module}"
+

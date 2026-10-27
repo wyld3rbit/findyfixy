@@ -50,7 +50,6 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Literal, TypedDict
 
-from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
@@ -58,6 +57,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMe
 
 from app.events import Emit, no_emit
 from app.investigate import analyse, content_text, format_evidence, investigation_prompt
+from app.llm import ollama_ask
 from app.settings import MissingEnvironment, load_env, read_models
 from app.triage import (
     Ask,
@@ -65,7 +65,6 @@ from app.triage import (
     Reply,
     Triage,
     TriageError,
-    answer_options,
     ask_validated,
     format_prior,
 )
@@ -111,33 +110,6 @@ class S(TypedDict, total=False):
     model_used: str
     evidence: str
     prior: str
-
-
-def ollama_ask(model: str, prompt: str) -> str:
-    """The real `ask`: call one Ollama model and return its raw reply text.
-
-    `format=<JSON Schema>` turns on constrained decoding: Ollama masks tokens
-    that would break the schema, so the reply is JSON of the right shape.
-    Values are checked later, in `ask_validated`. We return text, not a parsed
-    object, so a bad value fails in our code with a readable message.
-
-    We build the client on every call. That is cheap because it is only a
-    thin HTTP client. The expensive part is Ollama loading model weights into
-    memory. On a 16 GB Mac, switching from the 1.5B to the 7B model can add a
-    load delay, so an escalated run pays for a model swap on top of two calls.
-
-    The call is greedy (temperature 0) and has a read timeout; see
-    `app.triage.answer_options`.
-
-    Fails when: Ollama is not running (connection error), the model is not
-    pulled (404), or the server stalls past the timeout. Nothing here retries.
-    """
-    llm = ChatOllama(model=model, format=Triage.model_json_schema(), **answer_options())
-    message = llm.invoke(prompt)
-    # Ollama names the model that served the request in its response. Keep it
-    # next to the text, so a log can show what ACTUALLY answered, not only what
-    # we asked for. Absent metadata gives None (unknown), never a guess.
-    return Reply(message.content, served_by=message.response_metadata.get("model"))
 
 
 def build_graph(

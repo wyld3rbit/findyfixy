@@ -51,6 +51,7 @@ from typing import Any, Literal, get_args
 
 from langchain_ollama import ChatOllama
 
+from app.llm import answer_options
 from app.triage import (
     CONFIDENCE_RULE,
     EVIDENCE_MARKER,
@@ -59,7 +60,6 @@ from app.triage import (
     Ask,
     Reply,
     Triage,
-    answer_options,
 )
 
 Stress = Literal["none", "no_format", "vague_prompt", "percent_log", "small_context"]

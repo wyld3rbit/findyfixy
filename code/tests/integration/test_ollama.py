@@ -27,7 +27,8 @@ import math
 
 import pytest
 
-from app.graph import QUESTIONS, build_graph, ollama_ask
+from app.graph import QUESTIONS, build_graph
+from app.llm import ollama_ask
 from app.triage import Ask, Triage, ask_validated
 
 # Marks every test in this module. The default run deselects the marker.

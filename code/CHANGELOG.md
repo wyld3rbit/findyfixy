@@ -511,9 +511,13 @@ From the independent architecture review (see the review summary in `record/prog
 
 - `app/settings.py`: environment access in one place (`load_env`, `require_env`, `read_models`, `optional_models`, `MissingEnvironment`). The default judge model is defined once. `app/wiring.py`: `connect()`, `build_retriever()`, `lazy_recall()` and `RECALL_K`, replacing three hand-built copies of "connect, register, load passages, build embedder and reranker" in the console, the answer evaluation and the retrieval evaluation. `RECALL_K` is defined once; the duplicate literal and the test that pinned it to the console are gone.
 - Dependency rule, enforced by `tests/test_architecture.py`: only entry points may import `app.wiring` or `app.settings`; domain modules receive what they need as arguments. Break caught: `metrics` importing the composition root.
-- Tests: 539 pass (14 new). Breaks caught: lock removed from `lazy_recall` (the eight-thread build-once test fails), domain module importing `wiring`. Checked live: `lazy_recall()` returned INC-0009, INC-0087 and INC-0015 for a real alert against the real database.
+- Tests: 537 pass. Breaks caught: lock removed from `lazy_recall` (the eight-thread build-once test fails), domain module importing `wiring`. Checked live: `lazy_recall()` returned INC-0009, INC-0087 and INC-0015 for a real alert against the real database.
 - `direct_run.py` and `mcp_run.py` (Day 2 measurement scripts) still read the environment themselves; left alone on purpose so the recorded Day 2 numbers stay reproducible.
 - Observed, not changed: the first recall call took 82 s cold, including a Hugging Face hub request without a token on each model load. The weights are pinned by revision and cached, so a runtime network call is avoidable (`HF_HUB_OFFLINE=1`). Candidate for the wrap-up.
+
+### Architecture step 3: the model call moves out of the router (2026-10-26)
+
+`app/llm.py` now holds `ollama_ask` and the answering-model settings (`answer_options`, temperature 0, thinking off, read timeout). `app.triage` is back to pure domain code: it imports no vendor client. `graph`, `stress`, the console's investigator and the evaluation all take their settings from `llm`. `tests/test_architecture.py` fails if `triage`, `events`, `metrics`, `golden`, `paths` or `settings` import a vendor client (break caught). Behavior unchanged; 538 tests pass.
 
 ### Next
 

@@ -75,8 +75,9 @@ from app.wiring import RECALL_K, lazy_recall
 from app.investigate import build_investigator
 from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
 from app.tools import make_deploys_tool
-from app.graph import QUESTIONS, THRESHOLD, Recall, build_graph, ollama_ask
-from app.triage import Ask, Prior, TriageError, answer_options
+from app.graph import QUESTIONS, THRESHOLD, Recall, build_graph
+from app.llm import answer_options, ollama_ask
+from app.triage import Ask, Prior, TriageError
 
 Mode = Literal["live", "fake"]
 Scenario = Literal[
