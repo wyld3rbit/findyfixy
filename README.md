@@ -6,7 +6,7 @@ Paste an incident report. It returns:
 
 - A severity (`sev1` to `sev4`), the likely component and the first action to take.
 - A confidence, so a weak answer can be escalated to a larger model.
-- The most similar past incidents, found with hybrid search and used as context.
+- The most similar past incidents, found with hybrid search and used as context, with their severity and what fixed them.
 
 It runs on a 16 GB laptop with open-source parts. No data leaves the machine.
 
@@ -19,7 +19,7 @@ cp code/.env.example code/.env    # model names; edit if you use other models
 make setup                        # once per clone
 ```
 
-> `make setup` installs packages, pulls the two models (about 6 GB), starts the database and loads the incidents. It is safe to run again.
+> `make setup` installs packages, pulls the models named in `.env` (about 7 GB), starts the database and loads the incidents. It is safe to run again.
 
 Every session, from this folder:
 
@@ -37,9 +37,11 @@ make down       # when you are done
 make console          # live page: watch each step run
 make ui               # one landing page: http://127.0.0.1:8766
 make triage           # triage five fixed questions
+make eval             # score the assistant on 30 test cases (live models, minutes)
+make case ID=g07      # one case end to end: the alert, the answer, every judge decision
+make eval-gate        # exit 1 if answers got worse than the frozen baseline
 make eval-retrieval   # compare the three retrievers
 make test             # the product tests
-make up               # start the database (make down stops it)
 make help             # everything else
 ```
 
@@ -56,25 +58,57 @@ model: <small or large model> | confidence: <0 to 1> | latency: <seconds>
 report
   -> Recall        hybrid search over past incidents, reranked, top 3
   -> Investigate   tool call: recent deploys for the service
-  -> Small model   Qwen2.5 1.5B drafts the triage record
+  -> Answer        one model drafts the triage record
   -> Gate          confidence >= 0.7: answer
-                   otherwise: Qwen2.5 7B, reusing the same evidence
+                   otherwise: a second model, if one is configured
 ```
 
 | Layer | Implementation |
 |---|---|
 | Orchestration | LangGraph |
-| Models | Ollama: Qwen2.5 1.5B first, 7B on escalation |
+| Model | Ollama: Qwen3 4B-instruct (`SMALL_MODEL`). Set `LARGE_MODEL` to a different name for a second tier; the same name means one model and no escalation. |
+| Decoding | Temperature 0, thinking off, 120 s read timeout. The same alert gets the same triage. |
 | Output contract | Pydantic record, validated in code. One retry that carries the validation error. At most 2 calls per model. |
 | Memory | Postgres 16 with pgvector. 200 synthetic incidents, 800 chunks, `bge-small-en-v1.5` embeddings (384 dimensions). |
-| Retrieval | BM25 top 50 and vector top 50, fused with Reciprocal Rank Fusion (k=60), reranked by `bge-reranker-base`. |
+| Retrieval | BM25 top 50 and vector top 50, fused with Reciprocal Rank Fusion (k=60), reranked by `bge-reranker-base`. Each recalled incident carries its severity and its fix. |
 | Tools | `get_recent_deploys`, served over MCP (stdio). |
+| Judge | Qwen2.5 7B (`JUDGE_MODEL`), a different family from the answering model. |
 
-Routing is a policy, not a model property. The model's confidence is text it writes, so the 0.7 threshold is a placeholder until it is tuned against a measured quality metric.
+Routing is a policy, not a model property. A model's confidence is text it writes, so the 0.7 threshold only matters when two models are configured.
 
 ## Results
 
-Every number comes from a recorded run.
+Every number comes from a recorded run, and the limits are listed with them.
+
+**Choosing the model.** One model answers all 30 test cases, at temperature 0, thinking off, with the same judge. A case counts as right when the severity matches the reference.
+
+| Model | Severity right | Most serious (sev1) caught | Median per case | Memory |
+|---|---|---|---|---|
+| Qwen3 4B-instruct | 25 of 30 | 6 of 8 | 4.6 s | 2.5 GB |
+| Qwen3 8B | 26 of 30 | 7 of 8 | 7.9 s | 5.2 GB |
+| Qwen2.5 7B | 20 of 30 | 2 of 8 | 3.4 s | 4.7 GB |
+| Qwen2.5 1.5B | 10 of 30 | 2 of 8 | 1.5 s | 1.1 GB |
+
+The 4B and 8B differ by one case, which 30 cases cannot separate, so the 4B is the default at about 58 percent of the 8B's time and half its memory. With the 1.5B, the model's own confidence never flagged its mistakes (at most 1 of 30 cases escalated in any run), so small-first routing saved nothing there.
+
+**Answer quality on the final setup** (Qwen3 4B-instruct, severity and fix in the recalled incidents, 30 cases, 95 percent intervals):
+
+| Measure | Score | What it asks |
+|---|---|---|
+| Severity right | 0.77 [0.60, 0.90] | Does the severity match the reference? |
+| Faithfulness | 0.79 [0.70, 0.87] | Is each claim supported by the recalled incidents? |
+| Context recall | 0.93 [0.86, 0.98] | Does the recalled text contain what the reference says? |
+| Action quality | 0.92 [0.82, 0.98] | Would the proposed first action help? 26 of 30 rated helpful. |
+| Response relevancy | 0.67 [0.64, 0.69] | Does the answer address the question? |
+
+How to read these:
+
+- The test cases are the alert line only, with the case's own incident removed from recall, so the assistant cannot read the answer. The paired incident was recalled in 19 of the 20 cases that have one.
+- The corpus is templated and its severities are random within each failure pattern. Absolute scores flatter; compare runs, not the outside world.
+- Context recall rose after past fixes were added to the recalled text, partly because the reference also states the fix. It shows the text is present, not that retrieval improved.
+- The judge is a 7B model and tends to be lenient. Check scores with `make case`.
+- With 30 cases, one case moves a rate by 3 points. Differences of a few points are noise. The same model scored 25 of 30 in the model comparison and 23 of 30 here, after the recalled text changed.
+- Recall is what carries the result. With it removed, the same test falls to 0.17 on severity and 0.10 on action quality, and the release gate fails on all eight of its checks.
 
 **Retrieval.** 40 labelled queries: 30 paraphrases of known incidents, 10 exact hostnames.
 
@@ -87,40 +121,29 @@ Every number comes from a recorded run.
 - Embeddings miss exact tokens. BM25 recovers most of that. The reranker recovers the rest at about 24 times the latency.
 - The reranker lowers MRR. Near-duplicate incidents fill two of the three recall slots. Not fixed.
 - recall@5 is the share of queries with at least one correct incident in the top 5. MRR is the mean of 1 / rank of the first correct one.
-- The corpus is templated, so absolute scores flatter. One query is 2.5 points, so small gaps are noise.
 
-**Self-reported confidence is a weak routing signal.** Across 5 runs the small model wrote confidence on two scales: 0 to 1 twice, 0 to 100 three times. It wrote 75 for an answer that gave no checks. None escalated.
-
-**A valid tool call can still be wrong.** The model called the deploys tool in 30 of 30 runs with `hours=1` for a 24-hour question. The call is legal under the schema. It answered correctly 0 of 30 times. Validation cannot catch this. An evaluation can.
-
-**MCP costs process starts, not tokens.** One tool, same model and prompt, 10 runs per path:
-
-| Path | Input tokens | Median time |
-|---|---|---|
-| Direct function | 499 | 0.57 s |
-| MCP, persistent session | 499 | 0.57 s |
-| MCP, new session per call | 499 | 1.14 s |
-
-The extra 0.57 s is a server start paid on every call. Keep the session open. One tool understates token cost, and that was not measured with more.
+**Two earlier findings, both with the 1.5B model.** A valid tool call can still be wrong: it asked the deploys tool for a 1-hour window on a 24-hour question in 30 of 30 runs, a legal call that was right 0 of 30 times. And MCP costs process starts, not tokens: 499 input tokens on every path, with a median of 0.57 s direct or over a persistent session and 1.14 s with a new session per call.
 
 ## Decisions
 
 | Decision | Alternative rejected | Reason |
 |---|---|---|
-| Validate model output in code | Trust Ollama's schema option alone | Its docs do not say bounds are enforced, and the model wrote 75 into a 0-to-1 field. |
-| Hybrid retrieval with a reranker in the request path | Vector only | Hostname queries: recall 0.70 to 1.00. The 341 ms is small next to a 1.2 to 4.7 s end-to-end run. |
+| One answering model, Qwen3 4B-instruct | A small-first router with a second tier | Within noise of the 8B at 58 percent of the time, and the small model's confidence did not predict its errors. |
+| Temperature 0 and a read timeout on every answering model | Ollama's default sampling | The same configuration scored 9, 11 and 16 of 30 on severity across three runs. A repeatable gate needs a repeatable system. |
+| Test cases are the alert line only | The full report | The summary and timeline state the cause and the fix, so the model would read the answer. |
 | Evaluate with each case's own incident held out of Recall | Leave it in the index | Recall would return the answer key and every metric would read high. |
-| Write the judge metrics in-house | `ragas` 0.4.3 | An unfixed security advisory (PYSEC-2026-3046) and 31 new packages in a release gate. |
-| Count failed judge calls separately | Score them 0 | Judge flakiness would read as worse answers. |
-| 7-day delay on new package releases, vulnerability audit on every lock change | Latest versions | Fresh releases are where hijacks land. The audit found 7 known vulnerabilities in untouched packages. They were upgraded. |
+| Show each recalled incident's severity and fix | Summary and cause only | The twin's severity was in the archive and never shown. The fix is what a concrete next action comes from. |
+| Write the judge metrics in-house, with a separate action-quality measure | The `ragas` library | An unfixed security advisory (PYSEC-2026-3046) and 31 new packages in a release gate. Faithfulness scores advice near zero by construction. |
+| The gate never rewrites its own baseline, and refuses an untraceable one | Trust whoever runs it | A failing run saved as the baseline would make the next run pass. |
+| Commit hooks run the checks, and a drift check rejects docs that name missing files | Rules written in a document | A rule that can be forgotten will be. |
+| 7-day delay on new package releases, vulnerability audit on every lock change | Latest versions | Fresh releases are where hijacks land. |
 | Pin container images by digest and scan with Grype | Tags only | The database image carried 8 critical and 37 high findings in OS packages. Accepted for local use with synthetic data. |
-| Scan for local paths, emails and secrets in git hooks | Review by eye | The scanner reports rule and location, never the match. |
 
 ## Status
 
-**Built:** routing, validated output, tools over MCP, ingestion, hybrid retrieval with rerank, the Recall step and a labelled retrieval evaluation. Logic is tested with fakes. New logic was broken on purpose to confirm the tests fail.
+**Built:** routing, validated output, tools over MCP, ingestion, hybrid retrieval with rerank, the Recall step with severity and fixes, a labelled retrieval evaluation, and the answer-quality evaluation with a frozen baseline and a release gate. Logic is tested with fakes, and new logic was broken on purpose to confirm the tests fail.
 
-**Not built:** the answer-quality evaluation gate (designed), tracing, prompt-injection defences, cost budgets, approval for destructive actions and a one-command demo.
+**Not yet:** tracing, prompt-injection defences, cost budgets, approval for destructive actions and a one-command demo are not built.
 
 ## Notes
 

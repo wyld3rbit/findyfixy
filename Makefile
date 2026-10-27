@@ -27,7 +27,7 @@ setup up down console triage test eval-retrieval eval eval-gate eval-baseline ev
 # Targets that take a value are forwarded explicitly, because the pattern rule
 # above cannot pass variables to the code Makefile.
 case:
-	$(MAKE) -C code case ID=$(ID)
+	$(MAKE) -C code case ID=$(ID) REPORT=$(REPORT)
 
 eval-freeze:
 	$(MAKE) -C code eval-freeze REPORT=$(REPORT)

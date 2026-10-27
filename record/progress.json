@@ -112,6 +112,10 @@
     {
       "date": "2026-10-26",
       "entry": "Architecture steps 1 to 4 done (paths, settings and composition root, model call module, evaluation runner and console split); independent review fixes applied; recalled incidents carry severity and remediation; action quality added; commit hooks run the checks and a docs drift check is part of make check. Final-setup evaluation run in progress; baseline not yet frozen."
+    },
+    {
+      "date": "2026-10-26",
+      "entry": "Day 5 closed in the tracker plan (gated). Final run: severity 0.77, action quality 0.92, faithfulness 0.79, context recall 0.93. Without recall severity falls to 0.17 and the gate fails on eight checks. Baseline frozen from the final run; README updated. Self-check items stay unticked by the learner's instruction."
     }
   ],
   "decisions": [
@@ -247,6 +251,13 @@
       "decision": "Recalled incidents show their remediation, and a fourth judged measure, action quality, rates the proposed first action against the reference cause and fix.",
       "rejected": "Keeping faithfulness as the only answer-side measure",
       "why": "Advice is never in the recalled text, so faithfulness scores a sensible action near zero by construction. The assistant also could not propose a concrete action without seeing what fixed the same failure before."
+    },
+    {
+      "date": "2026-10-26",
+      "day": 5,
+      "decision": "Freeze the baseline from the final-setup run (commit 9a4d12c): floors at the mean minus 0.05, failure-rate cap 0.15. The assistant hand-checked three cases at the learner's request; the learner's own check is still open.",
+      "rejected": "Freezing from a fresh run, or before any hand-check",
+      "why": "The baseline should be exactly the numbers that were reviewed. The check found the judge fair on action quality and context recall and noisy on faithfulness, which is recorded so nobody over-reads that measure."
     }
   ],
   "days": [
@@ -342,7 +353,7 @@
       ],
       "done": [],
       "plan": {
-        "status": "built",
+        "status": "gated",
         "file": "notes/plans/day5-eval-harness.md"
       }
     },

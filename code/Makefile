@@ -118,9 +118,10 @@ golden:
 # case: print one case from the newest report: the alert, what the model and the
 # judge saw, the answer and every judge decision. For checking a score by eye.
 #   make case ID=g07
+#   make case ID=g07 REPORT=reports/eval-<timestamp>.json   (a report other than the newest)
 case:
-	@test -n "$(ID)" || { echo "usage: make case ID=g07"; exit 2; }
-	uv run python -m app.eval_answers --show-case $(ID)
+	@test -n "$(ID)" || { echo "usage: make case ID=g07 [REPORT=reports/eval-<timestamp>.json]"; exit 2; }
+	uv run python -m app.eval_answers --show-case $(ID) $(if $(REPORT),--report $(REPORT))
 
 # eval-freeze: freeze a SAVED report as the baseline (no run). The baseline is then
 # exactly the numbers you reviewed. Refuses a dirty-tree run, run errors, a high
