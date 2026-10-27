@@ -108,6 +108,10 @@
     {
       "date": "2026-10-26",
       "entry": "Model comparison, one model answering all 30 cases, temperature 0, thinking off, same judge: Qwen3 4B-instruct 25 of 30 severity (sev1 caught 6 of 8, median 4.6 s, 2.5 GB), Qwen3 8B 26 of 30 (7 of 8, 7.9 s, 5.2 GB), Qwen2.5 7B 20 of 30 (2 of 8, 3.4 s), Qwen2.5 1.5B 10 of 30 (2 of 8). The 4B-instruct is within noise of the 8B at 58 percent of the time and half the memory. Also: parallel workers gave no speedup on this machine; a 2 GB Colima VM works; docs drift check and commit hooks added; independent architecture review done, refactor awaiting approval."
+    },
+    {
+      "date": "2026-10-26",
+      "entry": "Architecture steps 1 to 4 done (paths, settings and composition root, model call module, evaluation runner and console split); independent review fixes applied; recalled incidents carry severity and remediation; action quality added; commit hooks run the checks and a docs drift check is part of make check. Final-setup evaluation run in progress; baseline not yet frozen."
     }
   ],
   "decisions": [
@@ -215,6 +219,34 @@
       "decision": "Lift the fixed Qwen2.5 pair for a measured comparison: Qwen3 4B-instruct and 8B allowed (Apache-2.0), thinking off, temperature 0, 120 s read timeout.",
       "rejected": "Keeping Qwen2.5 1.5B and 7B",
       "why": "At temperature 0 the 1.5B scored 10 of 30 on severity and its confidence never flagged its errors."
+    },
+    {
+      "date": "2026-10-26",
+      "day": 5,
+      "decision": "Qwen3 4B-instruct is the single answering model. Setting SMALL_MODEL and LARGE_MODEL to the same name means one model with no escalation to itself. The judge stays Qwen2.5 7B, a different family.",
+      "rejected": "Qwen3 8B (one case better on 30, 1.7 times slower, twice the memory); the old Qwen2.5 pair; a small-first router with Qwen3",
+      "why": "25 of 30 severity against 26 for the 8B, within noise, at 58 percent of the time and half the memory. The old 1.5B confidence never flagged its own errors, so routing on it saved nothing."
+    },
+    {
+      "date": "2026-10-26",
+      "day": 5,
+      "decision": "Fix the independent review's findings: a failed gate never rewrites the baseline, an unknown judge fingerprint cannot be baselined or compared, reports are self-contained, metric failures carry a reason, an empty context scores exactly 0 without asking the judge.",
+      "rejected": "Leaving the review findings as documented weak spots",
+      "why": "A quality gate that can be rewritten by a failing run, or that compares unknown judges as equal, protects nothing."
+    },
+    {
+      "date": "2026-10-26",
+      "day": 5,
+      "decision": "Split the code by responsibility in four small steps with layering tests: one paths module, one settings module and composition root, the model call in its own module, the evaluation runner and the console each split. Subpackages and moving the measurement scripts wait for the wrap-up.",
+      "rejected": "One big restructure into subpackages now",
+      "why": "Each step changes no behavior and keeps the tests green. Package moves change every import and every command, so they are a wrap-up job."
+    },
+    {
+      "date": "2026-10-26",
+      "day": 5,
+      "decision": "Recalled incidents show their remediation, and a fourth judged measure, action quality, rates the proposed first action against the reference cause and fix.",
+      "rejected": "Keeping faithfulness as the only answer-side measure",
+      "why": "Advice is never in the recalled text, so faithfulness scores a sensible action near zero by construction. The assistant also could not propose a concrete action without seeing what fixed the same failure before."
     }
   ],
   "days": [
