@@ -457,6 +457,12 @@ Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 - Thinking is now off for every answering model and the judge (`reasoning=False` in `answer_options()` and the judge's chat). `qwen3:8b` took 17.6 s with thinking and 6.9 s without on one alert (cold load included). Models without a thinking mode accept the setting. Tests: 502 pass; breaks caught: thinking left on for the answerer (6 fail), for the judge (1).
 - A 2 GB Colima VM was tested: ingest wrote 0 changes, the retrieval table matches Day 4 exactly (recall 0.93, 0.97, 1.00; MRR 0.823, 0.821, 0.781), Postgres used 60 MiB. The default in the Makefile is still 6 GB; changing it waits for the learner.
 
+### Deferred to the wrap-up of the lessons (learner's decision, 2026-10-26)
+
+- Database and container settings stay as they are until then. Two items to revisit at that point:
+  - Colima memory default: 6 GB today. A 2 GB VM was tested and works for the current stack (retrieval numbers identical to Day 4, Postgres uses about 60 MiB). Langfuse day needs 8 GB. Option: 2 GB by default, `COLIMA_MEMORY=8` on that day.
+  - A test that fails if a compose file publishes a port without the `127.0.0.1:` prefix. Checked by hand on 2026-10-26: every project port listens on loopback only, and the LAN address refused 5432, 8080 and 11434. The database password is `dev`, safe only because of that binding.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.
