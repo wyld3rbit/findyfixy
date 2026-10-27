@@ -519,6 +519,15 @@ From the independent architecture review (see the review summary in `record/prog
 
 `app/llm.py` now holds `ollama_ask` and the answering-model settings (`answer_options`, temperature 0, thinking off, read timeout). `app.triage` is back to pure domain code: it imports no vendor client. `graph`, `stress`, the console's investigator and the evaluation all take their settings from `llm`. `tests/test_architecture.py` fails if `triage`, `events`, `metrics`, `golden`, `paths` or `settings` import a vendor client. The first version of that test compared the whole top-level module name, so `langchain_ollama` slipped past a rule for `langchain`; the deliberate break showed "5 passed" and exposed it. Fixed to match by prefix, and re-proven against `triage`, `metrics`, `golden` and `events`. Behavior unchanged; 538 tests pass.
 
+### Architecture step 4: the two biggest modules are split (2026-10-26)
+
+- `eval_answers.py` (1,019 lines) is now 522: holdout recall, running the cases, live wiring and the command line. The rest moved, with no logic edited: `eval_stats.py` (bootstrap intervals, aggregation, score and group names), `eval_provenance.py` (the stamp on every report), `eval_report.py` (report and baseline files, the gate, the case viewer, `freeze_baseline`). The runner depends on the three, never the reverse. `python -m app.eval_answers` and every make target are unchanged.
+- `console.py` (883 lines) is now 732. The scripted replies, the scripted tool model, the invented recalled incidents and the fault injection moved to `console_fakes.py`. A test fails if anything but the console imports it.
+- `RECALL_K` moved to `app/triage.py` beside `MAX_PRIOR_CHARS` (both are the budget for recalled context). The first version of the split had the provenance module importing the composition root only for that constant, and the layering test caught it.
+- `eval_stats` and `eval_report` are in the pure-module list: no vendor client may be imported there.
+- Tests that patched names now point at each name's real home (`eval_report`). One test that only pinned two copies of `RECALL_K` together was removed because there is one copy.
+- Not done, by design: subpackages (`core/`, `eval/`, `web/`), and moving `corpus.py` and the Day 2 measurement scripts out of `app/`. They change every import path and every `python -m` command, so they wait for the wrap-up.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

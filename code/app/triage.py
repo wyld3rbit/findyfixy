@@ -146,6 +146,11 @@ PRIOR_PROMPT = (
 # token window that Ollama enforces by silently cutting the prompt's start.
 MAX_PRIOR_CHARS = 400
 
+# How many past incidents go into the prompt. Three keeps it small: each one
+# costs prompt tokens and, with a small model, starts to distract it. Together
+# with MAX_PRIOR_CHARS this is the budget for recalled context.
+RECALL_K = 3
+
 # Keep the echoed reply short. A runaway reply must not balloon the retry
 # prompt, which costs input tokens and can push the context window.
 _MAX_ECHO_CHARS = 500

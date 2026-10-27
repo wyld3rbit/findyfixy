@@ -23,6 +23,7 @@ from collections.abc import Iterator
 import pytest
 
 from app.console import RunHub, serve
+from app.console_fakes import FAKE_RECALL, ScriptedToolModel, fake_ask, scripted_reply
 
 
 @pytest.fixture
@@ -211,7 +212,7 @@ def test_force_escalation_sends_a_confident_answer_to_large(monkeypatch):
     import app.console as console
 
     def confident(model: str, prompt: str) -> str:
-        return console._reply(0.95)
+        return scripted_reply(0.95)
 
     monkeypatch.setattr(console, "ollama_ask", confident)
     hub = RunHub(live_models=("s", "l"), sleep=lambda s: None, fake_delay=0)
@@ -277,7 +278,7 @@ def test_hunt_stops_at_the_run_that_returns_a_bad_value(monkeypatch):
         calls["n"] += 1
         # Call 3 is run 3's first attempt: confidence 75 is illegal. The retry
         # (call 4) gets a good reply, so run 3 still finishes.
-        return console._reply(75 if calls["n"] == 3 else 0.9)
+        return scripted_reply(75 if calls["n"] == 3 else 0.9)
 
     _, port, srv = hunt_server(monkeypatch, ask)
     try:
@@ -295,7 +296,7 @@ def test_hunt_stops_at_the_run_that_returns_a_bad_value(monkeypatch):
 def test_hunt_ends_at_the_cap_when_nothing_goes_wrong(monkeypatch):
     import app.console as console
 
-    _, port, srv = hunt_server(monkeypatch, lambda m, p: console._reply(0.9))
+    _, port, srv = hunt_server(monkeypatch, lambda m, p: scripted_reply(0.9))
     try:
         _, events = hunt(port, hunt_max=4)
         assert finished(events) == {"reason": "exhausted", "runs": 4, "max": 4}
@@ -308,7 +309,7 @@ def test_hunt_rotates_the_fixed_questions_from_the_chosen_one(monkeypatch):
     import app.console as console
     from app.graph import QUESTIONS
 
-    _, port, srv = hunt_server(monkeypatch, lambda m, p: console._reply(0.9))
+    _, port, srv = hunt_server(monkeypatch, lambda m, p: scripted_reply(0.9))
     try:
         _, events = hunt(port, question=QUESTIONS[2], hunt_max=3)
         asked = [e["data"]["question"] for e in events if e["kind"] == "hunt_run"]
@@ -339,7 +340,7 @@ def test_stop_ends_a_hunt_after_the_current_run(monkeypatch):
 
     def ask(model, prompt):
         holder["hub"].stop()  # as if POST /stop arrived during run 1
-        return console._reply(0.9)
+        return scripted_reply(0.9)
 
     hub, port, srv = hunt_server(monkeypatch, ask)
     holder["hub"] = hub
@@ -364,7 +365,7 @@ def test_stop_endpoint_is_accepted(server):
 def test_bad_hunt_requests_are_422(monkeypatch, extra):
     import app.console as console
 
-    _, port, srv = hunt_server(monkeypatch, lambda m, p: console._reply(0.9))
+    _, port, srv = hunt_server(monkeypatch, lambda m, p: scripted_reply(0.9))
     try:
         body = {"mode": "live", "question": "q", **extra}
         assert post_run(port, body)[0] == 422
@@ -401,7 +402,7 @@ def test_hunt_rotates_the_incident_bank_from_the_chosen_one(monkeypatch):
     from app.incidents import load_incidents
 
     bank = load_incidents()
-    monkeypatch.setattr(console, "ollama_ask", lambda m, p: console._reply(0.9))
+    monkeypatch.setattr(console, "ollama_ask", lambda m, p: scripted_reply(0.9))
     hub = RunHub(live_models=("s", "l"), incidents=bank, sleep=lambda s: None, fake_delay=0)
     srv = serve(hub, port=0)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -433,7 +434,7 @@ def test_force_retry_runs_the_real_retry_on_the_real_model(monkeypatch):
 
     def ask(model, prompt):
         prompts.append(prompt)
-        return console._reply(0.9)
+        return scripted_reply(0.9)
 
     hub, port, srv = hunt_server(monkeypatch, ask)
     try:
@@ -457,7 +458,7 @@ def test_force_retry_runs_the_real_retry_on_the_real_model(monkeypatch):
 def test_force_retry_alone_does_not_escalate(monkeypatch):
     import app.console as console
 
-    _, port, srv = hunt_server(monkeypatch, lambda m, p: console._reply(0.9))
+    _, port, srv = hunt_server(monkeypatch, lambda m, p: scripted_reply(0.9))
     try:
         post_run(port, {"mode": "live", "question": "q", "force_retry": True})
         nodes = [e["data"]["node"] for e in stream(port) if e["kind"] == "node_entered"]
@@ -470,7 +471,7 @@ def test_force_retry_alone_does_not_escalate(monkeypatch):
 def test_force_retry_and_force_escalation_combine(monkeypatch):
     import app.console as console
 
-    _, port, srv = hunt_server(monkeypatch, lambda m, p: console._reply(0.9))
+    _, port, srv = hunt_server(monkeypatch, lambda m, p: scripted_reply(0.9))
     try:
         post_run(
             port,
@@ -497,7 +498,7 @@ def test_force_retry_and_force_escalation_combine(monkeypatch):
 def test_force_retry_conflicts_are_422(monkeypatch, body):
     import app.console as console
 
-    _, port, srv = hunt_server(monkeypatch, lambda m, p: console._reply(0.9))
+    _, port, srv = hunt_server(monkeypatch, lambda m, p: scripted_reply(0.9))
     try:
         assert post_run(port, body)[0] == 422
     finally:
@@ -557,11 +558,11 @@ def live_hub_with_tools(monkeypatch, with_investigator=True):
     from app.investigate import build_investigator
     from app.tools import make_deploys_tool
 
-    monkeypatch.setattr(console, "ollama_ask", lambda m, p: console._reply(0.9))
+    monkeypatch.setattr(console, "ollama_ask", lambda m, p: scripted_reply(0.9))
     investigator = None
     if with_investigator:
         investigator = build_investigator(
-            console._ScriptedToolModel(24), make_deploys_tool()
+            ScriptedToolModel(24), make_deploys_tool()
         )
     hub = RunHub(
         live_models=("s", "l"), investigator=investigator,
@@ -628,7 +629,7 @@ def test_streamed_model_replies_carry_the_served_by_field(monkeypatch):
     import app.console as console
     from app.triage import Reply
 
-    monkeypatch.setattr(console, "ollama_ask", lambda m, p: Reply(console._reply(0.9), served_by=m))
+    monkeypatch.setattr(console, "ollama_ask", lambda m, p: Reply(scripted_reply(0.9), served_by=m))
     hub = RunHub(live_models=("s", "l"), sleep=lambda s: None, fake_delay=0)
     srv = serve(hub, port=0)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -681,7 +682,7 @@ def stressed_hub(monkeypatch):
 
     def fake_make(stress):
         seen.append(stress)
-        return lambda m, p: console._reply(0.9)
+        return lambda m, p: scripted_reply(0.9)
 
     monkeypatch.setattr(console, "make_ollama_ask", fake_make)
     hub = RunHub(live_models=("s", "l"), sleep=lambda s: None, fake_delay=0)
@@ -782,7 +783,7 @@ def test_a_live_run_uses_the_hubs_recall_and_a_hub_without_one_has_no_step(monke
     import app.console as console
     from app.triage import Prior
 
-    monkeypatch.setattr(console, "ollama_ask", lambda model, prompt: console._reply(0.95))
+    monkeypatch.setattr(console, "ollama_ask", lambda model, prompt: scripted_reply(0.95))
     seen: list[str] = []
 
     def recall(question):

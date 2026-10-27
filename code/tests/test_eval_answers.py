@@ -15,25 +15,26 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from app import eval_answers as ea
+from app import eval_report as er
 from app.eval_answers import (
-    BaselineMissing,
-    BaselineRefused,
-    aggregate,
-    bootstrap_ci,
-    build_provenance,
-    format_table,
-    gate,
     holdout,
-    load_baseline,
     main,
     make_holdout_recall,
     render_answer,
     render_contexts,
     run_eval,
+)
+from app.eval_provenance import build_provenance
+from app.eval_report import (
+    BaselineMissing,
+    BaselineRefused,
+    format_table,
+    gate,
+    load_baseline,
     write_baseline,
     write_report,
 )
+from app.eval_stats import aggregate, bootstrap_ci
 from app.golden import GoldenCase
 from app.settings import MissingEnvironment, require_env
 from app.judge import JudgeError
@@ -174,12 +175,6 @@ def test_the_source_never_reaches_the_graph_even_when_ranked_first() -> None:
     assert "S" not in rec["recalled_ids"]
     assert rec["recalled_ids"] == ["T", "X", "Y"]
     assert rec["twin_recalled"] is True
-
-
-def test_recall_k_matches_the_console() -> None:
-    from app.wiring import RECALL_K
-
-    assert ea.RECALL_K == RECALL_K
 
 
 # ---- What the judge sees ----------------------------------------------------
@@ -669,7 +664,7 @@ def test_the_case_record_keeps_the_answer_the_contexts_and_the_judge_decisions()
 
 def test_show_case_prints_everything_needed_to_check_a_score(tmp_path: Path, capsys, monkeypatch) -> None:
     path = saved_report(tmp_path)
-    monkeypatch.setattr(ea, "load_golden", lambda: [case("g1", "S", "T")])
+    monkeypatch.setattr(er, "load_golden", lambda: [case("g1", "S", "T")])
     assert main(["--show-case", "g1", "--report", str(path)]) == 0
     out = capsys.readouterr().out
     for needle in ("g1", "ALERT", "REFERENCE", "RECALLED", "ANSWER", "faithfulness:",
@@ -679,7 +674,7 @@ def test_show_case_prints_everything_needed_to_check_a_score(tmp_path: Path, cap
 
 def test_show_case_uses_the_newest_report_by_default(tmp_path: Path, capsys, monkeypatch) -> None:
     saved_report(tmp_path)
-    monkeypatch.setattr(ea, "load_golden", lambda: [case("g1", "S", "T")])
+    monkeypatch.setattr(er, "load_golden", lambda: [case("g1", "S", "T")])
     assert main(["--show-case", "g1"], reports_dir=tmp_path / "reports") == 0
     assert "g1" in capsys.readouterr().out
 
@@ -694,10 +689,10 @@ def test_show_case_with_an_unknown_id_or_no_report_is_a_clear_error(tmp_path: Pa
 def test_show_case_survives_a_run_error_and_a_failed_metric() -> None:
     errored = {"id": "g1", "group": "twin", "source_id": "S", "twin_id": "T", "recalled_ids": [],
                "run_error": "RuntimeError: boom", "latency_s": 0.1}
-    assert "RUN ERROR  RuntimeError: boom" in ea.format_case(errored, case("g1", "S", "T"))
+    assert "RUN ERROR  RuntimeError: boom" in er.format_case(errored, case("g1", "S", "T"))
     failed = {**errored, "run_error": None, "severity": "sev2", "severity_match": True, "answer": "a",
               "contexts": [], "metrics": {"faithfulness": {"score": None, "failed": True, "trace": []}}}
-    out = ea.format_case(failed, None)
+    out = er.format_case(failed, None)
     assert "faithfulness: FAILED" in out and "nothing was recalled" in out
 
 
@@ -712,9 +707,9 @@ def test_a_file_that_is_not_a_report_is_refused(tmp_path: Path, content: str, ca
 def test_a_huge_file_is_refused_before_it_is_read(tmp_path: Path, monkeypatch) -> None:
     big = tmp_path / "big.json"
     big.write_text("{}")
-    monkeypatch.setattr(ea, "MAX_REPORT_BYTES", 1)
-    with pytest.raises(ea.ReportInvalid, match="too large"):
-        ea.load_report(big)
+    monkeypatch.setattr(er, "MAX_REPORT_BYTES", 1)
+    with pytest.raises(er.ReportInvalid, match="too large"):
+        er.load_report(big)
 
 
 def test_baseline_from_a_saved_report_runs_nothing_and_then_the_gate_passes(tmp_path: Path) -> None:
@@ -773,7 +768,7 @@ def test_a_saved_report_shows_what_was_scored_even_if_the_golden_set_changed(tmp
     path = saved_report(tmp_path)
     changed = case("g1", "S", "T")
     changed = changed.model_copy(update={"question": "A DIFFERENT QUESTION", "reference": "A DIFFERENT REFERENCE"})
-    monkeypatch.setattr(ea, "load_golden", lambda: [changed])
+    monkeypatch.setattr(er, "load_golden", lambda: [changed])
     assert main(["--show-case", "g1", "--report", str(path)]) == 0
     out = capsys.readouterr().out
     assert "question g1" in out and "DIFFERENT" not in out
@@ -787,7 +782,7 @@ def test_an_old_report_without_the_question_warns_when_the_golden_set_changed(tm
             c.pop(key)
     report["provenance"]["golden_sha256"] = "an-old-hash"
     path.write_text(json.dumps(report))
-    monkeypatch.setattr(ea, "load_golden", lambda: [case("g1", "S", "T")])
+    monkeypatch.setattr(er, "load_golden", lambda: [case("g1", "S", "T")])
     assert main(["--show-case", "g1", "--report", str(path)]) == 0
     assert "golden set changed" in capsys.readouterr().err
 
@@ -802,7 +797,7 @@ def test_a_missing_golden_file_does_not_crash_the_viewer_for_an_old_report(tmp_p
     def gone():
         raise FileNotFoundError("golden.jsonl")
 
-    monkeypatch.setattr(ea, "load_golden", gone)
+    monkeypatch.setattr(er, "load_golden", gone)
     assert main(["--show-case", "g1", "--report", str(path)]) == 0
     assert "golden file is missing" in capsys.readouterr().err
 
@@ -810,7 +805,7 @@ def test_a_missing_golden_file_does_not_crash_the_viewer_for_an_old_report(tmp_p
 @pytest.mark.parametrize("key", ["judge_digest", "git_sha"])
 def test_a_baseline_from_an_untraceable_run_is_refused(tmp_path: Path, key: str) -> None:
     report = report_with(GOOD, prov={**PROV, key: "unknown"})
-    with pytest.raises(ea.BaselineRefused, match=f"{key} is unknown"):
+    with pytest.raises(er.BaselineRefused, match=f"{key} is unknown"):
         write_baseline(report, tmp_path / "b.json")
 
 

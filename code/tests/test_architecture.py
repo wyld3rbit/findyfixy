@@ -85,7 +85,7 @@ def test_only_entry_points_import_the_composition_root_and_settings() -> None:
 
 # Pure domain code: rules and data shapes with no vendor client. These modules
 # can then be tested with plain values and reused with any model server.
-PURE_MODULES = ("triage", "events", "metrics", "golden", "paths", "settings")
+PURE_MODULES = ("triage", "events", "metrics", "golden", "paths", "settings", "eval_stats", "eval_report")
 VENDOR_CLIENTS = ("langchain", "ollama", "psycopg", "pgvector", "sentence_transformers", "mcp")
 
 
@@ -100,4 +100,9 @@ def test_pure_modules_import_no_vendor_client() -> None:
             for module in modules:
                 # startswith: "langchain_ollama" and "langchain_core" are langchain too.
                 assert not module.split(".")[0].startswith(VENDOR_CLIENTS), f"{name}.py imports {module}"
+
+
+def test_the_console_fakes_are_used_only_by_the_console() -> None:
+    """Demo and test data must never become a dependency of real code."""
+    assert _importers("console_fakes") <= {"console"}
 

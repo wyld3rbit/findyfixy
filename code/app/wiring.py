@@ -17,7 +17,7 @@ functions, so importing this module costs nothing.
 import threading
 from typing import TYPE_CHECKING
 
-from app.triage import Prior
+from app.triage import RECALL_K, Prior
 
 if TYPE_CHECKING:
     from psycopg import Connection
@@ -25,10 +25,6 @@ if TYPE_CHECKING:
     from app.graph import Recall
     from app.ingest import Embedder
     from app.retrieve import Retriever
-
-# Past incidents shown to the model. Three keeps the prompt small: each one costs
-# prompt tokens and, with a small model, starts to distract it.
-RECALL_K = 3
 
 
 def connect() -> "Connection":

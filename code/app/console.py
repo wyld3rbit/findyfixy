@@ -63,31 +63,32 @@ from typing import Literal
 from urllib.parse import parse_qs, urlparse
 
 from langgraph.graph.state import CompiledStateGraph
-from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field, ValidationError
 
+from app.console_fakes import (
+    FAKE_QUESTION,
+    FAKE_RECALL,
+    SCENARIOS,
+    TOOL_HOURS,
+    Scenario,
+    ScriptedToolModel,
+    fake_ask,
+    inject_bad_first_reply,
+)
 from app.dev_reload import fingerprint, snapshot
 from app.events import Emit, Event, make_emit
 from app.incidents import DEFAULT_PATH, Incident, load_incidents
 from app.paths import DOCS, ROOT
 from app.settings import load_env, optional_models
-from app.wiring import RECALL_K, lazy_recall
+from app.wiring import lazy_recall
 from app.investigate import build_investigator
 from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
 from app.tools import make_deploys_tool
 from app.graph import QUESTIONS, THRESHOLD, Recall, build_graph
 from app.llm import answer_options, ollama_ask
-from app.triage import Ask, Prior, TriageError
+from app.triage import RECALL_K, Ask, TriageError
 
 Mode = Literal["live", "fake"]
-Scenario = Literal[
-    "stay_small",
-    "retry_then_small",
-    "escalate",
-    "large_fails",
-    "tool_lookup",
-    "tool_wrong_window",
-]
 
 # The page lives next to the docs (app/paths.py resolves from the file, never
 # from the current directory, so the server works from any clone).
@@ -101,13 +102,6 @@ _KEEPALIVE_SECONDS = 10.0
 
 _FORCE_THRESHOLD = 1.01
 
-# What the page shows for the recall step in a fake run: fixed, invented, and
-# marked as such by its IDs. A fake run must never need a database or a model.
-FAKE_RECALL: tuple[Prior, ...] = (
-    Prior("FAKE-1", "auth", "sev2", "Latency rose after a certificate rotation.", "Peers lacked the new intermediate authority."),
-    Prior("FAKE-2", "auth", "sev3", "Slow logins after a rotation.", "Trust was not tested before cutover."),
-    Prior("FAKE-3", "gateway", "sev2", "Saturation at the daily peak.", "The autoscaler floor was too low."),
-)
 
 # A hunt repeats real model runs, so the cap is a cost and time bound. The
 # server enforces it. The page default is lower than the limit on purpose.
@@ -116,108 +110,6 @@ HUNT_LIMIT = 50
 
 _RUN_TERMINAL = ("run_finished", "run_failed")
 _HUNT_TERMINAL = ("hunt_finished",)
-
-
-def _reply(confidence: float | str, severity: str = "sev2") -> str:
-    """A Triage JSON text. `confidence` may be a string to make it invalid."""
-    return json.dumps(
-        {
-            "severity": severity,
-            "component": "auth-service",
-            "next_action": "check the last deploy and the error rate",
-            "confidence": confidence,
-        }
-    )
-
-
-# Scripted replies per scenario and tier. They exist so you can watch a retry
-# or an escalation on demand, without waiting for a real model to slip.
-# `75` is the Day 1 failure: legal JSON, illegal value.
-SCENARIOS: dict[str, dict[str, list[str]]] = {
-    "stay_small": {"small": [_reply(0.9)], "large": []},
-    "retry_then_small": {"small": [_reply(75), _reply(0.85)], "large": []},
-    "escalate": {"small": [_reply(0.3)], "large": [_reply(0.92, "sev1")]},
-    "large_fails": {
-        "small": [_reply(75), _reply(75)],
-        "large": ["not json", "still not json"],
-    },
-    # Scenarios with the tool step. The tool and the ToolNode are the real
-    # ones, reading data/deploys.json. Only the tool-calling model is scripted.
-    "tool_lookup": {"small": [_reply(0.9)], "large": []},
-    "tool_wrong_window": {"small": [_reply(0.9)], "large": []},
-}
-
-# The look-back window the scripted tool model asks for, per scenario.
-# `tool_wrong_window` mirrors what the real 1.5B model did on a 24 hour
-# question: it sent a legal but wrong 1 hour window, so the tool returns [].
-TOOL_HOURS: dict[str, int] = {"tool_lookup": 24, "tool_wrong_window": 1}
-
-
-class _ScriptedToolModel:
-    """A tool-calling model that asks for one deploy lookup, then finishes.
-
-    It reports no token usage on purpose: invented numbers would look real.
-    The page then shows the token fields as unknown.
-    """
-
-    def __init__(self, hours: int) -> None:
-        self._hours = hours
-        self._asked = False
-
-    def invoke(self, messages: list) -> AIMessage:
-        if self._asked:
-            return AIMessage(content="done")
-        self._asked = True
-        call = {
-            "name": "get_recent_deploys",
-            "args": {"service": "auth", "hours": self._hours},
-            "id": "fake-1",
-            "type": "tool_call",
-        }
-        return AIMessage(content="", tool_calls=[call])
-
-FAKE_QUESTION = "Fake run: replies are scripted, no model is called."
-
-
-def fake_ask(scenario: Scenario, sleep: Callable[[float], None], delay: float) -> Ask:
-    """Build an `ask` that plays back one scenario's scripted replies.
-
-    The model name tells the tiers apart: the fake models are "small" and
-    "large". `delay` is a pause per call so the animation is watchable. Tests
-    pass 0. Running past the script means the graph made more calls than the
-    scenario allows, which is a bug in the scenario, so it raises.
-    """
-    queues = {tier: iter(replies) for tier, replies in SCENARIOS[scenario].items()}
-
-    def ask(model: str, prompt: str) -> str:
-        sleep(delay)
-        return next(queues[model])
-
-    return ask
-
-
-def inject_bad_first_reply(ask: Ask, small_model: str, emit: Emit) -> Ask:
-    """Wrap `ask` so the small model's first reply is an illegal one.
-
-    The reply is well-formed JSON with `confidence: 75`, the Day 1 slip. It
-    passes the grammar and fails Pydantic, so the validate-retry path runs for
-    real: the real error text goes into the retry prompt, and the real model
-    answers it. Only that first reply is replaced, and the real model is not
-    called for it. An event marks the swap, so nobody mistakes it for a
-    natural failure. Later calls pass through untouched.
-
-    A hunt must not use this: the point of a hunt is to find real slips.
-    """
-    state = {"injected": False}
-
-    def wrapped(model: str, prompt: str) -> str:
-        if model == small_model and not state["injected"]:
-            state["injected"] = True
-            emit("fault_injected", model=model, field="confidence", value=75)
-            return _reply(75)
-        return ask(model, prompt)
-
-    return wrapped
 
 
 class RunRequest(BaseModel):
@@ -362,7 +254,7 @@ class RunHub:
             investigator = None
             if req.scenario in TOOL_HOURS:
                 investigator = build_investigator(
-                    _ScriptedToolModel(TOOL_HOURS[req.scenario]),
+                    ScriptedToolModel(TOOL_HOURS[req.scenario]),
                     make_deploys_tool(),
                 )
 
