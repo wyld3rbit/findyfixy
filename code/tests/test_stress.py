@@ -136,6 +136,7 @@ def test_every_stress_keeps_temperature_zero_and_the_timeout(stress) -> None:
     make_ollama_ask(stress, chat=FakeChat)("m", "prompt")
     built = FakeChat.built[-1]
     assert built["temperature"] == 0
+    assert built["reasoning"] is False
     assert built["client_kwargs"]["timeout"] > 0
 
 

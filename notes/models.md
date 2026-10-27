@@ -34,3 +34,16 @@ Check it any time:
 ```bash
 shasum -a 256 < ~/.cache/huggingface/hub/models--BAAI--bge-reranker-base/snapshots/*/model.safetensors
 ```
+
+## Qwen3 candidates (pulled 2026-10-26 for the model comparison)
+
+The project rule "Qwen2.5 1.5B and 7B only" was lifted by the learner on 2026-10-26 for this comparison. Limits that still hold: open source (OSI license), at most 8B parameters, 16 GB machine.
+
+| Ollama tag | Parameters, quantisation | Download | Ollama digest (sha256) | License (official model card) |
+|---|---|---|---|---|
+| `qwen3:4b-instruct` | 4.0B, Q4_K_M | 2.5 GB | `0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0` | Apache-2.0, `Qwen/Qwen3-4B-Instruct-2507`. Non-thinking only. |
+| `qwen3:8b` | 8.2B, Q4_K_M | 5.2 GB | `500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41` | Apache-2.0, `Qwen/Qwen3-8B`. Thinking on by default; the code switches it off. |
+
+- Existing models, for comparison: `qwen2.5:1.5b` (`65ec06548149`), `qwen2.5:7b` (`845dbda0ea48`).
+- The model card for Qwen3 8B warns against greedy decoding in thinking mode and recommends temperature 0.7 in non-thinking mode. This project uses temperature 0 with thinking off. Watch for repetition or empty answers; the 120 s read timeout bounds a loop.
+- Thinking cost on the same alert, cold load included: 17.6 s on, 6.9 s off (`qwen3:8b`).

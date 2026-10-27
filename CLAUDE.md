@@ -54,7 +54,7 @@ Fresh releases are where hijacks land. The LiteLLM PyPI compromise in March 2026
 
 ## Machine
 
-16 GB Mac. Models are Qwen2.5 1.5B (small) and 7B (large). Container runtime at 6 GB, 8 GB on Langfuse days. Do not pull larger models.
+16 GB Mac. Models start as Qwen2.5 1.5B (small) and 7B (large). On 2026-10-26 the learner lifted the fixed pair for a measured comparison: Qwen3 4B-instruct and 8B are allowed (Apache-2.0, recorded in `notes/models.md`). Any model must have an OSI license, be at most 8B parameters, and be recorded in `notes/models.md` after pulling. Container runtime at 6 GB, 8 GB on Langfuse days. Do not pull models larger than 8B.
 
 ## Plan before code
 

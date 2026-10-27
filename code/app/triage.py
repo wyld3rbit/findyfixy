@@ -103,6 +103,12 @@ class Reply(str):
 # Floating-point differences between runs or machines can still change a token,
 # so this is "repeatable in practice", not a guarantee.
 #
+# Thinking is off. Some models (Qwen3 8B) reason at length before they answer,
+# which took 17.6 s against 6.9 s with it off on the same alert, and a triage
+# tool should not make an on-call engineer wait for it. Models without a
+# thinking mode accept the setting and ignore it. Revisit it as an experiment
+# if accuracy matters more than latency.
+#
 # The timeout stops a hung model server from hanging the graph. It applies to
 # each read from the server, not to the whole call, so a long answer that keeps
 # streaming is not cut off, but a stalled one is. 120 s covers a cold load of
@@ -115,6 +121,7 @@ def answer_options() -> dict[str, Any]:
     """Keyword arguments for the answering `ChatOllama`. A fresh dict each call."""
     return {
         "temperature": ANSWER_TEMPERATURE,
+        "reasoning": False,
         "client_kwargs": {"timeout": ANSWER_TIMEOUT_S},
     }
 

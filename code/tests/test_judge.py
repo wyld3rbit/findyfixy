@@ -118,6 +118,7 @@ def test_default_chat_sets_temperature_zero_schema_and_timeout(monkeypatch):
     out = make_ollama_judge("m", timeout_s=7.5).ask("p", Answer)
     assert out.ok is True
     assert seen["temperature"] == 0
+    assert seen["reasoning"] is False  # thinking off: slower, and clashes with schema output
     assert seen["format"] == Answer.model_json_schema()
     assert seen["client_kwargs"] == {"timeout": 7.5}
     assert seen["model"] == "m"

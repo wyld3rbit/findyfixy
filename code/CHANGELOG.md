@@ -451,6 +451,12 @@ Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 - Tests: 502 pass. Breaks caught: dirty-tree refusal off, size limit off, answer not stored, trace marking everything supported, reason cap off. A new viewer test found a real crash (a record missing a metric); fixed.
 - The two temperature-0 reports made just before this change (made at commit 36f5999) have no traces, so they cannot be hand-checked. A fresh run is needed.
 
+### Model comparison setup (2026-10-26)
+
+- The learner lifted the fixed-pair rule for a measured comparison. Pulled `qwen3:4b-instruct` and `qwen3:8b` (both Apache-2.0 on the official cards); digests in `notes/models.md`. `CLAUDE.md` Machine section updated.
+- Thinking is now off for every answering model and the judge (`reasoning=False` in `answer_options()` and the judge's chat). `qwen3:8b` took 17.6 s with thinking and 6.9 s without on one alert (cold load included). Models without a thinking mode accept the setting. Tests: 502 pass; breaks caught: thinking left on for the answerer (6 fail), for the judge (1).
+- A 2 GB Colima VM was tested: ingest wrote 0 changes, the retrieval table matches Day 4 exactly (recall 0.93, 0.97, 1.00; MRR 0.823, 0.821, 0.781), Postgres used 60 MiB. The default in the Makefile is still 6 GB; changing it waits for the learner.
+
 ### Next
 
 - Day 1 drill and evidence line, if wanted.

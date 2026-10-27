@@ -93,6 +93,7 @@ def ollama_chat(timeout_s: float) -> ChatFn:
         llm = ChatOllama(
             model=model,
             temperature=0,
+            reasoning=False,
             format=json_schema,
             client_kwargs={"timeout": timeout_s},
         )

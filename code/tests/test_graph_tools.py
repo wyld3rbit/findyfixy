@@ -343,6 +343,7 @@ def test_ollama_ask_is_greedy_and_has_a_read_timeout(monkeypatch):
     monkeypatch.setattr(g, "ChatOllama", FakeChat)
     g.ollama_ask("m", "prompt")
     assert built["temperature"] == ANSWER_TEMPERATURE == 0
+    assert built["reasoning"] is False
     assert built["client_kwargs"] == {"timeout": ANSWER_TIMEOUT_S}
     assert built["format"]  # the schema is still passed
 
