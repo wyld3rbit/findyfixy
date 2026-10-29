@@ -20,4 +20,6 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install uv==0.13.1
+      # make check runs uv offline first, so fill the cache once with what it needs.
+      - run: uv run --no-project --with markdown --with pytest python -c "pass"
       - run: make check
