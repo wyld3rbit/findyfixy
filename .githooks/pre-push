@@ -2,9 +2,19 @@
 # Blocks a push whose commits contain PII or secrets, in files or in metadata,
 # or whose tree fails the project checks. Catches a commit made with --no-verify.
 # git passes the refs being pushed on stdin; the scanner reads them.
+# It also refuses any push whose commits touch blogs/, which is local only.
 set -e
 root=$(git rev-parse --show-toplevel)
-uv run --no-project python "$root/tools/scan_private.py" --pre-push "$1"
+refs=$(cat)
+printf '%s\n' "$refs" | while read -r _ local_sha _ remote_sha; do
+    case "$local_sha" in *[!0]*) ;; *) continue ;; esac
+    case "$remote_sha" in *[!0]*) range="$remote_sha..$local_sha" ;; *) range="$local_sha --not --remotes" ;; esac
+    if git log --name-only --format= $range | grep -q '^blogs/'; then
+        echo "blocked: a commit in this push touches blogs/, which is local only and must never be pushed." >&2
+        exit 1
+    fi
+done
+printf '%s\n' "$refs" | uv run --no-project python "$root/tools/scan_private.py" --pre-push "$1"
 if [ -f "$root/Makefile" ]; then
     make -C "$root" --no-print-directory check
     make -C "$root" --no-print-directory test
