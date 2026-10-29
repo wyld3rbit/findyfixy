@@ -54,3 +54,6 @@ Icon?
 
 # Words the privacy scanner must block (a name, say). Never committed.
 .private-terms
+
+# Local blog drafts. Never pushed.
+blogs/

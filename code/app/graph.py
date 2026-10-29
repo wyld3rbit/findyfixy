@@ -1,12 +1,12 @@
 """Day 1 router, Day 2 contract: small-model-first, with validated triage output.
 
 What it does
-    1. The small model (1.5B) returns a `Triage` record (app/triage.py). An
+    1. The small model returns a `Triage` record (app/triage.py). An
        invalid reply is re-asked once with the error text.
     2. If the record is valid and confidence is at or above the threshold,
        it is final.
     3. If the record is still invalid, or confidence is low, the large model
-       (7B) answers instead. That answer is final.
+       answers instead. That answer is final.
 
 Why this shape
     Most triage questions are routine. A small model answers them fast and

@@ -230,52 +230,61 @@
 
       <!-- built nodes -->
       <g class="node" id="n_q" data-status="built">
+        <title>In: The pasted incident report or log lines.&#10;Out: The same text, unchanged, to every step.&#10;Logic: Capped at 8000 characters. Treated as untrusted input.</title>
         <rect x="10" y="228" width="110" height="64" rx="8"/>
         <text class="t" x="65" y="256">Question</text>
         <text class="s" x="65" y="274">incident report</text>
       </g>
       <g class="node" id="n_inv" data-status="built">
+        <title>In: The question.&#10;Out: Evidence text from tool calls. May be empty.&#10;Logic: A tool-calling model decides whether to call get_recent_deploys. The loop has a turn cap. Every run pays for these model requests, even when no tool is called.</title>
         <rect x="142" y="228" width="130" height="64" rx="8"/>
         <text class="t" x="207" y="254">Investigate</text>
         <text class="s" x="207" y="271">tool-calling model</text>
         <text class="badge" x="207" y="286" id="b_inv"> </text>
       </g>
       <g class="node" id="n_small" data-status="built">
+        <title>In: The question, the recalled incidents and the evidence.&#10;Out: A triage record: severity, component, next action, confidence.&#10;Logic: Temperature 0, output constrained to the schema. If the record stays invalid after the retry, the result is empty and the route escalates.</title>
         <rect x="294" y="228" width="130" height="64" rx="8"/>
         <text class="t" x="359" y="254">Small model</text>
         <text class="s" x="359" y="271">answers first</text>
         <text class="badge" x="359" y="286" id="b_small"> </text>
       </g>
       <g class="node" id="n_val" data-status="built">
+        <title>In: The model's raw reply.&#10;Out: A checked triage record, or a typed error.&#10;Logic: Pydantic checks the severity value and the 0 to 1 confidence bound. An invalid reply is asked again once, with the error text added.</title>
         <rect x="446" y="228" width="130" height="64" rx="8"/>
         <text class="t" x="511" y="254">Validate</text>
         <text class="s" x="511" y="271">Pydantic, 1 retry</text>
         <text class="badge" x="511" y="286" id="b_val"> </text>
       </g>
       <g class="node" id="n_route" data-status="built">
+        <title>In: The triage record.&#10;Out: End the run, or escalate to the large model.&#10;Logic: A pure function, no model call. Escalates when the record is missing or confidence is below 0.7 (exactly 0.7 stays). If both models are the same name it always ends.</title>
         <polygon points="658,215 718,260 658,305 598,260"/>
         <text class="t" x="658" y="258">Route</text>
         <text class="badge" x="658" y="274" id="b_route"> </text>
       </g>
       <g class="node" id="n_large" data-status="built">
+        <title>In: The same question, recall and evidence as the small model.&#10;Out: The final triage record, overwriting the small model's.&#10;Logic: Same step as the small model. No tier above it, so an invalid reply fails loudly.</title>
         <rect x="593" y="388" width="130" height="64" rx="8"/>
         <text class="t" x="658" y="414">Large model</text>
         <text class="s" x="658" y="431">second tier, if set</text>
         <text class="badge" x="658" y="446" id="b_large"> </text>
       </g>
       <g class="node" id="n_rec" data-status="built">
+        <title>In: The final record.&#10;Out: Severity, component, next action, confidence and the model used.&#10;Logic: Shown as is. It is the only thing downstream steps read.</title>
         <rect x="780" y="228" width="130" height="64" rx="8"/>
         <text class="t" x="845" y="254">Triage record</text>
         <text class="s" x="845" y="271">severity, component</text>
         <text class="badge" x="845" y="286" id="b_rec"> </text>
       </g>
       <g class="node" id="n_recall" data-status="built">
+        <title>In: The question.&#10;Out: Up to 3 similar past incidents, each with severity, cause and fix, as prompt text.&#10;Logic: BM25 (keyword) and vector search each take their top 50. Reciprocal-rank fusion merges them, a cross-encoder reranker re-scores the best 30, and results collapse to one per incident. A database fault stops the run instead of being hidden.</title>
         <rect x="10" y="62" width="110" height="64" rx="8"/>
         <text class="t" x="65" y="86">Recall</text>
         <text class="s" x="65" y="103">hybrid + rerank</text>
         <text class="badge" x="65" y="119" id="b_recall"> </text>
       </g>
       <g class="node" id="n_tool" data-status="built">
+        <title>In: Service name and a number of hours.&#10;Out: JSON of that service's deploys in the window, newest first.&#10;Logic: Arguments are validated again inside the tool, so a direct call is as safe as one from a model.</title>
         <rect x="142" y="62" width="130" height="64" rx="8"/>
         <text class="t" x="207" y="86">Deploy tool</text>
         <text class="s" x="207" y="103">get_recent_deploys</text>
@@ -284,26 +293,31 @@
 
       <!-- planned nodes: one edit per build day flips data-status to built -->
       <g class="node" data-status="planned">
+        <title>Planned for Day 6. Not built, no behavior yet.</title>
         <rect x="294" y="70" width="130" height="56" rx="8"/>
         <text class="t" x="359" y="94">Tracing</text>
         <text class="s" x="359" y="112">Day 6, Langfuse</text>
       </g>
       <g class="node" data-status="planned">
+        <title>Planned for Day 7. Not built, no behavior yet.</title>
         <rect x="446" y="70" width="130" height="56" rx="8"/>
         <text class="t" x="511" y="94">Policy</text>
         <text class="s" x="511" y="112">Day 7, guardrails</text>
       </g>
       <g class="node" data-status="planned">
+        <title>Planned for Day 8. Not built, no behavior yet.</title>
         <rect x="598" y="70" width="130" height="56" rx="8"/>
         <text class="t" x="663" y="94">Gateway</text>
         <text class="s" x="663" y="112">Day 8, routing</text>
       </g>
-      <g class="node" data-status="planned">
+      <g class="node" data-status="built">
+        <title>In: The 30 golden cases, each with a reference severity, cause and fix.&#10;Out: Scores per metric with confidence intervals, a saved report, and a pass or fail gate.&#10;Logic: Runs every case through the real pipeline. A judge model from a different family scores severity, faithfulness, context recall, action quality and response relevancy. The gate fails if a score drops below its frozen floor (baseline mean minus 0.05) or the judge failure rate passes 0.15.</title>
         <rect x="10" y="396" width="130" height="56" rx="8"/>
         <text class="t" x="75" y="420">Evals</text>
-        <text class="s" x="75" y="438">Day 5, golden set</text>
+        <text class="s" x="75" y="438">golden set, gate</text>
       </g>
       <g class="node" data-status="planned">
+        <title>Planned for Day 9. Not built, no behavior yet.</title>
         <rect x="780" y="396" width="130" height="56" rx="8"/>
         <text class="t" x="845" y="420">Human review</text>
         <text class="s" x="845" y="438">Day 9, approval</text>
