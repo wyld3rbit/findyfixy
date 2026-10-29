@@ -44,15 +44,15 @@ A rerank pool that excludes the right candidate cannot be rescued. A larger corp
 
 ## Evidence
 
-40 queries: 30 meaning, 10 exact-token. k = 5, CPU, assistant run. The learner's run matched on every quality number.
+40 queries: 30 meaning, 10 exact-token. k = 5, CPU. The learner's run and the assistant's run matched on every quality number. Latencies below are the learner's run. The assistant's run gave 18, 18 and 356 ms.
 
 | Retriever | recall@5 | MRR | p50 ms |
 |---|---|---|---|
-| vector | 0.93 | 0.823 | 18 |
-| hybrid | 0.97 | 0.821 | 18 |
-| hybrid_rerank | 1.00 | 0.781 | 356 |
+| vector | 0.93 | 0.823 | 14 |
+| hybrid | 0.97 | 0.821 | 15 |
+| hybrid_rerank | 1.00 | 0.781 | 341 |
 
-Token queries: recall@5 0.70, 0.90, 1.00. Rerank costs about 340 ms per query against about 18 ms, 20 times the latency.
+Token queries: recall@5 0.70, 0.90, 1.00. Rerank costs about 341 ms per query against 14 ms, about 24 times the latency.
 
 ## Limits
 

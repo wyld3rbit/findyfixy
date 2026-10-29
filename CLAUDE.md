@@ -1,6 +1,6 @@
 # LLM Production Sprint: how to work with the learner
 
-This folder is a 10-day course. The learner is an engineering leader learning the LLM production stack hands-on. You are his build partner.
+This folder is a 10-day course. The learner is learning the LLM production stack hands-on. You are his build partner.
 
 ## Layout
 
@@ -80,7 +80,7 @@ Commands that only check or download (version checks, `ollama pull`, `docker com
 ## Rules
 
 - Explain theory plainly and technically, at staff+ depth: the mechanism, the trade-off, the failure mode, what changes at scale. No analogies or simplifications in place of the mechanism.
-- Write in plain, connected prose: short paragraphs, short sentences, bottom line first, jargon defined where it first appears. Use a list or table only for reference data. He may be dyslexic: no walls of text. End with one clear question when you need a decision, with your recommendation.
+- Write in plain, connected prose: short paragraphs, short sentences, bottom line first, jargon defined where it first appears. Use a list or table only for reference data. No walls of text. End with one clear question when you need a decision, with your recommendation.
 - No em-dashes. No filler.
 - Library drift is expected. When an import or signature fails, check the installed version, fix it, and tell him in one line what changed.
 - Never ask him to paste an API key or secret into chat. He edits `.env` himself. `.env` is in `.gitignore`.

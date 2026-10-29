@@ -149,6 +149,7 @@ How to read these:
 
 - All data is synthetic. Secrets go in `code/.env`, which is git-ignored.
 - `code/CHANGELOG.md` records what changed and what is open.
+- `docs/adr/` holds one decision record per phase, each with a diagram of the system at that phase. Every folder has a README.
 - Built with Claude Code.
 
 ## License
