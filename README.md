@@ -149,6 +149,12 @@ How to read these:
 - `code/CHANGELOG.md` records what changed and what is open.
 - Built with Claude Code.
 
+## Disclaimer
+
+This software and its documentation are provided "AS IS", without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, accuracy and non-infringement. It is a research prototype and is not intended for production use or for decisions about real systems, incidents, safety or finances. Model outputs can be wrong, and the measurements here describe one setup on synthetic data.
+
+To the maximum extent permitted by law, the author and contributors are not liable for any claim, damages or other liability, whether in contract, tort or otherwise, arising from or in connection with the software, its use or its documentation, including direct, indirect, incidental, special, consequential or other loss. You use it at your own risk and are responsible for reviewing, testing and securing anything you run. This section does not replace the warranty disclaimer and limitation of liability in sections 7 and 8 of `LICENSE`, which govern.
+
 ## License
 
 Apache-2.0. See `LICENSE` and `NOTICE`. Contributions are licensed under the same terms.
