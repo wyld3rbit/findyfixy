@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = (
     "README.md",
     "CLAUDE.md",
+    "CONTRIBUTING.md",
     "lessons/README.md",
     "notes/README.md",
     "record/README.md",

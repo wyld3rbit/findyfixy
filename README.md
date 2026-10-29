@@ -157,5 +157,5 @@ To the maximum extent permitted by law, the author and contributors are not liab
 
 ## License
 
-Apache-2.0. See `LICENSE` and `NOTICE`. Contributions are licensed under the same terms.
+Apache-2.0. See `LICENSE` and `NOTICE`. Contributions are licensed under the same terms; see `CONTRIBUTING.md`.
 
