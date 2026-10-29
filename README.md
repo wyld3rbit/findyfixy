@@ -153,4 +153,5 @@ How to read these:
 
 ## License
 
-To be added by the repository owner.
+Apache-2.0. See `LICENSE` and `NOTICE`. Contributions are licensed under the same terms.
+
