@@ -141,14 +141,16 @@ def scan_text(text: str, identity: Identity, terms: Iterable[str] = ()) -> list[
     # path rule instead. A generic CI account ("runner") is not a person and is
     # an ordinary word in the docs, so it is skipped too.
     name = identity.username
-    user = re.compile(rf"(?i)\b{re.escape(name)}\b") if len(name) >= 4 and name.lower() not in _GENERIC_ACCOUNTS else None
+    generic = name.lower() in _GENERIC_ACCOUNTS
+    home = "" if generic else identity.home   # the home of a CI account is /home/runner, which tests and docs name
+    user = re.compile(rf"(?i)\b{re.escape(name)}\b") if len(name) >= 4 and not generic else None
     found: list[tuple[int, str]] = []
     for number, line in enumerate(text.splitlines(), start=1):
         rules: set[str] = set()
         for m in _PATH.finditer(line):
             if (m.group(1) or m.group(2)).lower() not in _GENERIC_ACCOUNTS:
                 rules.add("local_path")
-        if identity.home and len(identity.home) > 3 and identity.home in line:
+        if home and len(home) > 3 and home in line:
             rules.add("identity")
         if sensitive_email and sensitive_email in line:
             rules.add("identity")
