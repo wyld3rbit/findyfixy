@@ -8,7 +8,7 @@ Paste an incident report. It returns:
 - A confidence, so a weak answer can be escalated to a larger model.
 - The most similar past incidents, found with hybrid search and used as context, with their severity and what fixed them.
 
-It runs on a 16 GB laptop with open-source parts. No data leaves the machine.
+It runs on 1 machine with 16 GB of memory provisioned, with open-source parts. No data leaves the machine.
 
 ## Quick start
 
