@@ -166,4 +166,4 @@ Apache-2.0. See `LICENSE` and `NOTICE`. Contributions are licensed under the sam
 
 ---
 
-Made by [wyld3rbit.ai](https://wyld3rbit.ai) with ❤️ in Seattle
+made with ❤️ in <img src="docs/space-needle.png" alt="Space Needle" height="20"> Seattle by [wyld3rbit.ai](https://wyld3rbit.ai)
