@@ -76,7 +76,7 @@ def problems() -> list[str]:
         if not render(n).strip():
             out.append(f"{lesson_file(n)}: renders to nothing")
 
-    for name in ["record/progress.json", *[lesson_file(n) for n in LESSON_NUMBERS]]:
+    for name in ["record/progress.json", *[f"lessons/{lesson_file(n)}" for n in LESSON_NUMBERS]]:
         if "—" in (ROOT / name).read_text():
             out.append(f"{name}: contains an em-dash")
     return out

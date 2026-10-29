@@ -69,6 +69,11 @@ Step 1 done: Postgres with pgvector, plus Adminer to look at it.
 
 Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
 
+### Lessons moved to lessons/, a README in every folder (2026-10-29)
+
+- `00-plan.md` and `d01.md` to `d10.md` moved from the repository root to `lessons/` with `git mv`, so history follows. `tools/lessons.py`, `tools/check.py`, `record/progress.json` and `CLAUDE.md` now name the new paths. The lesson text itself is unchanged. Earlier entries in this file name the old root paths on purpose.
+- Every folder has a short README that says what it is for. `tools/check_docs.py` now checks all of them for names that do not exist, and a test fails if a tracked README is left out of its list.
+
 ### State
 - Day 3 is complete in the tracker at 4 of 4. The drill was ticked at the learner's request with no answer (same as Day 2). Day 1's drill was skipped and its evidence line is still missing.
 - Everything up to commit `21b4c4a` is pushed to `origin/main`. This section is the only uncommitted change, unless git says otherwise. Check `git status`.

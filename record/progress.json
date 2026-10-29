@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-26",
+  "updated": "2026-10-29",
   "plannedStart": "2026-10-17",
   "plannedEnd": "2026-10-26",
   "countdownStart": "2026-10-17T18:51:00",
@@ -116,7 +116,8 @@
     {
       "date": "2026-10-26",
       "entry": "Day 5 closed in the tracker plan (gated). Final run: severity 0.77, action quality 0.92, faithfulness 0.79, context recall 0.93. Without recall severity falls to 0.17 and the gate fails on eight checks. Baseline frozen from the final run; README updated. Self-check items stay unticked by the learner's instruction."
-    }
+    },
+    {"date": "2026-10-29", "entry": "Lessons moved to lessons/ and a README added to every folder; the docs drift check now covers every README. Architecture page marks Evals built and gives each box an in, out and logic tooltip. make check passes with 38 tool tests; make test passed (552 passed, 14 deselected). Next: one decision record per phase in docs/adr/."}
   ],
   "decisions": [
     {
@@ -266,7 +267,7 @@
       "week": 1,
       "date": "2026-10-17",
       "title": "Setup and first graph",
-      "file": "d01.md",
+      "file": "lessons/d01.md",
       "outcome": "Small-model-first router escalating to a larger local model",
       "checks": [
         "5 answers tagged with model used",
@@ -285,7 +286,7 @@
       "week": 1,
       "date": "2026-10-18",
       "title": "Structured output and tools",
-      "file": "d02.md",
+      "file": "lessons/d02.md",
       "outcome": "Schema-validated triage; direct API vs MCP cost measured",
       "checks": [
         "10 of 10 outputs parse",
@@ -305,7 +306,7 @@
       "week": 1,
       "date": "2026-10-19",
       "title": "Memory I: ingestion",
-      "file": "d03.md",
+      "file": "lessons/d03.md",
       "outcome": "200 incidents chunked, embedded, in pgvector",
       "checks": [
         "About 800 chunks stored",
@@ -325,7 +326,7 @@
       "week": 1,
       "date": "2026-10-20",
       "title": "Memory II: hybrid retrieval",
-      "file": "d04.md",
+      "file": "lessons/d04.md",
       "outcome": "BM25 plus vector, RRF, rerank; recall@5 measured",
       "checks": [
         "Three-retriever table",
@@ -343,7 +344,7 @@
       "week": 1,
       "date": "2026-10-21",
       "title": "Evaluation as a gate",
-      "file": "d05.md",
+      "file": "lessons/d05.md",
       "outcome": "Golden set, RAGAS scores, CI gate",
       "checks": [
         "Baseline scores saved",
@@ -362,7 +363,7 @@
       "week": 2,
       "date": "2026-10-22",
       "title": "Observability",
-      "file": "d06.md",
+      "file": "lessons/d06.md",
       "outcome": "Langfuse traces with cost, latency, scores",
       "checks": [
         "Full trace tree visible",
@@ -377,7 +378,7 @@
       "week": 2,
       "date": "2026-10-23",
       "title": "Security by design",
-      "file": "d07.md",
+      "file": "lessons/d07.md",
       "outcome": "Action policy, credential broker, injection suite",
       "checks": [
         "0 of 20 attacks succeed",
@@ -392,7 +393,7 @@
       "week": 2,
       "date": "2026-10-24",
       "title": "Cost and context control",
-      "file": "d08.md",
+      "file": "lessons/d08.md",
       "outcome": "Gateway budgets; cost per run down with quality held",
       "checks": [
         "Lever table: cost and faithfulness",
@@ -407,7 +408,7 @@
       "week": 2,
       "date": "2026-10-25",
       "title": "Deploy and operate",
-      "file": "d09.md",
+      "file": "lessons/d09.md",
       "outcome": "API and demo screen in containers, approval gate, drift eval, shadow mode",
       "checks": [
         "compose up; demo screen returns a triage",
@@ -422,7 +423,7 @@
       "week": 2,
       "date": "2026-10-26",
       "title": "Capstone and show and tell",
-      "file": "d10.md",
+      "file": "lessons/d10.md",
       "outcome": "make demo, 3-minute live demo, 6 slides, one-page ADR",
       "checks": [
         "Fresh clone runs with make setup and make demo",

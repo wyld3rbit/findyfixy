@@ -4,7 +4,7 @@ This folder is a 10-day course. The learner is an engineering leader learning th
 
 ## Layout
 
-- `00-plan.md`, `d01.md` to `d10.md`: the lessons. Read them. Never edit them unless the learner asks.
+- `lessons/`: the lessons, `lessons/00-plan.md` and `lessons/d01.md` to `lessons/d10.md`. Read them. Never edit them unless the learner asks.
 - `tracker.html`: the page. Code only, no data. Do not edit unless he asks for a page change.
 - `record/progress.json`: the single record of status, plans and decisions (strict JSON). You maintain it. `code/CHANGELOG.md` stays the record of the code.
 - `tools/`: the tracker server, the lesson renderer and the validators. The lessons are the `.md` files; there is no generated copy. Start the page with `make ui` from this folder.
@@ -22,7 +22,7 @@ Run these from this folder. Show the command and its real output as evidence. A 
 ## When he says "start day N"
 
 0. From Day 2 on: warm-up first. Ask him to explain the previous day's lesson from memory in 3 to 5 lines, before any file is opened. Reply in one line: right, or the one thing he missed. Then continue.
-1. Read `dNN.md`.
+1. Read `lessons/dNN.md`.
 2. Give the day's outcome in one sentence.
 3. Walk the lab one step at a time. Show one step, then wait for him to say done.
 4. Explain each command in one line before he runs it.
@@ -91,7 +91,7 @@ Commands that only check or download (version checks, `ollama pull`, `docker com
 - If two corrections in a row have not fixed something, stop, say what you learned, and restart the step from a fresh plan instead of a third patch.
 - Before committing substantial code, run `/code-review`. A fresh agent that did not write it is not swayed by your reasoning.
 - No installs outside `code/`: never `brew install`, `pip install` (also `--user`), or `sudo`, and nothing into system or Homebrew Python. He already has uv, Python, Docker Compose and Ollama. Python lives in `code/.venv`: `uv add` and `uv run`, and `uvx` for a one-off tool. Services run as containers from compose files in `code/`.
-- Open source only. Every dependency must be OSI-licensed. Check the license before adding anything not in the bill of materials in `00-plan.md`, and tell him. Use the container runtime he already has. No Llama or Qwen2.5 3B/72B models. A hosted model API is allowed only for the optional Day 8 comparison.
+- Open source only. Every dependency must be OSI-licensed. Check the license before adding anything not in the bill of materials in `lessons/00-plan.md`, and tell him. Use the container runtime he already has. No Llama or Qwen2.5 3B/72B models. A hosted model API is allowed only for the optional Day 8 comparison.
 - Pin versions. Commit `uv.lock`. Never install `litellm` 1.82.7 or 1.82.8. Pin container image tags.
 - Before any push (only when he asks), re-read `README.md` against the code and the latest results and fix what drifted. `make check` rejects docs that name a make target or file that does not exist.
 - Docs hold no stale, redundant or wrong information, and the repo holds no needless files. Put numbers that change in `notes/` or a report, never in prose. Remove temporary artifacts you created (worktrees, scratch files) once merged.

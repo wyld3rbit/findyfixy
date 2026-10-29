@@ -5,8 +5,8 @@ worse than no doc, because the reader trusts it. These errors are mechanical,
 so a machine finds them. Judgment calls (is the prose still true?) stay with
 the person who changes the code; this only catches what can be proven wrong.
 
-Checked in README.md and CLAUDE.md (code/CHANGELOG.md is history, and the
-lessons are checked separately when they are revised):
+Checked in README.md, CLAUDE.md and the README of every folder (code/CHANGELOG.md
+is history, and the lessons are checked separately when they are revised):
 1. Every `make <target>` named in code is a target in the root Makefile.
 2. Every repository path named in code exists, except the few that are not in
    git on purpose (see ALLOWED_MISSING).
@@ -20,7 +20,21 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DOCS = ("README.md", "CLAUDE.md")
+DOCS = (
+    "README.md",
+    "CLAUDE.md",
+    "lessons/README.md",
+    "notes/README.md",
+    "record/README.md",
+    "tools/README.md",
+    ".githooks/README.md",
+    "code/README.md",
+    "code/app/README.md",
+    "code/tests/README.md",
+    "code/data/README.md",
+    "code/evals/README.md",
+    "code/docs/README.md",
+)
 
 # Paths a doc may name that are absent from a fresh clone on purpose: secrets
 # the user creates, and generated output that is git-ignored.
