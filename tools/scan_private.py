@@ -138,8 +138,10 @@ def scan_text(text: str, identity: Identity, terms: Iterable[str] = ()) -> list[
         if t.strip()
     ]
     # A short username would match ordinary words, so it is caught through the
-    # path rule instead.
-    user = re.compile(rf"(?i)\b{re.escape(identity.username)}\b") if len(identity.username) >= 4 else None
+    # path rule instead. A generic CI account ("runner") is not a person and is
+    # an ordinary word in the docs, so it is skipped too.
+    name = identity.username
+    user = re.compile(rf"(?i)\b{re.escape(name)}\b") if len(name) >= 4 and name.lower() not in _GENERIC_ACCOUNTS else None
     found: list[tuple[int, str]] = []
     for number, line in enumerate(text.splitlines(), start=1):
         rules: set[str] = set()
