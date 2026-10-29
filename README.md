@@ -163,3 +163,7 @@ To the maximum extent permitted by law, the author and contributors are not liab
 
 Apache-2.0. See `LICENSE` and `NOTICE`. Contributions are licensed under the same terms; see `CONTRIBUTING.md`.
 
+
+---
+
+Made by [wyld3rbit.ai](https://wyld3rbit.ai) with ❤️ in Seattle
