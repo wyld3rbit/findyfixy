@@ -1,4 +1,4 @@
-"""Day 5: score the triage agent's answers and gate a release on the scores.
+"""Day 5: score the agent's answers and gate a release on the scores.
 
 What it does
     1. Runs the triage graph once per golden case, with that case's own

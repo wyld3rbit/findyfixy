@@ -1,6 +1,6 @@
 # FindyFixy
 
-FindyFixy is an incident-triage assistant that runs entirely on your machine.
+FindyFixy is an event detection, determination and mitigation agent that runs entirely on your machine.
 
 Paste an incident report. It returns:
 

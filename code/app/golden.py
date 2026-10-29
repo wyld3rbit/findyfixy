@@ -1,4 +1,4 @@
-"""Day 5: the golden set. 30 holdout cases for scoring the triage agent.
+"""Day 5: the golden set. 30 holdout cases for scoring the agent.
 
 What it does
     Builds `data/golden.jsonl`: 30 cases, each a pasted incident report

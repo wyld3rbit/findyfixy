@@ -5,7 +5,7 @@
 ## What you get out of it
 
 1. **Every tool in the stack, built hands-on.** LangGraph, Ollama, hybrid-search memory, RAGAS, Langfuse, direct APIs over MCP, a token-exchange credential broker. You will have built each one and measured it.
-2. **A working repo.** A small autonomous incident-triage agent, end to end: design, memory, evals, guardrails, tracing, cost control, deploy. Portfolio-ready.
+2. **A working repo.** A small autonomous event detection, determination and mitigation agent, end to end: design, memory, evals, guardrails, tracing, cost control, deploy. Portfolio-ready.
 3. **A show and tell.** One command starts the whole stack. A demo screen, a 3-minute script and 6 slides, built on Day 10.
 4. **VP-level talking points.** Each day ends with one interview drill. You answer as "what I hold a team to", backed by a number you produced.
 5. **An architecture decision record.** One page in Larson's format: diagnosis, guiding policies, coherent actions. Usable in a system-design round.

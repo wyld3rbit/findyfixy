@@ -1,6 +1,6 @@
 # Code
 
-FindyFixy, an incident-triage assistant, and the evaluation harness around it. It runs on one laptop with open-source models and synthetic data only.
+FindyFixy, an event detection, determination and mitigation agent, and the evaluation harness around it. It runs on one laptop with open-source models and synthetic data only.
 
 - `code/app/` is the Python package. `code/app/README.md` maps its modules.
 - `code/tests/` holds the product tests, which use fakes and need no model or database.
