@@ -34,6 +34,7 @@ DOCS = (
     "code/data/README.md",
     "code/evals/README.md",
     "code/docs/README.md",
+    "docs/adr/README.md",
 )
 
 # Paths a doc may name that are absent from a fresh clone on purpose: secrets

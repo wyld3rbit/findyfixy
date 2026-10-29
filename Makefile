@@ -6,7 +6,7 @@
 # its own, so the real commands stay readable in one place each.
 
 .DEFAULT_GOAL := help
-.PHONY: help setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-negative case golden ingest audit tracker ui check
+.PHONY: help adr-snapshot setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-negative case golden ingest audit tracker ui check
 
 help:
 	@echo "First time:       make setup"
@@ -18,6 +18,7 @@ help:
 	@echo "Freeze baseline:  make eval-freeze REPORT=reports/eval-<timestamp>.json"
 	@echo "Tracker page:     make tracker"
 	@echo "Landing page:     make ui   (tracker with the visualization embedded)"
+	@echo "Decision records:  make adr-snapshot   (redraw the diagram in each ADR)"
 	@echo "Before a commit:  make check   make audit"
 
 # Product targets: see code/Makefile for what each one runs.
@@ -31,6 +32,10 @@ case:
 
 eval-freeze:
 	$(MAKE) -C code eval-freeze REPORT=$(REPORT)
+
+# One architecture picture per phase for the ADRs in docs/adr/, drawn from the live page.
+adr-snapshot:
+	python3 tools/adr_snapshot.py
 
 # The tracker page at http://127.0.0.1:8766. Ctrl-C stops it.
 tracker:

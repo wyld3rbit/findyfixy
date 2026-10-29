@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 20 940 450" width="940" height="450" role="img" aria-label="Architecture at the close of Day 3. Solid is built. Dashed is planned.">
+<style>
+.node rect, .node polygon { fill: #0b1220; stroke: #5cc8ff; stroke-width: 1.5; }
+.node .t { fill: #dbe6ff; font-size: 14px; font-weight: 600; text-anchor: middle; }
+.node .s, .node .badge { fill: #8da2c8; font-size: 11px; text-anchor: middle; }
+.node[data-status=planned] rect { stroke: #7f8fb0; stroke-dasharray: 5 4; }
+.node[data-status=planned] .t, .node[data-status=planned] .s { fill: #7f8fb0; }
+.edge { fill: none; stroke: #5b6f99; stroke-width: 2; marker-end: url(#arrow); }
+.edge.tool { stroke-dasharray: 5 5; stroke: #fbbf24; marker-end: url(#arrow-tool); }
+.edge-label { fill: #8da2c8; font-size: 11px; text-anchor: middle; }
+.caption { fill: #dbe6ff; font-size: 14px; font-weight: 600; }
+text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,1 L10,5 L0,9 z" fill="#5b6f99"/></marker><marker id="arrow-tool" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,1 L10,5 L0,9 z" fill="#fbbf24"/></marker></defs>
+<rect x="0" y="20" width="940" height="450" fill="#0b1220"/>
+<text class="caption" x="14" y="44">Architecture at the close of Day 3. Solid is built. Dashed is planned.</text>
+<path id="e_q_inv" class="edge" d="M120,260 L142,260"/>
+<path id="e_inv_small" class="edge" d="M272,260 L294,260"/>
+<path id="e_small_val" class="edge" d="M424,260 L446,260"/>
+<path id="e_val_route" class="edge" d="M576,260 L598,260"/>
+<path id="e_retry" class="edge" d="M511,292 C511,352 359,352 359,292"/>
+<path id="e_route_rec" class="edge" d="M718,260 L780,260"/>
+<path id="e_route_large" class="edge" d="M658,305 L658,388"/>
+<path id="e_large_rec" class="edge" d="M723,405 C780,405 845,350 845,292"/>
+<path id="e_inv_tool" class="edge tool" d="M207,228 L207,126"/>
+<text class="edge-label" x="435" y="366">retry with the error text (once)</text>
+<text class="edge-label" x="749" y="250">confident</text>
+<text class="edge-label" x="745" y="352">low confidence or invalid</text>
+<text class="edge-label" x="749" y="250">confident</text>
+<g class="node" id="n_q" data-status="built">
+        <rect x="10" y="228" width="110" height="64" rx="8"/>
+        <text class="t" x="65" y="256">Question</text>
+        <text class="s" x="65" y="274">incident report</text>
+      </g>
+<g class="node" id="n_inv" data-status="built">
+        <rect x="142" y="228" width="130" height="64" rx="8"/>
+        <text class="t" x="207" y="254">Investigate</text>
+        <text class="s" x="207" y="271">tool-calling model</text>
+        <text class="badge" x="207" y="286" id="b_inv"> </text>
+      </g>
+<g class="node" id="n_small" data-status="built">
+        <rect x="294" y="228" width="130" height="64" rx="8"/>
+        <text class="t" x="359" y="254">Small model</text>
+        <text class="s" x="359" y="271">answers first</text>
+        <text class="badge" x="359" y="286" id="b_small"> </text>
+      </g>
+<g class="node" id="n_val" data-status="built">
+        <rect x="446" y="228" width="130" height="64" rx="8"/>
+        <text class="t" x="511" y="254">Validate</text>
+        <text class="s" x="511" y="271">Pydantic, 1 retry</text>
+        <text class="badge" x="511" y="286" id="b_val"> </text>
+      </g>
+<g class="node" id="n_route" data-status="built">
+        <polygon points="658,215 718,260 658,305 598,260"/>
+        <text class="t" x="658" y="258">Route</text>
+        <text class="badge" x="658" y="274" id="b_route"> </text>
+      </g>
+<g class="node" id="n_large" data-status="built">
+        <rect x="593" y="388" width="130" height="64" rx="8"/>
+        <text class="t" x="658" y="414">Large model</text>
+        <text class="s" x="658" y="431">second tier, if set</text>
+        <text class="badge" x="658" y="446" id="b_large"> </text>
+      </g>
+<g class="node" id="n_rec" data-status="built">
+        <rect x="780" y="228" width="130" height="64" rx="8"/>
+        <text class="t" x="845" y="254">Triage record</text>
+        <text class="s" x="845" y="271">severity, component</text>
+        <text class="badge" x="845" y="286" id="b_rec"> </text>
+      </g>
+<g class="node" id="n_tool" data-status="built">
+        <rect x="142" y="62" width="130" height="64" rx="8"/>
+        <text class="t" x="207" y="86">Deploy tool</text>
+        <text class="s" x="207" y="103">get_recent_deploys</text>
+        <text class="badge" x="207" y="119" id="b_tool"> </text>
+      </g>
+<g class="node" data-status="planned">
+        <rect x="294" y="70" width="130" height="56" rx="8"/>
+        <text class="t" x="359" y="94">Tracing</text>
+        <text class="s" x="359" y="112">Day 6, Langfuse</text>
+      </g>
+<g class="node" data-status="planned">
+        <rect x="446" y="70" width="130" height="56" rx="8"/>
+        <text class="t" x="511" y="94">Policy</text>
+        <text class="s" x="511" y="112">Day 7, guardrails</text>
+      </g>
+<g class="node" data-status="planned">
+        <rect x="598" y="70" width="130" height="56" rx="8"/>
+        <text class="t" x="663" y="94">Gateway</text>
+        <text class="s" x="663" y="112">Day 8, routing</text>
+      </g>
+<g class="node" data-status="planned">
+        <rect x="10" y="396" width="130" height="56" rx="8"/>
+        <text class="t" x="75" y="420">Evals</text>
+        <text class="s" x="75" y="438">Day 5</text>
+      </g>
+<g class="node" data-status="planned">
+        <rect x="780" y="396" width="130" height="56" rx="8"/>
+        <text class="t" x="845" y="420">Human review</text>
+        <text class="s" x="845" y="438">Day 9, approval</text>
+      </g>
+</svg>

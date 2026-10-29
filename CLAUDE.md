@@ -8,6 +8,7 @@ This folder is a 10-day course. The learner is an engineering leader learning th
 - `tracker.html`: the page. Code only, no data. Do not edit unless he asks for a page change.
 - `record/progress.json`: the single record of status, plans and decisions (strict JSON). You maintain it. `code/CHANGELOG.md` stays the record of the code.
 - `tools/`: the tracker server, the lesson renderer and the validators. The lessons are the `.md` files; there is no generated copy. Start the page with `make ui` from this folder.
+- `docs/adr/`: one architecture decision record per phase, each with a diagram of the system at that phase. Written when the phase closes.
 - `code/`: the code. Everything you build goes here.
 
 ## The checks
@@ -40,6 +41,7 @@ He runs the course with you alone. Keep the record true without being asked.
 
 - **When a self-check item passes**, add its index (0-based, in the order listed) to that day's `done` in `record/progress.json`. Only after the evidence is in `notes/dayN.md`.
 - **At the end of each session**, append one log entry to `record/progress.json`: `{"date": "YYYY-MM-DD", "entry": "<what was done, one or two sentences, with the numbers>"}`. Set `updated` to today. Run `date` for the date; never guess it.
+- **At the close of each day**, write that day's ADR in `docs/adr/` in the shape described in `docs/adr/README.md`, add its row to the index, add the day to `PHASES` in `tools/adr_snapshot.py`, and run `make adr-snapshot`. `make check` fails if the page and the latest phase disagree.
 - **If he changes the schedule**, update each day's `date`, `plannedEnd` and `countdownEnd`.
 - **If he asks to change a lesson**, edit the `.md` file. The server renders it on request.
 - **Before every commit that touches these files**, `make check` must pass. Fix anything it reports.
