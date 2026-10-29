@@ -1,5 +1,9 @@
 # FindyFixy
 
+![The live visualizer: a scripted run escalates from the small model to the large model](docs/demo.gif)
+
+*A scripted run in the visualizer (`make console`, fake mode, no model). The dot is the request moving through each step.*
+
 FindyFixy is a prototype that tests whether all three levels of AI-assisted engineering are reachable today with an open-source harness. At Level 1 an AI writes code, and humans review, deploy and maintain it. At Level 2 the AI also reviews the code with agent judges or deterministic rule sets and deploys it once a human says OK, while humans respond to incidents with AI-augmented discovery. At Level 3 the AI also rolls back and rolls forward, writes postmortems and makes any change a human problem-solver would, under the same kind of risk controls.
 
 The harness is the part being built: the evaluations, gates, guardrails, tracing and cost limits that decide what an AI system may do on its own. FindyFixy is the system inside it, an event detection, determination and mitigation agent. An engineer pastes in an incident report, and it returns a severity, the likely component and a first action, along with the most similar past incidents and what fixed them. It can route a weak answer to a larger model, though the default setup uses one model, because the measurements below showed that a model's own confidence did not predict its errors.
