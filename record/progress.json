@@ -117,7 +117,14 @@
       "date": "2026-10-26",
       "entry": "Day 5 closed in the tracker plan (gated). Final run: severity 0.77, action quality 0.92, faithfulness 0.79, context recall 0.93. Without recall severity falls to 0.17 and the gate fails on eight checks. Baseline frozen from the final run; README updated. Self-check items stay unticked by the learner's instruction."
     },
-    {"date": "2026-10-29", "entry": "Lessons moved to lessons/ and a README added to every folder; the docs drift check now covers every README. Architecture page marks Evals built and gives each box an in, out and logic tooltip. make check passes with 38 tool tests; make test passed (552 passed, 14 deselected). Next: one decision record per phase in docs/adr/."}
+    {
+      "date": "2026-10-29",
+      "entry": "Lessons moved to lessons/ and a README added to every folder; the docs drift check now covers every README. Architecture page marks Evals built and gives each box an in, out and logic tooltip. make check passes with 38 tool tests; make test passed (552 passed, 14 deselected). Next: one decision record per phase in docs/adr/."
+    },
+    {
+      "date": "2026-10-29",
+      "entry": "Repo hardening: the pre-commit and pre-push hooks now refuse anything under blogs/; a disclaimer and a closing line were added to the README, with a GIF of the visualizer at the top; a pull request template, CONTRIBUTING.md and a check workflow were added (green after three fixes: a warmed uv cache, two generated paths allowed in the docs check, and the privacy scan no longer treats the CI account name runner as personal data); main is protected by a ruleset that requires a pull request with 1 approval and the check workflow, with repository admins able to bypass. 552 product tests passed at the last push. Local blog drafts for parts 02 to 05 were written and fact-checked. Next: Day 6, observability."
+    }
   ],
   "decisions": [
     {
