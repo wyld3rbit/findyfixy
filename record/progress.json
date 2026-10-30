@@ -127,7 +127,7 @@
     },
     {
       "date": "2026-10-30",
-      "entry": "README gif replaced with a captured live run of the visualizer (recall, deploy tool, small model, forced escalation to Qwen3 8B). Recorded after a warm-up run, because a cold console spent about three quarters of the clip loading the reranker; 18.7 s, 665 KB, the long waits sped up. Re-record it on Day 10 once the dashed boxes are built. Next: Day 6, observability."
+      "entry": "README gif replaced with a captured live run of the visualizer (recall, deploy tool, small model, forced escalation to Qwen3 8B). Recorded after a warm-up run, because a cold console spent about three quarters of the clip loading the reranker; 18.7 s, 665 KB, the long waits sped up. Re-record it on Day 10 once the dashed boxes are built. Next: Day 6, observability. The README was cut to 49 lines (run it, try it, disclaimer, license) at the learner's request; PR #2 is open and awaiting his approval. Rule agreed: ask before circumventing any permission block or ruleset, and use a branch and PR for main."
     }
   ],
   "decisions": [
