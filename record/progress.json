@@ -1,9 +1,9 @@
 {
-  "updated": "2026-11-08",
+  "updated": "2026-11-09",
   "plannedStart": "2026-10-17",
-  "plannedEnd": "2026-10-26",
+  "plannedEnd": "2026-11-17",
   "countdownStart": "2026-10-17T18:51:00",
-  "countdownEnd": "2026-10-26T23:59:59",
+  "countdownEnd": "2026-11-17T23:59:59",
   "log": [
     {
       "date": "2026-10-17",
@@ -274,6 +274,13 @@
       "decision": "Freeze the baseline from the final-setup run (commit 9a4d12c): floors at the mean minus 0.05, failure-rate cap 0.15. The assistant hand-checked three cases at the learner's request; the learner's own check is still open.",
       "rejected": "Freezing from a fresh run, or before any hand-check",
       "why": "The baseline should be exactly the numbers that were reviewed. The check found the judge fair on action quality and context recall and noisy on faithfulness, which is recorded so nobody over-reads that measure."
+    },
+    {
+      "date": "2026-11-09",
+      "day": 5,
+      "decision": "The harness is the product and FindyFixy is the app it is tested on. Day 5 moves the eval gate into a harness package behind a SystemUnderTest interface, with FindyFixy as the first consumer. Each later day builds its control as a harness component.",
+      "rejected": "Keep each control inside the app, as the lessons build it",
+      "why": "A control wired to one app's types cannot be reused or shipped. The articles now lead with what the harness gains."
     }
   ],
   "days": [
@@ -299,7 +306,7 @@
     {
       "n": 2,
       "week": 1,
-      "date": "2026-10-18",
+      "date": "2026-10-20",
       "title": "Structured output and tools",
       "file": "lessons/d02.md",
       "outcome": "Schema-validated triage; direct API vs MCP cost measured",
@@ -319,7 +326,7 @@
     {
       "n": 3,
       "week": 1,
-      "date": "2026-10-19",
+      "date": "2026-10-21",
       "title": "Memory I: ingestion",
       "file": "lessons/d03.md",
       "outcome": "200 incidents chunked, embedded, in pgvector",
@@ -339,7 +346,7 @@
     {
       "n": 4,
       "week": 1,
-      "date": "2026-10-20",
+      "date": "2026-10-25",
       "title": "Memory II: hybrid retrieval",
       "file": "lessons/d04.md",
       "outcome": "BM25 plus vector, RRF, rerank; recall@5 measured",
@@ -357,26 +364,23 @@
     {
       "n": 5,
       "week": 1,
-      "date": "2026-10-21",
+      "date": "2026-11-09",
       "title": "Evaluation as a gate",
       "file": "lessons/d05.md",
-      "outcome": "Golden set, RAGAS scores, CI gate",
+      "outcome": "Eval gate as a harness component, FindyFixy as its first consumer, attested CI gate on main",
       "checks": [
-        "Baseline scores saved",
-        "pytest passes on main, fails without retrieval",
+        "Harness never imports the app; architecture test fails when it does",
+        "Saved final run passes and no-recall control fails with the new code",
+        "CI fails an answer-affecting change without a matching passing attestation",
         "Hand-checked 3 judge scores",
         "Drill under 90s"
       ],
-      "done": [],
-      "plan": {
-        "status": "gated",
-        "file": "notes/plans/day5-eval-harness.md"
-      }
+      "done": []
     },
     {
       "n": 6,
       "week": 2,
-      "date": "2026-10-22",
+      "date": "2026-11-11",
       "title": "Observability",
       "file": "lessons/d06.md",
       "outcome": "Langfuse traces with cost, latency, scores",
@@ -391,7 +395,7 @@
     {
       "n": 7,
       "week": 2,
-      "date": "2026-10-23",
+      "date": "2026-11-12",
       "title": "Security by design",
       "file": "lessons/d07.md",
       "outcome": "Action policy, credential broker, injection suite",
@@ -406,7 +410,7 @@
     {
       "n": 8,
       "week": 2,
-      "date": "2026-10-24",
+      "date": "2026-11-13",
       "title": "Cost and context control",
       "file": "lessons/d08.md",
       "outcome": "Gateway budgets; cost per run down with quality held",
@@ -421,7 +425,7 @@
     {
       "n": 9,
       "week": 2,
-      "date": "2026-10-25",
+      "date": "2026-11-16",
       "title": "Deploy and operate",
       "file": "lessons/d09.md",
       "outcome": "API and demo screen in containers, approval gate, drift eval, shadow mode",
@@ -436,7 +440,7 @@
     {
       "n": 10,
       "week": 2,
-      "date": "2026-10-26",
+      "date": "2026-11-17",
       "title": "Capstone and show and tell",
       "file": "lessons/d10.md",
       "outcome": "make demo, 3-minute live demo, 6 slides, one-page ADR",

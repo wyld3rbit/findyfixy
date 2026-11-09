@@ -549,7 +549,14 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 - Baseline frozen with `make eval-freeze` from that report: `code/evals/baseline.json`, floors at the mean minus 0.05, failure-rate cap 0.15. The gate passes on its own source run and fails the control. Tests that start servers (tools and console) ran during the work, so latency in the baseline's provenance is not gated.
 - Open: the answering quality of the router with two Qwen3 tiers (not tested); the Colima memory default and the loopback-binding test (wrap-up); subpackage moves (wrap-up).
 
+### One source of truth per day, one docs folder (2026-11-09)
+
+- `notes/day1.md` to `notes/day4.md` were folded, word for word, into the Results sections of `lessons/d01.md` to `lessons/d04.md`, and `notes/evidence.md` into each lesson's Evidence section. `notes/models.md` moved to `record/models.md`. `notes/` is gone. Earlier entries in this file name the old paths on purpose.
+- The root `docs/` folder (ADRs, `demo.gif`, `space-needle.png`) moved into `code/docs/` with `git mv`. `tools/adr_snapshot.py` now writes to `code/docs/adr/img/`; a re-run produced identical diagrams.
+- The tracker's per-day `plan` field, its check in `tools/check.py` and its line on the page were removed: the plan now lives in the lesson's Build section.
+- `lessons/d05.md` was rewritten for the harness focus: the eval gate moves into a `harness/` package behind a `SystemUnderTest` interface, with an attested CI gate on `main`. Not built yet.
+- Checks: `make check` OK (45 tracker tests), `make test` 552 passed, `make adr-snapshot` no diff, no broken relative links in the ADRs and READMEs.
+
 ### Next
 
-- Day 1 drill and evidence line, if wanted.
-- Day 2: run it live, then tools (direct vs MCP) and the measurement table.
+- Day 5 build, step 1: the `harness/eval/` package and the architecture test (`lessons/d05.md`).

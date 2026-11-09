@@ -1,7 +1,7 @@
 # ADR 0002: Validate every model output and every tool argument
 
 Status: accepted. Written 2026-10-29, after the phase closed, from the phase notes, the changelog and the decision log.
-Phase: Day 2. Code at close: commit `5262b5b`. Run data: [notes/day2.md](../../notes/day2.md).
+Phase: Day 2. Code at close: commit `5262b5b`. Run data: the Results section of [lessons/d02.md](../../../lessons/d02.md).
 
 ## Decision
 

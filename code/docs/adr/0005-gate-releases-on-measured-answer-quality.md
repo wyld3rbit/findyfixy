@@ -1,7 +1,7 @@
 # ADR 0005: Gate releases on measured answer quality
 
 Status: accepted. Written 2026-10-29, after the phase closed, from the phase notes, the changelog and the decision log.
-Phase: Day 5. Code at close: commit `1e7f27a`. Run data: the Day 5 entries of [code/CHANGELOG.md](../../code/CHANGELOG.md), and `record/progress.json`. There is no `notes/day5.md`.
+Phase: Day 5. Code at close: commit `1e7f27a`. Run data: the Day 5 entries of [code/CHANGELOG.md](../../CHANGELOG.md), and `record/progress.json`. There is no `notes/day5.md`.
 
 ## Decision
 

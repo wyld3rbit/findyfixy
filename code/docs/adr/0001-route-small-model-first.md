@@ -1,7 +1,7 @@
 # ADR 0001: Route on a small model first and distrust its confidence
 
 Status: accepted. Written 2026-10-29, after the phase closed, from the phase notes, the changelog and the decision log.
-Phase: Day 1. Code at close: commit `853532b`. Run data: [notes/day1.md](../../notes/day1.md).
+Phase: Day 1. Code at close: commit `853532b`. Run data: the Results section of [lessons/d01.md](../../../lessons/d01.md).
 
 ## Decision
 

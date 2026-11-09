@@ -1,6 +1,6 @@
 # FindyFixy
 
-![The visualizer on a live run: recall, the deploy-lookup tool, the small model, then the large model](docs/demo.gif)
+![The visualizer on a live run: recall, the deploy-lookup tool, the small model, then the large model](code/docs/demo.gif)
 
 *A live run in the visualizer (`make console`, real models through Ollama, escalation forced). The waiting stretches are sped up; the console was warmed first.*
 
@@ -46,4 +46,4 @@ Apache-2.0. See `LICENSE` and `NOTICE`. Contributions are licensed under the sam
 
 ---
 
-made with ❤️ in <img src="docs/space-needle.png" alt="Space Needle" height="20"> Seattle by [wyld3rbit.ai](https://wyld3rbit.ai)
+made with ❤️ in <img src="code/docs/space-needle.png" alt="Space Needle" height="20"> Seattle by [wyld3rbit.ai](https://wyld3rbit.ai)

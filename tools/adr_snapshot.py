@@ -20,7 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "code" / "docs" / "architecture.html"
-OUT = ROOT / "docs" / "adr" / "img"
+OUT = ROOT / "code" / "docs" / "adr" / "img"
 
 # The phase in which each node first existed. A node absent here is planned.
 FIRST_BUILT = {

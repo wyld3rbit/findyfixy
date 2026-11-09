@@ -33,7 +33,7 @@ case:
 eval-freeze:
 	$(MAKE) -C code eval-freeze REPORT=$(REPORT)
 
-# One architecture picture per phase for the ADRs in docs/adr/, drawn from the live page.
+# One architecture picture per phase for the ADRs in code/docs/adr/, drawn from the live page.
 adr-snapshot:
 	python3 tools/adr_snapshot.py
 

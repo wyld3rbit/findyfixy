@@ -1,5 +1,5 @@
 # Lessons
 
-The course text for the ten-day build. `lessons/00-plan.md` is the plan and the bill of materials. `lessons/d01.md` to `lessons/d10.md` are one lesson per day, each with an outcome, a concept, a lab, a self-check and a drill question.
+The single source of truth for each day of the build. `lessons/00-plan.md` is the overall plan and the bill of materials. `lessons/d01.md` to `lessons/d10.md` hold one day each: outcome, concept, build steps, self-check and drill, then the measured results and the evidence line once the day has run.
 
-These files are the course as written. They change only when a statement is wrong about what was built, and only on request. The tracker (`make ui`) renders them from this folder. What was done lives in `record/progress.json`, the measurements in `notes/`, and the code in `code/`.
+From Day 5 on, a lesson's outcome, build steps and self-check are rewritten at the start of its day to match what is really built, and approved before building. Days 1 to 4 keep their original text, with their results added below it. The tracker (`make ui`) renders these files. Status and decisions live in `record/progress.json`, and the code in `code/`.

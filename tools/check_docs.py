@@ -25,7 +25,6 @@ DOCS = (
     "CLAUDE.md",
     "CONTRIBUTING.md",
     "lessons/README.md",
-    "notes/README.md",
     "record/README.md",
     "tools/README.md",
     ".githooks/README.md",
@@ -35,7 +34,7 @@ DOCS = (
     "code/data/README.md",
     "code/evals/README.md",
     "code/docs/README.md",
-    "docs/adr/README.md",
+    "code/docs/adr/README.md",
 )
 
 # Paths a doc may name that are absent from a fresh clone on purpose: secrets
