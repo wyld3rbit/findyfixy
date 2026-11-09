@@ -2,7 +2,8 @@
 
 FindyFixy, an event detection, determination and mitigation agent, and the evaluation harness around it. It runs on 1 machine with 16 GB of memory provisioned, with open-source models and synthetic data only.
 
-- `code/app/` is the Python package. `code/app/README.md` maps its modules.
+- `code/app/` is the FindyFixy package. `code/app/README.md` maps its modules.
+- `code/harness/` is the evaluation harness. It never imports the app. `code/harness/README.md` explains the seam.
 - `code/tests/` holds the product tests, which use fakes and need no model or database.
 - `code/data/` holds the synthetic data the system reads.
 - `code/evals/` holds the frozen evaluation baseline.

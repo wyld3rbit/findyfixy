@@ -6,7 +6,7 @@ What it does
     3. Validates the raw reply with Pydantic in OUR code, retries once with the
        validation error in the prompt, then raises `JudgeError`.
 
-Why it copies the triage pattern (app/triage.py `ask_validated`)
+Why it copies the validate-retry pattern of FindyFixy's triage (`ask_validated`)
     Constrained decoding guarantees shape, not meaning. The chat function
     returns raw text, so a bad reply fails here with a readable Pydantic
     message instead of inside a client library. That message is what the

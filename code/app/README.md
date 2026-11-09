@@ -15,8 +15,9 @@ The `code/app/` package. Dependencies point inward: only entry points import the
 - `code/app/incidents.py`: the small hand-written incident bank.
 
 **Evaluation**
-- `code/app/golden.py`, `code/app/judge.py` and `code/app/metrics.py`: the golden set, the judge seam and the metrics.
-- `code/app/eval_answers.py`, `code/app/eval_report.py`, `code/app/eval_stats.py` and `code/app/eval_provenance.py`: the answer evaluation, its reports and gate, its statistics and its provenance stamp.
+- `code/app/golden.py`: the golden set, built from the corpus.
+- `code/app/eval_adapter.py`: FindyFixy as a system under test for the harness in `code/harness/`: holdout recall, the severity label and the twin data.
+- `code/app/eval_answers.py`: the answer evaluation's entry point. It builds the live adapter and hands it to the harness command line.
 - `code/app/eval_queries.py` and `code/app/eval_retrieval.py`: the labelled queries and the retrieval evaluation.
 
 **Entry points and wiring**

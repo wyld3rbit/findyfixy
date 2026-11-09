@@ -1,4 +1,4 @@
-"""Tests for the judge seam (app/judge.py), with a fake `chat`. No model.
+"""Tests for the judge seam (harness/eval/judge.py), with a fake `chat`. No model.
 
 What these tests cover
     Validation in code, one retry that carries the validation error, a bounded
@@ -15,7 +15,7 @@ import json
 import pytest
 from pydantic import BaseModel
 
-from app.judge import JudgeError, make_ollama_judge
+from harness.eval.judge import JudgeError, make_ollama_judge
 
 
 class Answer(BaseModel):

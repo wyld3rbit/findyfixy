@@ -13,7 +13,7 @@ What it does
     ours and has no published counterpart.
 
 Seams
-    `judge` is a `Judge` (app/judge.py). `embed` is an `Embedder`. Both are
+    `judge` is a `Judge` (harness/eval/judge.py). `embed` is an `Embedder`. Both are
     arguments, so tests use fakes and nothing loads at import time.
 
 Failure model
@@ -51,10 +51,11 @@ from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, Field
 
-from app.judge import Judge, JudgeError
+from harness.eval.judge import Judge, JudgeError
 
-# Same shape as app.ingest.Embedder. Redefined so this module does not import
-# psycopg and pgvector just to name a function type.
+# texts -> one vector per text. The consuming app supplies it (FindyFixy
+# passes its sentence-transformers embedder). A plain function type, so this
+# module imports no embedding library.
 Embed = Callable[[Sequence[str]], list[list[float]]]
 
 

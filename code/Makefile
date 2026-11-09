@@ -92,8 +92,9 @@ test:
 eval-retrieval:
 	uv run python -m app.eval_retrieval
 
-# Answer-quality evaluation (app/eval_answers.py). Needs make up and Ollama. Each
-# run takes many minutes. Reports land in code/reports/ (git-ignored).
+# Answer-quality evaluation: app/eval_answers.py runs FindyFixy through the
+# harness in harness/eval/. Needs make up and Ollama. Each run takes many
+# minutes. Reports land in code/reports/ (git-ignored).
 #   eval          run and print the scores, no gate
 #   eval-gate     the release gate: exit 1 if answers got worse vs evals/baseline.json
 #   eval-baseline freeze this run as the new baseline. Review the diff before committing.

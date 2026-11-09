@@ -19,7 +19,7 @@ def test_the_latest_phase_matches_the_live_page() -> None:
 
 
 def test_flipping_a_node_on_the_page_without_a_new_phase_is_caught() -> None:
-    flipped = PAGE.replace('<g class="node" data-status="planned">\n        <title>Planned for Day 6.', '<g class="node" data-status="built">\n        <title>Planned for Day 6.')
+    flipped = PAGE.replace('<g class="node" data-status="planned" data-layer="harness">\n        <title>Planned for Day 6.', '<g class="node" data-status="built" data-layer="harness">\n        <title>Planned for Day 6.')
     assert flipped != PAGE
     assert snap.built_in_phase(max(snap.PHASES)) != snap.built_on_page(flipped)
 

@@ -39,6 +39,7 @@
     --bad: #fb7185;
     --warn: #fbbf24;
     --planned: #7f8fb0;
+    --harness: #c084fc;
   }
   * { box-sizing: border-box; }
   /* Author CSS such as `.field { display: grid }` beats the browser's own
@@ -106,6 +107,9 @@
   .node[data-status=planned] rect { stroke: var(--planned); stroke-dasharray: 5 4; }
   .node[data-status=planned] .t { fill: var(--planned); }
   .node[data-status=planned] .s { fill: var(--planned); }
+  /* Harness controls: the product. The app's own steps keep the accent colour.
+     Only the stroke changes, so a planned control stays dashed. */
+  .node[data-layer=harness] rect { stroke: var(--harness); }
   .node.active rect, .node.active polygon { stroke: #fff; fill: #12304d; }
   .node.calling rect { animation: pulse 1s ease-in-out infinite; }
   .node.ok rect, .node.ok polygon { stroke: var(--ok); }
@@ -122,6 +126,7 @@
   .legend span::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 2px solid; margin-right: 6px; vertical-align: middle; }
   .l-built::before { border-color: var(--accent); }
   .l-planned::before { border-color: var(--planned); border-top-style: dashed !important; }
+  .l-harness::before { border-color: var(--harness); }
 
   .lower { display: grid; gap: 16px; grid-template-columns: 1fr; }
   @media (min-width: 900px) { .lower { grid-template-columns: 1.6fr 1fr; } }
@@ -292,31 +297,37 @@
       </g>
 
       <!-- planned nodes: one edit per build day flips data-status to built -->
-      <g class="node" data-status="planned">
+      <g class="node" data-status="planned" data-layer="harness">
         <title>Planned for Day 6. Not built, no behavior yet.</title>
         <rect x="294" y="70" width="130" height="56" rx="8"/>
         <text class="t" x="359" y="94">Tracing</text>
         <text class="s" x="359" y="112">Day 6, Langfuse</text>
       </g>
-      <g class="node" data-status="planned">
+      <g class="node" data-status="planned" data-layer="harness">
         <title>Planned for Day 7. Not built, no behavior yet.</title>
         <rect x="446" y="70" width="130" height="56" rx="8"/>
         <text class="t" x="511" y="94">Policy</text>
         <text class="s" x="511" y="112">Day 7, guardrails</text>
       </g>
-      <g class="node" data-status="planned">
+      <g class="node" data-status="planned" data-layer="harness">
         <title>Planned for Day 8. Not built, no behavior yet.</title>
         <rect x="598" y="70" width="130" height="56" rx="8"/>
         <text class="t" x="663" y="94">Gateway</text>
         <text class="s" x="663" y="112">Day 8, routing</text>
       </g>
-      <g class="node" data-status="built">
-        <title>In: The 30 golden cases, each with a reference severity, cause and fix.&#10;Out: Scores per metric with confidence intervals, a saved report, and a pass or fail gate.&#10;Logic: Runs every case through the real pipeline. A judge model from a different family scores severity, faithfulness, context recall, action quality and response relevancy. The gate fails if a score drops below its frozen floor (baseline mean minus 0.05) or the judge failure rate passes 0.15.</title>
+      <g class="node" data-status="built" data-layer="harness">
+        <title>In: An app's golden cases, through one interface (SystemUnderTest: describe, answer, summarise). FindyFixy plugs in with an adapter: 30 cases, each with a reference severity, cause and fix.&#10;Out: Scores per metric with confidence intervals, a saved report, and a pass or fail gate.&#10;Logic: The harness package (code/harness/eval) never imports the app. A judge model from a different family scores faithfulness, context recall, action quality and response relevancy; labels such as severity are matched exactly. The gate fails if a score drops below its frozen floor (baseline mean minus 0.05), regresses outside its 95% interval, or the judge failure rate passes 0.15. Moving it into the harness changed no score: the frozen baseline still reproduces byte for byte.</title>
         <rect x="10" y="396" width="130" height="56" rx="8"/>
         <text class="t" x="75" y="420">Evals</text>
-        <text class="s" x="75" y="438">golden set, gate</text>
+        <text class="s" x="75" y="438">harness, any app</text>
       </g>
-      <g class="node" data-status="planned">
+      <g class="node" data-status="planned" data-layer="harness">
+        <title>Planned for Day 5, step 4. Not built, no behavior yet.&#10;A passing local eval run writes an attestation: a fingerprint of every file that changes answers, plus the verdict. CI fails a change to those files that has no matching passing attestation.</title>
+        <rect x="160" y="396" width="130" height="56" rx="8"/>
+        <text class="t" x="225" y="420">CI gate</text>
+        <text class="s" x="225" y="438">Day 5, attested</text>
+      </g>
+      <g class="node" data-status="planned" data-layer="harness">
         <title>Planned for Day 9. Not built, no behavior yet.</title>
         <rect x="780" y="396" width="130" height="56" rx="8"/>
         <text class="t" x="845" y="420">Human review</text>
@@ -329,6 +340,7 @@
     <div class="legend">
       <span class="l-built">built</span>
       <span class="l-planned">planned (day shown)</span>
+      <span class="l-harness">harness control (the product); the rest is the FindyFixy app</span>
     </div>
   </section>
 

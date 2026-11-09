@@ -30,6 +30,7 @@ DOCS = (
     ".githooks/README.md",
     "code/README.md",
     "code/app/README.md",
+    "code/harness/README.md",
     "code/tests/README.md",
     "code/data/README.md",
     "code/evals/README.md",

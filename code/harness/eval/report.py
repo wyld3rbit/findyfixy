@@ -6,8 +6,14 @@ viewer that prints one case end to end (`show_case`, `format_case`) or freezes a
 saved report as the baseline (`freeze_baseline`).
 
 Why separate from the runner: this is policy and presentation, not execution. It
-reads and writes files but never calls a model. The runner (eval_answers) depends on
-it, not the other way round.
+reads and writes files but never calls a model. The CLI depends on it, not the
+other way round.
+
+Nothing here knows which app produced a report. Label scores, groups and the
+app's extra aggregates are read from the report itself, so FindyFixy's
+`severity_match`, `twin`/`no_twin` and `twin_recall_rate` pass through unnamed.
+Every path is passed in by the caller: the harness has no idea where an app keeps
+its reports or its baseline.
 """
 
 from __future__ import annotations
@@ -19,32 +25,37 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+from types import MappingProxyType
 from typing import Any
 
-from app.eval_provenance import file_sha256
-from app.eval_stats import GROUPS, METRIC_NAMES, SCORE_NAMES
-from app.golden import DEFAULT_PATH as GOLDEN_PATH, GoldenCase, load_golden
-from app.paths import EVALS, REPORTS
-
-REPORTS_DIR = REPORTS
-BASELINE_PATH = EVALS / "baseline.json"
+from harness.eval.stats import (
+    CORE_AGGREGATE_KEYS,
+    CORE_RECORD_KEYS,
+    METRIC_NAMES,
+    groups_in,
+    match_name,
+    ordered_score_names,
+)
 
 # Provenance keys that must match for a baseline to be comparable.
 COMPARABLE_KEYS: tuple[str, ...] = ("judge_digest", "prompt_versions", "golden_sha256")
-# Provenance keys copied into the baseline file.
-BASELINE_PROVENANCE_KEYS: tuple[str, ...] = (
-    "judge_model",
-    "judge_digest",
-    "prompt_versions",
-    "golden_sha256",
-    "small_model",
-    "large_model",
-    "threshold",
-    "recall_k",
-    "git_sha",
-    "timestamp_utc",
+# Provenance keys NOT copied into the baseline file. Every other key is, so the
+# app's own `describe()` keys (models, thresholds) reach the baseline without
+# the harness naming them. These are left out because they describe how one
+# run was made, not what the baseline stands for: a dirty flag, the bootstrap
+# settings, and the control flag (a control run is refused anyway). An app's
+# legacy control keys (see `LegacyControl`) are left out as well.
+BASELINE_EXCLUDED_KEYS: frozenset[str] = frozenset(
+    {"git_dirty", "bootstrap_seed", "bootstrap_resamples", "negative_control"}
 )
 
+# An app's own older way of marking a control run in provenance: key -> the
+# value that means "this was a control". Reports written before the harness had
+# `negative_control` carry the app's flag instead, and the harness cannot know
+# its name. The app passes it in. Such keys are also kept out of a baseline,
+# because they describe one run, like `negative_control` does.
+LegacyControl = Mapping[str, Any]
+NO_LEGACY_CONTROL: LegacyControl = MappingProxyType({})
 
 
 class BaselineMissing(Exception):
@@ -80,24 +91,28 @@ def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
         raise
 
 
-def report_path(now: datetime, directory: Path = REPORTS_DIR) -> Path:
+def report_path(now: datetime, directory: Path) -> Path:
     """`reports/eval-<UTC timestamp>.json`. Second resolution is enough for a sequential run."""
     stamp = now.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return directory / f"eval-{stamp}.json"
 
 
-def write_report(report: Mapping[str, Any], now: datetime, directory: Path = REPORTS_DIR) -> Path:
+def write_report(report: Mapping[str, Any], now: datetime, directory: Path) -> Path:
     """Write the report atomically and return its path."""
     path = report_path(now, directory)
     _atomic_write_json(path, report)
     return path
 
 
-def load_baseline(path: Path = BASELINE_PATH) -> dict[str, Any]:
-    """Read the baseline. Raises `BaselineMissing` with the fix, never a bare crash."""
+def load_baseline(path: Path, command: str | None = None) -> dict[str, Any]:
+    """Read the baseline. Raises `BaselineMissing` with the fix, never a bare crash.
+
+    `command` is the app's eval command, so the message names the exact fix.
+    """
     if not path.exists():
+        run = f"`{command} --write-baseline`" if command else "the eval with `--write-baseline`"
         raise BaselineMissing(
-            f"no baseline at {path.name}. Run `python -m app.eval_answers --write-baseline` "
+            f"no baseline at {path.name}. Run {run} "
             "once, review the numbers, and commit the file."
         )
     return json.loads(path.read_text(encoding="utf-8"))
@@ -106,12 +121,31 @@ def load_baseline(path: Path = BASELINE_PATH) -> dict[str, Any]:
 # ---- Baseline and gate ------------------------------------------------------
 
 
-def baseline_refusals(report: Mapping[str, Any], max_failure_rate: float) -> list[str]:
+def is_negative_control(
+    provenance: Mapping[str, Any], legacy_control: LegacyControl = NO_LEGACY_CONTROL
+) -> bool:
+    """True for a run built to fail the gate.
+
+    `negative_control` is the harness flag. A `legacy_control` key holding its
+    marking value is the same fact in a report written before the flag existed.
+    The key must be present and equal that value: a missing key is not a control.
+    """
+    if provenance.get("negative_control") is True:
+        return True
+    return any(key in provenance and provenance[key] == value for key, value in legacy_control.items())
+
+
+def baseline_refusals(
+    report: Mapping[str, Any],
+    max_failure_rate: float,
+    legacy_control: LegacyControl = NO_LEGACY_CONTROL,
+) -> list[str]:
     """Reasons not to write a baseline from this run. Empty means fine."""
     overall = report["aggregates"]["overall"]
     reasons = []
-    if report["provenance"].get("recall_enabled") is False:
-        reasons.append("recall was disabled for this run (negative control)")
+    if is_negative_control(report["provenance"], legacy_control):
+        # A control exists to fail. Freezing it would make failure the standard.
+        reasons.append("this run was a negative control, built to fail the gate")
     if report["provenance"].get("git_dirty") is True:
         reasons.append("the working tree had uncommitted changes, so the code is not traceable")
     for key in ("judge_digest", "git_sha"):
@@ -132,8 +166,12 @@ def write_baseline(
     *,
     floor_margin: float = 0.05,
     max_failure_rate: float = 0.15,
+    legacy_control: LegacyControl = NO_LEGACY_CONTROL,
 ) -> None:
     """Freeze this run as the baseline. Never called automatically.
+
+    `legacy_control` lets an app's older control flag refuse the run and keeps
+    that flag out of the baseline (see `LegacyControl`).
 
     Floors are the overall mean minus a margin, clamped at 0. They are
     absolute minimums: a release below them fails even if it matches the
@@ -147,17 +185,19 @@ def write_baseline(
     0 the judge-based means moved by less than 0.003 between reruns (measured
     2026-10-26). The interval-based test is the regression rule, not this one.
     """
-    reasons = baseline_refusals(report, max_failure_rate)
+    reasons = baseline_refusals(report, max_failure_rate, legacy_control)
     if reasons:
         raise BaselineRefused("; ".join(reasons))
     overall = report["aggregates"]["overall"]["scores"]
+    names = ordered_score_names(overall)
     provenance = report["provenance"]
+    excluded = BASELINE_EXCLUDED_KEYS | set(legacy_control)
     payload = {
-        "provenance": {k: provenance[k] for k in BASELINE_PROVENANCE_KEYS if k in provenance},
-        "scores": {n: {"mean": overall[n]["mean"], "ci": overall[n]["ci"]} for n in SCORE_NAMES},
+        "provenance": {k: v for k, v in provenance.items() if k not in excluded},
+        "scores": {n: {"mean": overall[n]["mean"], "ci": overall[n]["ci"]} for n in names},
         "floors": {
             n: round(max(0.0, overall[n]["mean"] - floor_margin), 4)
-            for n in SCORE_NAMES
+            for n in names
             if overall[n]["mean"] is not None
         },
         "max_failure_rate": max_failure_rate,
@@ -243,6 +283,15 @@ def _cell(stat: Mapping[str, Any]) -> str:
     return f"{stat['mean']:.2f}{span} f{stat['n_failed']}"
 
 
+def _number(value: Any) -> str:
+    """An extra aggregate: two decimals, `n/a` for None, as-is for anything else."""
+    if value is None:
+        return "n/a"
+    if isinstance(value, float):
+        return f"{value:.2f}"
+    return str(value)
+
+
 # ---- Saved reports: load, show one case, freeze a baseline ------------------
 
 # A report is a few hundred KB. A file far larger than that is not one of ours,
@@ -254,7 +303,7 @@ class ReportInvalid(ValueError):
     """The file is not a report this module wrote."""
 
 
-def latest_report(directory: Path = REPORTS_DIR) -> Path:
+def latest_report(directory: Path) -> Path:
     """The newest report file by name (names carry a UTC timestamp)."""
     found = sorted(directory.glob("eval-*.json"))
     if not found:
@@ -284,42 +333,70 @@ def _verdict_rows(trace: Sequence[Mapping[str, Any]], key: str) -> list[str]:
     ]
 
 
-def format_case(record: Mapping[str, Any], golden: GoldenCase | None) -> str:
+# The metrics in display order, with the trace key that holds each judged item.
+_TRACE_KEYS: tuple[tuple[str, str], ...] = (
+    ("faithfulness", "claim"),
+    ("response_relevancy", "question"),
+    ("context_recall", "sentence"),
+    ("action_quality", "action"),
+)
+
+
+def record_labels(record: Mapping[str, Any]) -> list[str]:
+    """The labels a record was scored on, as the record stores them in `labels`.
+
+    Legacy fallback only: records written before 2026-11-09 have no `labels`
+    key, so the names are read from key shapes. A label `L` is known by
+    `expected_L`, or by `L` next to `L_match`, because the oldest saved
+    reports have no `expected_L`. New records never take this path, so an app
+    meta key that happens to end in `_match` is not mistaken for a label.
+    """
+    if "labels" in record:
+        return list(record["labels"])
+    expected = {k.removeprefix("expected_") for k in record if k.startswith("expected_")}
+    matched = {k.removesuffix("_match") for k in record if k.endswith("_match")}
+    return sorted(expected | {label for label in matched if label in record})
+
+
+def _meta_value(value: Any) -> str:
+    """A meta value as one short line: lists joined by commas, None as a dash."""
+    if value is None:
+        return "-"
+    if isinstance(value, (list, tuple)):
+        return ", ".join(str(v) for v in value) or "(none)"
+    return str(value)
+
+
+def format_case(record: Mapping[str, Any]) -> str:
     """One case end to end, as plain text, for a person to check by eye.
 
     Everything the model and the judge saw, and every decision the judge made.
-    Tolerates a run error and reports saved before traces existed.
+    Labels and app meta are printed generically (`name: value`), so the viewer
+    serves any app. Tolerates a run error, and reports saved before records
+    carried the question and reference ("?" is printed for what is missing).
     """
-    verdict = {True: "MATCH", False: "MISS", None: "-"}[record.get("severity_match")]
-    question = record.get("question") or (golden.question if golden else "?")
-    reference = record.get("reference") or (golden.reference if golden else "")
-    expected = record.get("expected_severity") or (golden.expected_severity if golden else "?")
-    head = (
-        f"{record['id']}  {record['group']}  source {record['source_id']}  "
-        f"expected {expected}  "
-        f"answered {record.get('severity')}  {verdict}  "
-        f"model {record.get('model_used')}  {record.get('latency_s', 0):.1f}s"
-    )
-    twin = record.get("twin_id")
-    lines = [head, f"ALERT      {question}"]
-    if reference:
-        lines.append("REFERENCE  " + reference.replace("\n", "\n           "))
-    recalled = ", ".join(
-        f"{i} (twin)" if i == twin else i for i in record.get("recalled_ids", [])
-    )
-    lines.append(f"RECALLED   {recalled or 'nothing'}")
+    labels = record_labels(record)
+    label_keys = {k for label in labels for k in (label, match_name(label), f"expected_{label}")}
+    lines = [f"{record['id']}  {record.get('group', '?')}  {record.get('latency_s', 0):.1f}s"]
+    lines.append(f"ALERT      {record.get('question') or '?'}")
+    reference = record.get("reference") or "?"
+    lines.append("REFERENCE  " + reference.replace("\n", "\n           "))
+    for label in labels:
+        verdict = {True: "MATCH", False: "MISS", None: "-"}[record.get(match_name(label))]
+        lines.append(
+            f"LABEL      {label}: expected {record.get(f'expected_{label}') or '?'}, "
+            f"answered {record.get(label)}  {verdict}"
+        )
+    meta = [k for k in record if k not in CORE_RECORD_KEYS and k not in label_keys]
+    for n, key in enumerate(meta):
+        lines.append(f"{'META' if n == 0 else '':<11}{key}: {_meta_value(record[key])}")
     if record.get("run_error"):
         lines.append(f"RUN ERROR  {record['run_error']}")
         return "\n".join(lines)
     lines.append("SEEN BY THE MODEL AND THE JUDGE")
-    lines.extend(f"    {c}" for c in record.get("contexts", []) or ["(nothing was recalled)"])
+    lines.extend(f"    {c}" for c in record.get("contexts", []) or ["(no context)"])
     lines.append(f"ANSWER     {record.get('answer')}")
-    for name, key in (
-        ("faithfulness", "claim"),
-        ("response_relevancy", "question"),
-        ("context_recall", "sentence"),
-        ("action_quality", "action"),
-    ):
+    for name, key in _TRACE_KEYS:
         m = record.get("metrics", {}).get(name, {})
         if not m:
             lines.append(f"{name}: not recorded")
@@ -339,7 +416,12 @@ def format_case(record: Mapping[str, Any], golden: GoldenCase | None) -> str:
 
 
 def show_case(case_id: str, report_path: Path | None, reports_dir: Path) -> int:
-    """Print one case from a saved report. Returns the exit code."""
+    """Print one case from a saved report. Returns the exit code.
+
+    A very old report holds only the case id, not the question or reference.
+    The harness cannot look them up: the golden file belongs to the app. It
+    says so on stderr instead of showing text that may not be what was scored.
+    """
     try:
         report = load_report(report_path or latest_report(reports_dir))
     except ReportInvalid as err:
@@ -350,22 +432,16 @@ def show_case(case_id: str, report_path: Path | None, reports_dir: Path) -> int:
         known = ", ".join(r.get("id", "?") for r in report["cases"])
         print(f"error: no case {case_id!r} in that report. Cases: {known}", file=sys.stderr)
         return 2
-    golden = None
     if "question" not in record:
-        # An older report holds only the id, so the question and reference come
-        # from the golden file as it is now. Say so if that file has changed.
-        try:
-            golden = {c.id: c for c in load_golden()}.get(case_id)
-            if report["provenance"].get("golden_sha256") != file_sha256(GOLDEN_PATH):
-                print("warning: the golden set changed after this report was made; "
-                      "the alert and reference below may not be what was scored", file=sys.stderr)
-        except OSError:
-            print("warning: the golden file is missing; alert and reference are not shown", file=sys.stderr)
-    print(format_case(record, golden))
+        print("warning: this report predates self-contained records; "
+              "the alert and reference were not saved in it", file=sys.stderr)
+    print(format_case(record))
     return 0
 
 
-def freeze_baseline(report_path: Path, baseline_path: Path) -> int:
+def freeze_baseline(
+    report_path: Path, baseline_path: Path, legacy_control: LegacyControl = NO_LEGACY_CONTROL
+) -> int:
     """Freeze a saved report as the baseline, with the same refusals as a live run.
 
     The baseline is then exactly the numbers that were reviewed, not a fresh
@@ -373,7 +449,7 @@ def freeze_baseline(report_path: Path, baseline_path: Path) -> int:
     """
     try:
         report = load_report(report_path)
-        write_baseline(report, baseline_path)
+        write_baseline(report, baseline_path, legacy_control=legacy_control)
     except ReportInvalid as err:
         print(f"error: {err}", file=sys.stderr)
         return 2
@@ -384,24 +460,37 @@ def freeze_baseline(report_path: Path, baseline_path: Path) -> int:
     return 0
 
 
+def extra_columns(report: Mapping[str, Any]) -> list[str]:
+    """The app's own aggregate keys (from `summarise`), sorted. Shown after the scores."""
+    overall = report["aggregates"]["overall"]
+    return sorted(k for k in overall if k not in CORE_AGGREGATE_KEYS)
+
+
 def format_table(report: Mapping[str, Any]) -> str:
     """Markdown table: one row per group, mean with 95% CI and failed count (f).
 
     A cell is `mean [low,high] fN`: N metric calls failed and are not in the mean.
+    Rows are "overall", then each group in the order its first case appears.
+    Columns are the scores, then the app's extra aggregates under their own key
+    names, then median latency and run errors.
     """
-    header = ["group", "n", "severity_match", *METRIC_NAMES, "twin_recall", "median_s", "run_err"]
+    aggregates = report["aggregates"]
+    names = ordered_score_names(aggregates["overall"]["scores"])
+    extras = extra_columns(report)
+    header = ["group", "n", *names, *extras, "median_s", "run_err"]
     lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
-    for group in ("overall", *GROUPS):
-        agg = report["aggregates"][group]
-        recall = agg["twin_recall_rate"]
+    groups = [g for g in groups_in(report["cases"]) if g in aggregates]
+    for group in ("overall", *groups):
+        agg = aggregates[group]
         latency = agg["median_latency_s"]
         row = [
             group,
             str(agg["n"]),
-            *(_cell(agg["scores"][name]) for name in SCORE_NAMES),
-            "n/a" if recall is None else f"{recall:.2f}",
+            *(_cell(agg["scores"][name]) for name in names),
+            *(_number(agg.get(key)) for key in extras),
             "n/a" if latency is None else f"{latency:.1f}",
             str(agg["n_run_errors"]),
         ]
         lines.append("| " + " | ".join(row) + " |")
     return "\n".join(lines)
+

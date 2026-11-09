@@ -16,7 +16,9 @@ Why it is opt-in
         uv run pytest -m quality
 
     The logic of the gate itself is covered by fast tests in
-    tests/test_eval_answers.py. This file only wires it to the live system.
+    tests/test_harness_eval_report.py and tests/test_harness_eval_cli.py, and
+    the FindyFixy adapter by tests/test_eval_adapter.py. This file only wires
+    it to the live system.
 
 What changes at scale
     On CI with a GPU runner this runs on every pull request that touches a

@@ -557,6 +557,16 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 - `lessons/d05.md` was rewritten for the harness focus: the eval gate moves into a `harness/` package behind a `SystemUnderTest` interface, with an attested CI gate on `main`. Not built yet.
 - Checks: `make check` OK (45 tracker tests), `make test` 552 passed, `make adr-snapshot` no diff, no broken relative links in the ADRs and READMEs.
 
+### Day 5: the eval gate moves into the harness (2026-11-09)
+
+- New package `harness/eval/`: `case.py` and `sut.py` define the seam (`Case`, `Answer`, `SystemUnderTest` with `describe`, `answer`, `summarise`). `judge.py`, `metrics.py`, `stats.py` (was `app/eval_stats.py`), `report.py` (was `app/eval_report.py`) and `provenance.py` (was `app/eval_provenance.py`) moved with `git mv`. `runner.py` and `cli.py` are the generic runner and command line. Nothing under `harness/` imports `app`; `tests/test_architecture.py` enforces it and was shown to fail when the rule was broken.
+- FindyFixy plugs in through `app/eval_adapter.py` (holdout recall, graph call, severity label, twin data). `app/eval_answers.py` is now a thin entry point; every make target and flag is unchanged.
+- Equivalence proof with no live models: with the new code the saved final run (`eval-20261027T044126Z`) passes the gate, the no-recall control (`eval-20261027T044746Z`) fails with the same 8 messages in the same order, and re-freezing the final run reproduces `evals/baseline.json` byte for byte. Fast tests pin the same facts without the git-ignored reports.
+- Differs from before: the table column `twin_recall` is now `twin_recall_rate`; `make case` prints labels and app data as `LABEL` and `META` lines; new reports record `negative_control` instead of `recall_enabled` (old reports still read); an adapter error on one case is recorded as that case's run error instead of ending the run.
+- A fresh-agent review found 10 issues; all are fixed. Inputs are validated before any case runs, so a bad group name or key clash cannot lose a scored run; a clash in one answer becomes that case's run error. FindyFixy's legacy key `recall_enabled` is passed in by the app (`legacy_control`), so the harness holds no app vocabulary. Records store their label names (`labels`). Relative imports are banned by a test, so the cycle and vendor checks see every import. One schema constant each for records and provenance.
+- The architecture page marks harness controls in violet, renames the Evals box's subtitle to "harness, any app", and adds a planned "CI gate" box. `tools/adr_snapshot.py` skips boxes added after a phase and drops the colour attribute, so the ADR 0001 to 0004 pictures are byte-identical.
+- Tests: `make test` 612 passed, 14 deselected. `make check` OK.
+
 ### Next
 
-- Day 5 build, step 1: the `harness/eval/` package and the architecture test (`lessons/d05.md`).
+- Day 5 step 4: the attested CI gate (`lessons/d05.md`).

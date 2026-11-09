@@ -99,7 +99,12 @@ text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-se
 <g class="node" data-status="built">
         <rect x="10" y="396" width="130" height="56" rx="8"/>
         <text class="t" x="75" y="420">Evals</text>
-        <text class="s" x="75" y="438">golden set, gate</text>
+        <text class="s" x="75" y="438">harness, any app</text>
+      </g>
+<g class="node" data-status="planned">
+        <rect x="160" y="396" width="130" height="56" rx="8"/>
+        <text class="t" x="225" y="420">CI gate</text>
+        <text class="s" x="225" y="438">Day 5, attested</text>
       </g>
 <g class="node" data-status="planned">
         <rect x="780" y="396" width="130" height="56" rx="8"/>

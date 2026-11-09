@@ -36,6 +36,11 @@ PHASES = range(1, 6)
 # (Tracing, Policy, Gateway, Evals, Human review) is always drawn.
 FLOW = {"Investigate", "Deploy tool", "Validate", "Recall"}
 
+# Planned nodes added to the page after earlier phases closed. They are drawn
+# only from the phase they were added in, so an older ADR keeps the picture it
+# was written with.
+ADDED_IN = {"CI gate": 5}
+
 # Each edge in the page: (from node, to node).
 EDGES = {
     "e_q_inv": ("Question", "Investigate"), "e_inv_small": ("Investigate", "Small model"),
@@ -110,7 +115,11 @@ def snapshot(phase: int, page: str) -> str:
         name = node_name(block)
         if name in FLOW and name not in built:
             continue
+        if phase < ADDED_IN.get(name, 0):
+            continue
         block = re.sub(r"<title>.*?</title>\s*", "", block, flags=re.S)
+        # The harness colour is a page concern; ADR pictures keep their original look.
+        block = re.sub(r' data-layer="\w+"', "", block, count=1)
         status = "built" if name in built else "planned"
         block = re.sub(r'data-status="\w+"', f'data-status="{status}"', block, count=1)
         if status == "planned" and name in FIRST_BUILT:

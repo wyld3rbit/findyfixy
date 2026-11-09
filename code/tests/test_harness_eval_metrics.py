@@ -1,4 +1,4 @@
-"""Tests for the three metrics (app/metrics.py), with a fake judge and embedder.
+"""Tests for the three metrics (harness/eval/metrics.py), with a fake judge and embedder.
 
 What these tests cover
     Hand-computed scores, every failure path, empty-context behaviour, the
@@ -15,9 +15,9 @@ import math
 
 import pytest
 
-import app.metrics as metrics
-from app.judge import JudgeError
-from app.metrics import (
+import harness.eval.metrics as metrics
+from harness.eval.judge import JudgeError
+from harness.eval.metrics import (
     ACTION_SCORES,
     PROMPT_VERSIONS,
     ActionRating,
@@ -293,7 +293,7 @@ def test_a_failed_result_has_no_trace():
 
 
 def test_a_runaway_judge_reason_is_capped_before_it_is_stored():
-    from app.metrics import MAX_REASON_CHARS
+    from harness.eval.metrics import MAX_REASON_CHARS
 
     judge = FakeJudge({Claims: [Claims(claims=["a"])], Verdict: [Verdict(supported=True, reason="x" * 5000)]})
     (row,) = faithfulness(judge, "ans", ["c"]).trace
@@ -324,7 +324,7 @@ def test_the_splitter_is_part_of_the_context_recall_version():
     """Change how sentences are cut and the report must show the metric changed."""
     import hashlib
 
-    from app.metrics import ATTRIBUTION_PROMPT, PROMPT_VERSIONS, _SENTENCE_END
+    from harness.eval.metrics import ATTRIBUTION_PROMPT, PROMPT_VERSIONS, _SENTENCE_END
 
     expected = hashlib.sha256("\x1f".join([ATTRIBUTION_PROMPT, _SENTENCE_END.pattern]).encode()).hexdigest()
     assert PROMPT_VERSIONS["context_recall"] == expected
