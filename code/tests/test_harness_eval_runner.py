@@ -344,3 +344,90 @@ def test_an_empty_run_does_not_crash() -> None:
     report = run([])
     assert list(report["aggregates"]) == ["overall"]
     assert report["aggregates"]["overall"]["scores"]["faithfulness"]["mean"] is None
+
+
+# ---- Live events --------------------------------------------------------------
+
+
+def recorder() -> tuple[list[tuple[str, dict[str, Any]]], Any]:
+    """A list and an `on_event` that appends (kind, data) to it."""
+    seen: list[tuple[str, dict[str, Any]]] = []
+    return seen, lambda kind, **data: seen.append((kind, data))
+
+
+def test_events_follow_each_case_from_start_to_score_in_order() -> None:
+    """Started, then per case: started, answered, one event per metric in order, scored."""
+    seen, on_event = recorder()
+    run([case("g1"), case("g2", group="b", kind="y")], on_event=on_event)
+    kinds = [k for k, _ in seen]
+    per_case = ["case_started", "case_answered", *["metric_scored"] * 4, "case_scored"]
+    assert kinds == ["eval_started", *per_case, *per_case]
+    assert seen[0][1] == {"n": 2, "cases": ["g1", "g2"], "system": {"fake_model": "m1", "fake_threshold": 0.5}}
+    assert seen[1][1] == {"id": "g1", "group": "a", "index": 1, "n": 2}
+    assert seen[9][1] == {"id": "g2", "labels": {"kind": "x"}, "expected": {"kind": "y"}, "run_error": None}
+    metrics = [d for k, d in seen[:7] if k == "metric_scored"]
+    assert [d["name"] for d in metrics] == ["faithfulness", "response_relevancy", "context_recall", "action_quality"]
+    assert all(d["score"] == 1.0 and d["failed"] is False for d in metrics)
+
+
+def test_a_run_error_is_answered_and_scored_with_no_metric_events() -> None:
+    """A failed case still closes on the stream, and no metric is reported for it."""
+    seen, on_event = recorder()
+    run([case("g1")], sut=FakeSUT(raise_on=["g1"]), on_event=on_event)
+    assert [k for k, _ in seen] == ["eval_started", "case_started", "case_answered", "case_scored"]
+    assert seen[2][1]["run_error"] == "RuntimeError: model never produced a valid record"
+    assert seen[2][1]["labels"] == {"kind": None}
+
+
+def test_a_failed_metric_is_reported_failed_with_no_score() -> None:
+    """A judge failure is an event with score None, never a zero."""
+    seen, on_event = recorder()
+    run([case("g1")], judge=FakeJudge(fail=True), on_event=on_event)
+    metrics = [d for k, d in seen if k == "metric_scored"]
+    assert metrics and all(d["score"] is None and d["failed"] for d in metrics)
+
+
+def test_listening_changes_nothing_in_the_report() -> None:
+    """The callback only observes: the report is the same with and without it."""
+    cases = [case("g1"), case("g2", kind="y")]
+    _, on_event = recorder()
+    quiet = run(cases, timer=lambda: 0.0)
+    loud = run(cases, timer=lambda: 0.0, on_event=on_event)
+    assert quiet == loud
+
+
+def test_a_run_refused_up_front_reports_nothing() -> None:
+    """Validation fails before `eval_started`, so a viewer never sees a run that did not start."""
+    seen, on_event = recorder()
+    with pytest.raises(ValueError):
+        run([case("g1", group="overall")], on_event=on_event)
+    assert seen == []
+
+
+def test_events_keep_each_cases_order_under_parallel_workers() -> None:
+    """Cases interleave across threads, but each case's own events stay in order."""
+    seen, on_event = recorder()
+    lock = threading.Lock()
+
+    def safe(kind: str, **data: Any) -> None:
+        """A thread-safe sink, as the contract asks for under workers > 1."""
+        with lock:
+            on_event(kind, **data)
+
+    run([case(f"g{i}") for i in range(4)], workers=4, on_event=safe)
+    for i in range(4):
+        mine = [k for k, d in seen if d.get("id") == f"g{i}"]
+        assert mine == ["case_started", "case_answered", *["metric_scored"] * 4, "case_scored"]
+
+
+def test_a_stop_ends_the_run_before_the_next_case_with_no_report() -> None:
+    """`should_stop` is asked before each case; yes raises after the case in flight."""
+    from harness.eval.runner import EvalStopped
+
+    seen, on_event = recorder()
+    sut = CountingSUT()
+    with pytest.raises(EvalStopped, match="stopped after 1 of 3 cases"):
+        run([case("g1"), case("g2"), case("g3")], sut=sut, on_event=on_event,
+            should_stop=lambda: sut.answered >= 1)
+    assert sut.answered == 1
+    assert [d["id"] for k, d in seen if k == "case_started"] == ["g1"]

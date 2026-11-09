@@ -1,0 +1,4 @@
+# The ADR pictures for phases 1 to 4 are frozen and checked by SHA-256
+# (tools/adr_snapshot.py). Keep every ADR picture's bytes exactly as committed:
+# no line-ending conversion on any checkout, whatever core.autocrlf says.
+code/docs/adr/img/*.svg -text

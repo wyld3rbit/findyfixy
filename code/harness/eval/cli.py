@@ -34,6 +34,7 @@ import sys
 from typing import Protocol
 
 from harness.eval.case import Case
+from harness.eval.events import EvalEmit, no_eval_emit
 from harness.eval.judge import Judge, make_ollama_judge
 from harness.eval.metrics import Embed
 from harness.eval.provenance import build_provenance, file_sha256, git_info, ollama_digest
@@ -82,10 +83,21 @@ SessionFactory = Callable[[bool], AbstractContextManager[Session]]
 
 
 class RunFn(Protocol):
-    """One evaluation run: progress sink in, report out. `main` calls it once."""
+    """One evaluation run: progress sink in, report out. `main` calls it once.
+
+    `on_event` receives the live events (harness/eval/events.py) and
+    `should_stop` is asked before each case (runner.EvalStopped). The command
+    line passes neither; a viewer such as an app's console passes both.
+    """
 
     def __call__(
-        self, progress: Callable[[str], None], *, negative_control: bool, workers: int
+        self,
+        progress: Callable[[str], None],
+        *,
+        negative_control: bool,
+        workers: int,
+        on_event: EvalEmit = no_eval_emit,
+        should_stop: Callable[[], bool] = lambda: False,
     ) -> Report:
         """Run every case and return the report. No file is written here."""
         ...
@@ -112,7 +124,14 @@ def live_runner(
     does there lands before the timestamp, as it did before the harness split.
     """
 
-    def run(progress: Callable[[str], None], *, negative_control: bool, workers: int) -> Report:
+    def run(
+        progress: Callable[[str], None],
+        *,
+        negative_control: bool,
+        workers: int,
+        on_event: EvalEmit = no_eval_emit,
+        should_stop: Callable[[], bool] = lambda: False,
+    ) -> Report:
         """Open the session, stamp provenance, run every case, close the session."""
         with open_session(negative_control) as session:
             provenance = build_provenance(
@@ -132,6 +151,8 @@ def live_runner(
                 provenance=provenance,
                 progress=progress,
                 workers=workers,
+                on_event=on_event,
+                should_stop=should_stop,
             )
 
     return run

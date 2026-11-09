@@ -39,6 +39,20 @@ Failure model
     - Cases with a run error have no answer, so they are left out of every
       mean and are reported as `n_run_errors`.
 
+Live events
+    `run_eval` takes an `on_event` callback (harness/eval/events.py) and
+    reports each case as it starts, is answered and is scored, and each metric
+    as soon as it is computed. The default reports nothing, so the command line
+    and every saved report are unchanged. The callback only observes: nothing
+    it does can change a score or a record.
+
+Stopping
+    `should_stop` is asked before each case starts. When it says yes, the run
+    raises `EvalStopped` and returns no report: a run cut short is not a
+    smaller report, because its cases were chosen by when someone pressed
+    stop, not by design. The case in flight finishes first; a judge call is
+    never cut off halfway.
+
 What changes at scale
     One local model server on one GPU caps parallelism at a few workers
     (`MAX_WORKERS`). Cost is about ten judge calls per case. With more cases,
@@ -55,6 +69,7 @@ import time
 from typing import Any
 
 from harness.eval.case import Case
+from harness.eval.events import EvalEmit, no_eval_emit
 from harness.eval.judge import Judge
 from harness.eval.metrics import (
     Embed,
@@ -68,6 +83,7 @@ from harness.eval.stats import (
     BOOTSTRAP_SEED,
     CORE_AGGREGATE_KEYS,
     CORE_RECORD_KEYS,
+    MetricName,
     Report,
     aggregate,
     groups_in,
@@ -80,6 +96,10 @@ from harness.eval.sut import Answer, SystemUnderTest
 # model server's memory (its KV cache), and every extra request queues on the
 # same GPU. Past a few workers the machine swaps and the run gets slower.
 MAX_WORKERS = 4
+
+
+class EvalStopped(Exception):
+    """The caller asked the run to stop. No report is built for a stopped run."""
 
 
 def _safe_metric(compute: Callable[[], MetricResult]) -> MetricResult:
@@ -137,6 +157,28 @@ def new_record(case: Case) -> dict[str, Any]:
     return record
 
 
+def _answered(record: Mapping[str, Any], case: Case, on_event: EvalEmit) -> None:
+    """Report what the system answered for one case: its labels, or its run error.
+
+    Plain dicts, not the case's read-only mappings, so a viewer can serialise
+    the event as it is.
+    """
+    on_event(
+        "case_answered",
+        id=case.id,
+        labels={label: record[label] for label in case.expected},
+        expected=dict(case.expected),
+        run_error=record["run_error"],
+    )
+
+
+def _unscored(record: dict[str, Any], case: Case, on_event: EvalEmit) -> dict[str, Any]:
+    """End a case that has a run error: report it answered and scored, return the record."""
+    _answered(record, case, on_event)
+    on_event("case_scored", id=case.id)
+    return record
+
+
 def run_case(
     case: Case,
     *,
@@ -144,8 +186,13 @@ def run_case(
     judge: Judge,
     embed: Embed,
     timer: Callable[[], float],
+    on_event: EvalEmit = no_eval_emit,
 ) -> dict[str, Any]:
-    """Run and score one case. Returns the per-case record."""
+    """Run and score one case. Returns the per-case record.
+
+    Every path ends with `case_answered` then `case_scored` on `on_event`, so a
+    viewer always sees a case close, even one that failed.
+    """
     record = new_record(case)
     start = timer()
     try:
@@ -153,7 +200,7 @@ def run_case(
     except Exception as err:  # the system's fault, not ours: record it, keep going
         record["latency_s"] = timer() - start
         record["run_error"] = f"{type(err).__name__}: {err}"
-        return record
+        return _unscored(record, case, on_event)
     record["latency_s"] = timer() - start
     try:
         _merge(record, answer.meta, f"answer meta for case {case.id}")
@@ -161,28 +208,39 @@ def run_case(
         # Known only once the system has answered, so it cannot be checked up
         # front. A run error keeps the other cases, and the gate fails on it.
         record["run_error"] = f"{type(err).__name__}: {err}"
-        return record
+        return _unscored(record, case, on_event)
     if answer.error is not None:
         record["run_error"] = answer.error
-        return record
+        return _unscored(record, case, on_event)
 
     for label, expected in case.expected.items():
         got = answer.labels.get(label)
         record[label] = got
         record[match_name(label)] = got == expected
+    _answered(record, case, on_event)
     text, contexts = answer.text, list(answer.contexts)
-    results = {
-        "faithfulness": _safe_metric(lambda: faithfulness(judge, text, contexts)),
-        "response_relevancy": _safe_metric(
-            lambda: response_relevancy(judge, embed, case.question, text)
-        ),
-        "context_recall": _safe_metric(lambda: context_recall(judge, case.reference, contexts)),
+    # In the fixed metric order, one at a time, so the judge sees the same call
+    # sequence as before events existed and a viewer sees each score as it lands.
+    metrics: tuple[tuple[MetricName, Callable[[], MetricResult]], ...] = (
+        ("faithfulness", lambda: faithfulness(judge, text, contexts)),
+        ("response_relevancy", lambda: response_relevancy(judge, embed, case.question, text)),
+        ("context_recall", lambda: context_recall(judge, case.reference, contexts)),
         # No action is a failed metric (the metric refuses an empty action),
         # never a zero: the system may simply not propose actions.
-        "action_quality": _safe_metric(
-            lambda: action_quality(judge, answer.action or "", case.reference)
-        ),
-    }
+        ("action_quality", lambda: action_quality(judge, answer.action or "", case.reference)),
+    )
+    results: dict[str, MetricResult] = {}
+    for name, compute in metrics:
+        result = _safe_metric(compute)
+        results[name] = result
+        on_event(
+            "metric_scored",
+            id=case.id,
+            name=name,
+            score=result.score,
+            failed=result.failed,
+            error=result.error,
+        )
     # The answer, what the judge was shown, and the judge's own decisions are
     # kept so a score can be audited and hand-checked (`--show-case`).
     record["answer"] = text
@@ -196,6 +254,7 @@ def run_case(
         }
         for n, r in results.items()
     }
+    on_event("case_scored", id=case.id)
     return record
 
 
@@ -264,6 +323,8 @@ def run_eval(
     timer: Callable[[], float] = time.perf_counter,
     progress: Callable[[str], None] = lambda _msg: None,
     workers: int = 1,
+    on_event: EvalEmit = no_eval_emit,
+    should_stop: Callable[[], bool] = lambda: False,
 ) -> Report:
     """Run every case and return the report dict. No I/O.
 
@@ -276,6 +337,14 @@ def run_eval(
     `cases`, so a parallel report has the same shape as a serial one. Per-case
     latency under `workers` > 1 includes queueing, so it is not comparable with
     a serial run's.
+
+    `on_event` receives the live events (harness/eval/events.py). It is called
+    from the worker threads, so under `workers` > 1 it must be thread-safe.
+    `eval_started` goes out only after validation, so a run refused up front
+    reports nothing.
+
+    `should_stop` is asked before each case. Yes raises `EvalStopped` once the
+    cases already started have finished (see "Stopping" above).
     """
     if not 1 <= workers <= MAX_WORKERS:
         raise ValueError(f"workers must be between 1 and {MAX_WORKERS}, got {workers}")
@@ -283,11 +352,17 @@ def run_eval(
     labels = sorted({label for case in cases for label in case.expected})
     progress_lock = threading.Lock()
     finished = 0
+    on_event("eval_started", n=len(cases), cases=[c.id for c in cases], system=dict(sut.describe()))
 
-    def work(case: Case) -> dict[str, Any]:
+    def work(index: int, case: Case) -> dict[str, Any]:
         """Run one case and report progress. The counter is shared, so it is locked."""
         nonlocal finished
-        record = run_case(case, sut=sut, judge=judge, embed=embed, timer=timer)
+        if should_stop():
+            with progress_lock:
+                done = finished
+            raise EvalStopped(f"stopped after {done} of {len(cases)} cases")
+        on_event("case_started", id=case.id, group=case.group, index=index + 1, n=len(cases))
+        record = run_case(case, sut=sut, judge=judge, embed=embed, timer=timer, on_event=on_event)
         with progress_lock:
             finished += 1
             progress(
@@ -298,10 +373,10 @@ def run_eval(
 
     start = timer()
     if workers == 1:
-        records = [work(case) for case in cases]
+        records = [work(i, case) for i, case in enumerate(cases)]
     else:
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            records = list(pool.map(work, cases))
+            records = list(pool.map(work, range(len(cases)), cases))
     wall_s = timer() - start
     timing = {
         "workers": workers,

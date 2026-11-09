@@ -567,6 +567,17 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 - The architecture page marks harness controls in violet, renames the Evals box's subtitle to "harness, any app", and adds a planned "CI gate" box. `tools/adr_snapshot.py` skips boxes added after a phase and drops the colour attribute, so the ADR 0001 to 0004 pictures are byte-identical.
 - Tests: `make test` 612 passed, 14 deselected. `make check` OK.
 
+### Day 5: the visualizer shows the harness and runs evals live (2026-11-09)
+
+- `code/docs/architecture.html` has two lanes: Harness on top (Eval gate built; CI gate, Tracing, Policy, Gateway, Human review planned) and FindyFixy below (the triage flow). Arrows show cases going in and answers being scored.
+- New Eval run mode in the console: 1 to N golden cases, live or fake. Each case animates through the app lane from the graph's real events, then the harness lane shows the judge's scores. A full run is gated against `evals/baseline.json`; a subset shows "subset, gate not applied". The console never writes reports or baselines.
+- The harness runner takes an injected event callback with its own vocabulary (`harness/eval/events.py`), so the harness still never imports the app. `app/console_eval.py` bridges it into the console stream.
+- `tests/test_page_truth.py`: each box names its code (`data-code`). A built box must point at real code, a planned box at code that does not exist yet, every graph node needs a box, and every app and harness event kind needs a handler on the page. Each test was shown to fail once.
+- ADR pictures for phases 1 to 4 are frozen files checked by hash; from phase 5 on they are drawn from the page.
+- Differs from the lesson: the visualizer work was not in the original Build steps; it was added at the learner's request so the page shows today's system objectively.
+- A fresh-agent review found 10 issues; all are fixed. An eval run can be stopped between cases (it ends with `eval_failed`, reason "stopped"), and POST /stop now says `false` when nothing can stop. The page test replays the unmodified fake stream, sped up through the page's own reduced-motion setting. The case limit comes from the golden set's size. `SharedRetrieval` in `app/wiring.py` gives the console one embedder, reranker and connection for both triage and eval runs, instead of a second copy of about 1.3 GB. One stamped emitter (`app/events.py`) serves app and harness events. A root `.gitattributes` keeps the frozen ADR pictures byte-exact on any clone.
+- Tests: `make test` 650 passed, 14 deselected. `make check` OK. The equivalence proof still passes.
+
 ### Next
 
 - Day 5 step 4: the attested CI gate (`lessons/d05.md`).

@@ -22,8 +22,8 @@ from collections.abc import Iterator
 
 import pytest
 
-from app.console import RunHub, serve
-from app.console_fakes import FAKE_RECALL, ScriptedToolModel, fake_ask, scripted_reply
+from app.console import BASELINE_PATH as ROOT_BASELINE, RunHub, serve
+from app.console_fakes import FAKE_RECALL, ScriptedToolModel, fake_ask, fake_cases, scripted_reply
 
 
 @pytest.fixture
@@ -810,3 +810,293 @@ def test_a_live_run_uses_the_hubs_recall_and_a_hub_without_one_has_no_step(monke
         srv.server_close()
     assert events[0]["data"]["recall"] is False
     assert "recall" not in [e["data"].get("node") for e in events]
+
+
+# ---- eval run: the harness on the first N golden cases ------------------------
+
+FAKE_SIZE = len(fake_cases())
+
+
+def post_eval(port, payload, **headers):
+    """POST /eval with a JSON body and any extra headers. Returns (status, body)."""
+    h = {"Content-Type": "application/json", **headers}
+    return call(port, "POST", "/eval", json.dumps(payload), h)
+
+
+def no_wait(seconds):
+    """A sleep that does not sleep: fake runs finish at once."""
+
+
+def eval_result(n_cases=1):
+    """A minimal report wrapped as a subset result, for runs that score nothing."""
+    from app.console_eval import EvalResult
+
+    return EvalResult(report={"aggregates": {"overall": {"n": n_cases, "n_run_errors": 0, "scores": {}}}}, subset=True)
+
+
+def test_a_fake_eval_streams_both_sources_and_ends_on_a_subset_verdict(server):
+    """Harness and app events share one tagged stream, ending on a subset verdict."""
+    _, port = server
+    assert post_eval(port, {"mode": "fake", "cases": 2})[0] == 202
+    events = stream(port)
+    assert {e["source"] for e in events} == {"app", "harness"}
+    assert events[0]["kind"] == "eval_started" and events[0]["data"]["n"] == 2
+    assert events[0]["data"]["system"]["data"] == "FAKE"
+    # The graph inside each case reports through the same stream.
+    assert [e["data"]["node"] for e in events if e["kind"] == "node_entered"][:2] == ["recall", "small"]
+    last = events[-1]
+    assert last["source"] == "harness" and last["kind"] == "eval_finished"
+    assert last["data"]["subset"] is True and last["data"]["gate"] is None
+    assert last["data"]["summary"]["n"] == 2
+
+
+def test_a_full_fake_eval_is_gated_read_only_and_fails_as_not_comparable(tmp_path):
+    """Fake scores never pass the real baseline, and the baseline is only read.
+
+    The judge and the golden set differ, so the gate refuses to compare. The
+    baseline file keeps its bytes and nothing else appears next to it.
+    """
+    baseline = tmp_path / "baseline.json"
+    original = ROOT_BASELINE.read_bytes()
+    baseline.write_bytes(original)
+    srv, port = _serve(RunHub(live_models=None, sleep=no_wait, fake_delay=0, baseline_path=baseline))
+    try:
+        assert post_eval(port, {"mode": "fake", "cases": FAKE_SIZE})[0] == 202
+        last = stream(port)[-1]
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert last["kind"] == "eval_finished" and last["data"]["subset"] is False
+    problems = last["data"]["gate"]
+    assert any("not comparable" in p for p in problems)
+    assert any("run error" in p for p in problems)  # the scripted large_fails cases
+    assert baseline.read_bytes() == original and list(tmp_path.iterdir()) == [baseline]
+
+
+def test_a_full_eval_without_a_baseline_ends_in_eval_failed(tmp_path):
+    """A missing baseline is a failed run with its reason, not a hang or a pass."""
+    srv, port = _serve(RunHub(live_models=None, sleep=no_wait, fake_delay=0, baseline_path=tmp_path / "none.json"))
+    try:
+        post_eval(port, {"mode": "fake", "cases": FAKE_SIZE})
+        last = stream(port)[-1]
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert last["kind"] == "eval_failed" and last["data"]["error_type"] == "BaselineMissing"
+    assert last["data"]["reason"] == "error"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"mode": "fake", "cases": 0},
+        {"mode": "fake", "cases": FAKE_SIZE + 1},
+        {"mode": "fake", "cases": "2"},
+        {"mode": "fake", "cases": 2.5},
+        {"mode": "fake", "cases": True},
+        {"mode": "fake"},
+        {"mode": "weird", "cases": 2},
+        {"mode": "fake", "cases": 2, "scenario": "stay_small"},
+    ],
+)
+def test_bad_eval_requests_are_422(server, payload):
+    """Counts outside the fake set, non-integers, missing or extra fields are refused."""
+    _, port = server
+    assert post_eval(port, payload)[0] == 422
+
+
+def test_the_live_limit_is_the_live_sets_own_size():
+    """A live count is checked against the live suite's size, not the fake one's."""
+    from app.console_eval import EvalSuite
+
+    suite = EvalSuite(run=lambda n, **kw: eval_result(n), size=3)
+    srv, port = _serve(RunHub(live_models=("s", "l"), live_eval=suite, sleep=no_wait, fake_delay=0))
+    try:
+        assert post_eval(port, {"mode": "live", "cases": 4})[0] == 422
+        assert post_eval(port, {"mode": "live", "cases": 3})[0] == 202
+        stream(port)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_a_live_eval_without_models_is_503(server):
+    """No live suite configured: the request is refused as not configured."""
+    _, port = server
+    assert post_eval(port, {"mode": "live", "cases": 2})[0] == 503
+
+
+def test_an_eval_gets_the_same_header_checks_as_a_run(server):
+    """Content type, origin, host and body size are checked as for /run."""
+    _, port = server
+    body = json.dumps({"mode": "fake", "cases": 2})
+    assert call(port, "POST", "/eval", body, {"Content-Type": "text/plain"})[0] == 415
+    assert post_eval(port, {"mode": "fake", "cases": 2}, Origin="http://evil.example")[0] == 403
+    assert post_eval(port, {"mode": "fake", "cases": 2}, Host="evil.example")[0] == 403
+    assert call(port, "POST", "/eval", "x" * 40000, {"Content-Type": "application/json"})[0] == 413
+
+
+def test_an_eval_and_a_triage_run_never_overlap():
+    """One run slot: an eval blocks a triage run and another eval, and the reverse."""
+    gate = threading.Event()
+    srv, port = _serve(RunHub(live_models=None, sleep=lambda s: gate.wait(5), fake_delay=1))
+    try:
+        assert post_eval(port, {"mode": "fake", "cases": 1})[0] == 202
+        assert post_run(port, {"mode": "fake", "scenario": "stay_small"})[0] == 409
+        assert post_eval(port, {"mode": "fake", "cases": 1})[0] == 409
+        gate.set()
+        stream(port)
+        gate.clear()
+        assert post_run_when_free(port, {"mode": "fake", "scenario": "stay_small"}) == 202
+        assert post_eval(port, {"mode": "fake", "cases": 1})[0] == 409
+    finally:
+        gate.set()
+        stream(port)
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_config_reports_each_eval_sets_size(server):
+    """The page reads the sizes from /config; live is None when not configured."""
+    _, port = server
+    cfg = json.loads(call(port, "GET", "/config")[1])
+    assert cfg["eval_sizes"] == {"live": None, "fake": FAKE_SIZE}
+    assert cfg["eval_default"] == 2
+
+
+# ---- stopping an eval run ---------------------------------------------------------
+
+
+def test_stop_ends_a_fake_eval_after_the_case_in_flight():
+    """POST /stop during case 1 of a full run: case 1 finishes, case 2 never starts."""
+    holder = {}
+
+    def press_stop(seconds):
+        """The fake model's pause: the moment someone presses stop."""
+        holder["stopping"] = call(holder["port"], "POST", "/stop", headers={"Content-Length": "0"})
+
+    srv, port = _serve(RunHub(live_models=None, sleep=press_stop, fake_delay=0))
+    holder["port"] = port
+    try:
+        assert post_eval(port, {"mode": "fake", "cases": FAKE_SIZE})[0] == 202
+        events = stream(port)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert holder["stopping"] == (200, b'{"stopping": true}')
+    kinds = [e["kind"] for e in events]
+    assert kinds.count("case_started") == 1 and kinds.count("case_scored") == 1
+    last = events[-1]
+    assert last["kind"] == "eval_failed" and last["data"]["reason"] == "stopped"
+    assert last["data"]["error"] == f"stopped after 1 of {FAKE_SIZE} cases"
+
+
+def test_stop_says_false_when_nothing_can_stop(server):
+    """Idle, or a single triage run, cannot stop: the answer says so."""
+    _, port = server
+    assert call(port, "POST", "/stop", headers={"Content-Length": "0"}) == (200, b'{"stopping": false}')
+    post_run(port, {"mode": "fake", "scenario": "stay_small"})
+    stream(port)
+    assert call(port, "POST", "/stop", headers={"Content-Length": "0"}) == (200, b'{"stopping": false}')
+
+
+def test_a_stop_left_over_from_a_hunt_does_not_end_the_next_eval():
+    """The stop flag is cleared when a run starts, so an old press cannot leak."""
+    hub = RunHub(live_models=None, sleep=no_wait, fake_delay=0)
+    hub._stop.set()  # as if a press landed just after the previous run ended
+    srv, port = _serve(hub)
+    try:
+        post_eval(port, {"mode": "fake", "cases": 2})
+        last = stream(port)[-1]
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert last["kind"] == "eval_finished"
+
+
+# ---- the live eval path, without a model ------------------------------------------
+
+
+def test_a_live_eval_hub_runs_the_injected_eval_and_streams_its_events():
+    """The hub hands the live suite the count, both emitters and the stop flag."""
+    from app.console_eval import EvalSuite
+
+    seen = []
+
+    def live(n, *, emit, on_event, should_stop):
+        """A live run that reports one harness and one app event."""
+        seen.append((n, should_stop()))
+        on_event("eval_started", n=n, cases=["g01"], system={})
+        emit("node_entered", node="small", model="s")
+        return eval_result()
+
+    hub = RunHub(live_models=("s", "l"), live_eval=EvalSuite(run=live, size=5), sleep=no_wait, fake_delay=0)
+    srv, port = _serve(hub)
+    try:
+        assert post_eval(port, {"mode": "live", "cases": 3})[0] == 202
+        events = stream(port)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert seen == [(3, False)]
+    assert [(e["source"], e["kind"]) for e in events] == [
+        ("harness", "eval_started"), ("app", "node_entered"), ("harness", "eval_finished")]
+
+
+def test_live_eval_cuts_the_session_to_n_cases_and_hands_the_graph_its_emitter(monkeypatch, tmp_path):
+    """The real `live_eval` over the real `live_runner`, with a fake session, judge, digest and git."""
+    from contextlib import contextmanager
+
+    from app.console_eval import live_eval
+    from app.eval_adapter import FindyFixy
+    from app.graph import build_graph
+    from harness.eval import cli
+    from harness.eval.cli import Session
+    from tests.harness_fakes import FakeJudge, case, embed
+
+    real = cli.live_runner
+    monkeypatch.setattr(cli, "live_runner", lambda open_session, **kw: real(
+        open_session, **kw, make_judge=lambda m: FakeJudge(), digest=lambda m: "dig",
+        git=lambda repo: ("abc1234", False)))
+    controls = []
+
+    @contextmanager
+    def open_session(negative_control, *, emit):
+        """A session of three cases whose graph reports to the run's `emit`."""
+        controls.append(negative_control)
+
+        def make_graph(recall):
+            """A graph with a confident scripted model and this case's recall."""
+            return build_graph(lambda m, p: scripted_reply(0.9), small_model="s", large_model="l",
+                               emit=emit, recall=recall)
+
+        sut = FindyFixy(make_graph=make_graph, candidates=lambda q, n: [], small_model="s", large_model="l")
+        cases = [case(f"g{i}", source_id=f"S{i}", twin_id=None) for i in range(3)]
+        yield Session(sut=sut, cases=cases, judge_model="j", embed=embed)
+
+    golden = tmp_path / "golden.jsonl"
+    golden.write_text("{}\n")
+    suite = live_eval(open_session, golden_path=golden, repo_dir=tmp_path, progress=lambda m: None, size=3)
+    assert suite.size == 3
+    app_events, harness_events = [], []
+    result = suite.run(2, emit=lambda kind, **d: app_events.append(kind),
+                       on_event=lambda kind, **d: harness_events.append((kind, d)), should_stop=lambda: False)
+    assert controls == [False]
+    assert [c["id"] for c in result.report["cases"]] == ["g0", "g1"] and result.subset is True
+    assert "route" in app_events
+    assert harness_events[0] == ("eval_started", {"n": 2, "cases": ["g0", "g1"], "system": {
+        "small_model": "s", "large_model": "l", "threshold": 0.7, "recall_k": 3}})
+    assert result.report["provenance"]["judge_digest"] == "dig"
+    full = suite.run(3, emit=lambda kind, **d: None, on_event=lambda kind, **d: None, should_stop=lambda: False)
+    assert full.subset is False
+    from harness.eval.runner import EvalStopped
+
+    with pytest.raises(EvalStopped):
+        suite.run(3, emit=lambda kind, **d: None, on_event=lambda kind, **d: None, should_stop=lambda: True)
+
+
+def test_a_subset_result_is_never_gated(tmp_path):
+    """The gate needs the full set: a subset verdict is None even with no baseline on disk."""
+    from app.console_eval import EvalResult, verdict
+
+    assert verdict(EvalResult(report={}, subset=True), tmp_path / "missing.json") is None

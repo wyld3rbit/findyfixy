@@ -8,6 +8,7 @@ Modules, from the bottom of the dependency graph up:
     stats.py       bootstrap intervals, aggregation, score and group names
     provenance.py  the stamp that says what produced a report
     report.py      report and baseline files, the gate, the table, the case viewer
+    events.py      the live events a run reports to a viewer (default: none)
     runner.py      run_case and run_eval over a SystemUnderTest
     cli.py         the command line an app's entry point hands its wiring to
 

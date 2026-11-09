@@ -23,4 +23,5 @@ The `code/app/` package. Dependencies point inward: only entry points import the
 **Entry points and wiring**
 - `code/app/wiring.py`, `code/app/settings.py` and `code/app/paths.py`: the composition root, the configuration read from the environment, and where files live.
 - `code/app/console.py`, `code/app/console_fakes.py`, `code/app/dev_reload.py` and `code/app/stress.py`: the live console, its scripted stand-ins, hot reload and stress settings.
+- `code/app/console_eval.py`: the console's eval run. It streams the harness's events next to the graph's for each case, and applies the gate read-only. It writes no report.
 - `code/app/mcp_server.py`, `code/app/mcp_client.py`, `code/app/mcp_run.py` and `code/app/direct_run.py`: the tool served over MCP and the two measured paths to it.

@@ -10,7 +10,7 @@ What it does
 
 Why polling and the standard library
     A file-watching package (`watchfiles`, or `uvicorn --reload`) would add
-    dependencies and, through them, supply-chain surface. Polling about thirty
+    dependencies and, through them, supply-chain surface. Polling a few dozen
     files twice a second costs almost nothing, and it works the same on every
     system. The cost: a change is noticed up to half a second late, and a file
     that changes and changes back within one poll is missed. Neither matters
@@ -50,8 +50,9 @@ from typing import Protocol
 
 # Relative to the project root (code/). A change here needs a NEW PROCESS: Python
 # does not re-read modules it has imported, and model names are read from `.env`
-# at startup. Only `.env`'s modification time is read, never its contents.
-RESTART_PATTERNS = ("app/**/*.py", "data/*.json", ".env")
+# at startup. Only `.env`'s modification time is read, never its contents. The
+# console's eval run imports the harness, so harness code restarts it too.
+RESTART_PATTERNS = ("app/**/*.py", "harness/**/*.py", "data/*.json", ".env")
 
 # The page is read from disk on every request, so editing it needs no restart,
 # only a browser reload. It is part of the fingerprint the page polls, and not

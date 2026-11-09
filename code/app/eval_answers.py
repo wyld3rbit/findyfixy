@@ -8,7 +8,9 @@ What it does
 
 Run it:  uv run python -m app.eval_answers [--gate | --write-baseline | --no-recall]
 Every make target (`make eval`, `make eval-gate`, `make eval-baseline`,
-`make eval-negative`, `make case`, `make eval-freeze`) calls this module.
+`make eval-negative`, `make case`, `make eval-freeze`) calls this module. The
+console's live eval run (app/console_eval.py) opens the same session, so the
+command line and the viewer can never run different wiring.
 
 Why so thin
     This is the composition root of the evaluation: the one place that reads
@@ -21,7 +23,8 @@ Failure model
     - A missing SMALL_MODEL or LARGE_MODEL becomes the harness `ConfigError`,
       so the command prints "set the environment variable ..." and exits 2.
     - The database, the retriever and the embedder are opened for the run and
-      closed when it ends, even when it fails, by the session's context.
+      closed when it ends, even when it fails, by the session's context. (The
+      console instead lends the session its own long-lived copy.)
 
 What changes at scale
     Sequential by default: one Ollama on one Apple GPU, with the models loaded
@@ -31,20 +34,19 @@ What changes at scale
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 import sys
-import threading
 from types import MappingProxyType
 
 from app.eval_adapter import FindyFixy, Invokable, to_case
+from app.events import Emit, no_emit
 from app.golden import DEFAULT_PATH as GOLDEN_PATH, load_golden
 from app.graph import Recall
 from app.paths import EVALS, REPORTS, ROOT
 from app.settings import MissingEnvironment, load_env, read_models
-from app.triage import Prior
-from app.wiring import build_retriever, connect
+from app.wiring import SharedRetrieval
 from harness.eval import cli
 from harness.eval.cli import ConfigError, Session, SessionFactory
 
@@ -59,7 +61,9 @@ LEGACY_CONTROL = MappingProxyType({"recall_enabled": False})
 
 
 @contextmanager
-def open_live_session(negative_control: bool) -> Iterator[Session]:
+def open_live_session(
+    negative_control: bool, *, emit: Emit = no_emit, retrieval: SharedRetrieval | None = None
+) -> Iterator[Session]:
     """Open the real database, retriever and embedder, and yield the live adapter.
 
     Environment: SMALL_MODEL and LARGE_MODEL (required), JUDGE_MODEL (default
@@ -72,13 +76,18 @@ def open_live_session(negative_control: bool) -> Iterator[Session]:
     Scores must fall and the gate must fail. The harness records the flag in
     provenance, and such a run cannot be saved as a baseline.
 
-    The retriever, the database connection and the embedder are shared across
-    workers, and none is safe to call from two threads at once, so each sits
-    behind one lock. The lock covers only retrieval and embedding (well under a
-    second per case), never the model calls, which are where the time goes.
+    `emit` receives the graph's own run events (app/events.py) for every case.
+    The command line passes none. The console passes its stream, so the app
+    lane of the page moves with each case from real events.
+
+    `retrieval` is the process's shared database, embedder and retriever
+    (app/wiring.py). The console passes the one its triage runs already use,
+    so an eval run loads no second copy, and it stays open after the session.
+    The command line passes none: the session builds its own and closes it at
+    the end, even when the run fails. Either way the shared object's lock keeps
+    retrieval and embedding to one thread at a time, so `--workers` is safe.
     """
     from app.graph import build_graph
-    from app.ingest import make_embedder
     from app.llm import ollama_ask
 
     load_env()
@@ -88,23 +97,10 @@ def open_live_session(negative_control: bool) -> Iterator[Session]:
         raise ConfigError(f"set the environment variable {err}") from err
     small, large = models.small, models.large
     goldens = load_golden(GOLDEN_PATH)
-    embedder = make_embedder()
-    with connect() as conn:
-        retriever = build_retriever(conn, embedder)
-        shared = threading.Lock()
-
-        def candidates(question: str, n: int) -> list[Prior]:
-            """Top n incidents by hybrid + rerank, as prompt-ready briefs. Thread-safe."""
-            with shared:
-                found = retriever.hybrid_rerank(question, n)
-                return [retriever.brief(f.incident_id) for f in found]
-
-        def embed_locked(texts: Sequence[str]) -> list[list[float]]:
-            """The embedder behind a lock: a loaded model is not safe to share across threads."""
-            with shared:
-                return embedder(texts)
-
-        candidates(goldens[0].question, 1)  # warm-up, not measured
+    owned = retrieval is None
+    shared = SharedRetrieval() if retrieval is None else retrieval
+    try:
+        shared.candidates(goldens[0].question, 1)  # warm-up, not measured
 
         def make_graph(recall: Recall) -> Invokable:
             """The production graph with recall bound to one case, or none for the control."""
@@ -112,11 +108,15 @@ def open_live_session(negative_control: bool) -> Iterator[Session]:
                 ollama_ask,
                 small_model=small,
                 large_model=large,
+                emit=emit,
                 recall=None if negative_control else recall,
             )
 
-        sut = FindyFixy(make_graph=make_graph, candidates=candidates, small_model=small, large_model=large)
-        yield Session(sut=sut, cases=[to_case(g) for g in goldens], judge_model=models.judge, embed=embed_locked)
+        sut = FindyFixy(make_graph=make_graph, candidates=shared.candidates, small_model=small, large_model=large)
+        yield Session(sut=sut, cases=[to_case(g) for g in goldens], judge_model=models.judge, embed=shared.embed)
+    finally:
+        if owned:
+            shared.close()
 
 
 def main(

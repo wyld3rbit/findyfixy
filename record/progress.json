@@ -371,6 +371,7 @@
       "checks": [
         "Harness never imports the app; architecture test fails when it does",
         "Saved final run passes and no-recall control fails with the new code",
+        "Eval run of 2 cases animates both lanes and ends with subset, gate not applied",
         "CI fails an answer-affecting change without a matching passing attestation",
         "Hand-checked 3 judge scores",
         "Drill under 90s"

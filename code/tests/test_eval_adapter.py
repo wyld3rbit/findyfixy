@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app import eval_answers
+from app import eval_answers, wiring
 from app.eval_adapter import (
     FindyFixy,
     holdout,
@@ -364,7 +364,7 @@ def test_an_unset_model_name_exits_2_through_the_real_live_session(tmp_path: Pat
         """Fail the test if the session got as far as the database."""
         raise AssertionError("the database was opened before the missing setting was reported")
 
-    monkeypatch.setattr(eval_answers, "connect", no_database)
+    monkeypatch.setattr(wiring, "connect", no_database)
     assert entry([], tmp_path) == 2
     assert "error: set the environment variable SMALL_MODEL" in capsys.readouterr().err
     assert not (tmp_path / "r").exists()  # no report for a run that never started

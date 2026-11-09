@@ -5,11 +5,22 @@ What it does
     a run is in flight it streams every event (app/events.py) to the browser
     over Server-Sent Events (SSE). The page animates from those events.
 
+    It also runs the evaluation harness on the first N golden cases (an "eval
+    run", app/console_eval.py). The stream then carries the harness's events
+    (harness/eval/events.py) next to the graph's events for each case. Every
+    streamed event is tagged with its `source`, "app" or "harness", so the
+    page can tell the two vocabularies apart.
+
         GET  /         the page (docs/architecture.html)
         GET  /config   questions, fake scenarios, which modes are available
         POST /run      start one run (or a hunt): {"mode", "question"?, "scenario"?}
-        POST /stop     ask a running hunt to stop after its current run
+        POST /eval     start one eval run: {"mode", "cases": 1..N}, N the set's size
+        POST /stop     ask a hunt or an eval run to stop after its current run or
+                       case; answers {"stopping": false} when nothing can stop
         GET  /events   SSE stream of the latest run, replayed from the start
+
+    The console is a viewer. An eval run here writes no report and no
+    baseline; it applies the gate read-only, and only when every case ran.
 
 Run it:   uv run python -m app.console      (then open the printed address)
 Develop:  uv run python -m app.console --reload
@@ -38,7 +49,10 @@ Security model (a local tool is still a web server)
       send that without a CORS preflight, and we answer no preflight.
     - Origin, when present, must match Host.
     - The question is capped at 8000 characters and the body at 32 KB.
-    - One run at a time. Two 7B-class runs would not fit in 16 GB.
+    - An eval run's case count must be a JSON integer from 1 to the size of
+      the chosen set (the golden set live, the invented set fake). Strict:
+      "2", 2.0 and true are refused, and so is any unknown field.
+    - One run at a time, triage or eval. Two 7B-class runs would not fit in 16 GB.
 
 Failure modes
     - A browser that disconnects mid-stream is a broken pipe in the handler.
@@ -56,6 +70,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import asdict
+from functools import partial
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -63,8 +78,16 @@ from typing import Literal
 from urllib.parse import parse_qs, urlparse
 
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError
 
+from app.console_eval import (
+    EVAL_DEFAULT,
+    EvalRun,
+    HarnessEvent,
+    EvalSuite,
+    live_eval,
+    run_and_judge,
+)
 from app.console_fakes import (
     FAKE_QUESTION,
     FAKE_RECALL,
@@ -73,14 +96,15 @@ from app.console_fakes import (
     Scenario,
     ScriptedToolModel,
     fake_ask,
+    fake_eval,
     inject_bad_first_reply,
 )
 from app.dev_reload import fingerprint, snapshot
-from app.events import Emit, Event, make_emit
+from app.events import Emit, Event, make_emit, make_stamped_emit
 from app.incidents import DEFAULT_PATH, Incident, load_incidents
-from app.paths import DOCS, ROOT
+from app.paths import DOCS, EVALS, ROOT
 from app.settings import load_env, optional_models
-from app.wiring import lazy_recall
+from app.wiring import SharedRetrieval
 from app.investigate import build_investigator
 from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
 from app.tools import make_deploys_tool
@@ -110,6 +134,14 @@ HUNT_LIMIT = 50
 
 _RUN_TERMINAL = ("run_finished", "run_failed")
 _HUNT_TERMINAL = ("hunt_finished",)
+# Harness kinds. The app and harness vocabularies share no kind name
+# (tests/test_page_truth.py checks it), so a kind alone says which run ended.
+_EVAL_TERMINAL = ("eval_finished", "eval_failed")
+
+# Read-only: the console compares a full eval run to it and never writes it.
+BASELINE_PATH = EVALS / "baseline.json"
+
+StreamEvent = Event | HarnessEvent
 
 
 class RunRequest(BaseModel):
@@ -130,6 +162,21 @@ class RunRequest(BaseModel):
     # Live mode only. Repeat real runs until a reply fails validation, or until
     # this many runs have been made. None means a single run.
     hunt_max: int | None = Field(default=None, ge=1, le=HUNT_LIMIT)
+
+
+class EvalRequest(BaseModel):
+    """The body of POST /eval, validated before anything starts.
+
+    `cases` is a strict int: the first N cases run, so a string or a float
+    has no meaning here and is refused rather than coerced. Unknown fields are
+    refused too, so a typo cannot silently fall back to a default. The upper
+    bound depends on the mode's case set, so `RunHub.start_eval` checks it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Mode
+    cases: StrictInt = Field(ge=1)
 
 
 class Busy(Exception):
@@ -191,8 +238,20 @@ class RunHub:
         sleep: Callable[[float], None] = time.sleep,
         fake_delay: float = 0.6,
         clock: Callable[[], float] = time.perf_counter,
+        live_eval: EvalSuite | None = None,
+        baseline_path: Path = BASELINE_PATH,
     ) -> None:
+        """Hold the wiring. Nothing runs until `start` or `start_eval`.
+
+        `live_eval` is the real eval run and its golden set's size (built in
+        `main` when models are configured); None means live eval runs are
+        refused as not configured. Fake eval runs are always available and
+        need no model.
+        """
         self._live_models = live_models
+        self._live_eval = live_eval
+        self._fake_eval = fake_eval(sleep, fake_delay)
+        self._baseline_path = baseline_path
         self.incidents = incidents or []
         self._investigator = investigator
         # When set, live runs use it and fake runs use `FAKE_RECALL`. When None
@@ -202,11 +261,16 @@ class RunHub:
         self._fake_delay = fake_delay
         self._clock = clock
         self._cond = threading.Condition()
-        self._events: list[Event] = []
+        self._events: list[StreamEvent] = []
         self._running = False
         self._run_id = 0
         self._stop = threading.Event()
         self._terminal: tuple[str, ...] = _RUN_TERMINAL
+        # Set by `_publish` when a terminal event lands, so `wait_for` reads a
+        # flag instead of rescanning every event on each wake.
+        self._finished = False
+        # True while a run that honours /stop (a hunt, an eval) is in flight.
+        self._stoppable = False
 
     @property
     def tools_available(self) -> bool:
@@ -217,6 +281,67 @@ class RunHub:
     def live_available(self) -> bool:
         """True when `SMALL_MODEL` and `LARGE_MODEL` were configured."""
         return self._live_models is not None
+
+    def eval_sizes(self) -> dict[str, int | None]:
+        """How many cases each mode's eval set has. None for live when it is not configured."""
+        return {"live": self._live_eval.size if self._live_eval else None, "fake": self._fake_eval.size}
+
+    def _begin(self, terminal: tuple[str, ...], *, stoppable: bool) -> int:
+        """Claim the one run slot and reset the stream. Raises `Busy`. Returns the run id.
+
+        Shared by triage and eval runs, so neither can start while the other is
+        in flight. The terminal kinds are set here, under the lock, so a viewer
+        never reads a stream with the previous run's end condition.
+        """
+        with self._cond:
+            if self._running:
+                raise Busy
+            self._running = True
+            self._run_id += 1
+            self._events = []
+            self._stop.clear()
+            self._terminal = terminal
+            self._finished = False
+            self._stoppable = stoppable
+            return self._run_id
+
+    def start_eval(self, req: EvalRequest) -> int:
+        """Start an eval run of the first `req.cases` cases in a thread. Raises `Busy`.
+
+        Live needs the real wiring (`NotConfigured` otherwise). Fake runs the
+        real harness on invented cases with scripted models. A count above the
+        chosen set's size is a `ValueError` (422), checked before the slot is
+        taken.
+        """
+        if req.mode == "live":
+            if self._live_eval is None:
+                raise NotConfigured("live eval needs SMALL_MODEL and LARGE_MODEL")
+            suite = self._live_eval
+        else:
+            suite = self._fake_eval
+        if req.cases > suite.size:
+            raise ValueError(f"cases must be between 1 and {suite.size} for {req.mode} mode")
+        run_id = self._begin(_EVAL_TERMINAL, stoppable=True)
+        threading.Thread(target=self._eval, args=(suite.run, req.cases), daemon=True).start()
+        return run_id
+
+    def _eval(self, run: EvalRun, n: int) -> None:
+        """The eval run thread. Always ends with exactly one terminal event.
+
+        Two emitters feed one stream: the graph's events (app vocabulary) and
+        the runner's (harness vocabulary). Both stamp time from this moment,
+        with the same emitter code. The runner asks the stop flag before each
+        case. `_running` is cleared last, as in `_run`.
+        """
+        emit = make_emit(self._publish, self._clock)
+        on_event = make_stamped_emit(self._publish, self._clock, HarnessEvent)
+        try:
+            run_and_judge(run, n, emit=emit, on_event=on_event, should_stop=self._stop.is_set,
+                          baseline_path=self._baseline_path)
+        finally:
+            with self._cond:
+                self._running = False
+                self._cond.notify_all()
 
     def start(self, req: RunRequest) -> int:
         """Start a run in a thread and return its id. Raises `Busy`.
@@ -258,15 +383,7 @@ class RunHub:
                     make_deploys_tool(),
                 )
 
-        with self._cond:
-            if self._running:
-                raise Busy
-            self._running = True
-            self._run_id += 1
-            self._events = []
-            self._stop.clear()
-            self._terminal = _HUNT_TERMINAL if req.hunt_max else _RUN_TERMINAL
-            run_id = self._run_id
+        run_id = self._begin(_HUNT_TERMINAL if req.hunt_max else _RUN_TERMINAL, stoppable=bool(req.hunt_max))
 
         threading.Thread(
             target=self._run,
@@ -289,19 +406,30 @@ class RunHub:
             return None
         return self._recall if mode == "live" else (lambda question: FAKE_RECALL)
 
-    def _publish(self, event: Event) -> None:
+    def _publish(self, event: StreamEvent) -> None:
         """Sink for the run's emitter: append and wake the SSE handlers."""
         with self._cond:
             self._events.append(event)
+            if event.kind in self._terminal:
+                self._finished = True
             self._cond.notify_all()
 
     def _banks(self) -> list[list[str]]:
         """The question banks a hunt can rotate: the lesson five, then incidents."""
         return [QUESTIONS, [i.text for i in self.incidents]]
 
-    def stop(self) -> None:
-        """Ask a running hunt to stop after its current run. Harmless otherwise."""
-        self._stop.set()
+    def stop(self) -> bool:
+        """Ask a running hunt or eval run to stop after its current run or case.
+
+        Returns True when such a run is in flight and will stop, False when
+        there is nothing that can stop (idle, or a single triage run), so the
+        page can say what really happens.
+        """
+        with self._cond:
+            if not (self._running and self._stoppable):
+                return False
+            self._stop.set()
+            return True
 
     def _run(
         self,
@@ -442,7 +570,7 @@ class RunHub:
                 break
         emit("hunt_finished", reason=reason, runs=runs, max=hunt_max)
 
-    def wait_for(self, index: int, timeout: float) -> tuple[list[Event], bool]:
+    def wait_for(self, index: int, timeout: float) -> tuple[list[StreamEvent], bool]:
         """Block until there are events at or past `index`, or `timeout`.
 
         Returns (new events, finished). `finished` is true once a terminal
@@ -450,13 +578,10 @@ class RunHub:
         `finished` false means the wait timed out: send a keepalive.
         """
         with self._cond:
-            def finished() -> bool:
-                return any(e.kind in self._terminal for e in self._events)
-
             # Wake on new events, or on a finished run (so a replay past the
             # end returns at once instead of waiting out the timeout).
-            self._cond.wait_for(lambda: len(self._events) > index or finished(), timeout)
-            return self._events[index:], finished()
+            self._cond.wait_for(lambda: len(self._events) > index or self._finished, timeout)
+            return self._events[index:], self._finished
 
     @property
     def terminal_kinds(self) -> tuple[str, ...]:
@@ -468,6 +593,16 @@ class RunHub:
         """True once any run has started, so there is something to replay."""
         with self._cond:
             return self._run_id > 0
+
+
+def wire(event: StreamEvent) -> dict[str, object]:
+    """One stream event as the JSON object the page reads, tagged with its source.
+
+    The tag is added here, at the edge, so neither vocabulary needs to know
+    about the other or about the page.
+    """
+    source = "harness" if isinstance(event, HarnessEvent) else "app"
+    return {"source": source, **asdict(event)}
 
 
 def make_handler(
@@ -568,6 +703,8 @@ def make_handler(
                         "hunt_limit": HUNT_LIMIT,
                         "stresses": {s: DESCRIPTIONS[s] for s in STRESSES},
                         "dev_reload": dev_root is not None,
+                        "eval_sizes": hub.eval_sizes(),
+                        "eval_default": EVAL_DEFAULT,
                     },
                 )
             if url.path == "/events":
@@ -583,9 +720,8 @@ def make_handler(
             path = urlparse(self.path).path
             if path == "/stop":
                 # No body is read, and none is needed. Close, as above.
-                hub.stop()
-                return self._json(HTTPStatus.OK, {"stopping": True})
-            if path != "/run":
+                return self._json(HTTPStatus.OK, {"stopping": hub.stop()})
+            if path not in ("/run", "/eval"):
                 return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
             if not self.headers.get("Content-Type", "").startswith("application/json"):
                 return self._json(
@@ -600,8 +736,11 @@ def make_handler(
                                   {"error": "bad body size"})
             self.close_connection = False  # body is about to be read in full
             try:
-                req = RunRequest.model_validate_json(self.rfile.read(length))
-                run_id = hub.start(req)
+                body = self.rfile.read(length)
+                if path == "/eval":
+                    run_id = hub.start_eval(EvalRequest.model_validate_json(body))
+                else:
+                    run_id = hub.start(RunRequest.model_validate_json(body))
             except (ValidationError, ValueError) as err:
                 return self._json(HTTPStatus.UNPROCESSABLE_ENTITY, {"error": str(err)})
             except NotConfigured as err:
@@ -635,7 +774,7 @@ def make_handler(
                         self.wfile.flush()
                         continue
                     for event in new:
-                        data = json.dumps(asdict(event))
+                        data = json.dumps(wire(event))
                         self.wfile.write(f"id: {sent}\ndata: {data}\n\n".encode())
                         sent += 1
                     self.wfile.flush()
@@ -708,11 +847,27 @@ def main(argv: list[str] | None = None) -> None:
         investigator = build_investigator(
             ChatOllama(model=models.small, **answer_options()).bind_tools([tool]), tool
         )
+    # One database connection, embedder and reranker for the whole process:
+    # triage recall and the eval session share it, so a live eval loads no copy.
+    retrieval = SharedRetrieval() if models else None
+    live_eval_suite = None
+    if retrieval is not None:
+        from app.eval_answers import GOLDEN_PATH, open_live_session
+        from app.golden import load_golden
+
+        live_eval_suite = live_eval(
+            partial(open_live_session, retrieval=retrieval),
+            golden_path=GOLDEN_PATH,
+            repo_dir=ROOT,
+            progress=lambda msg: print(msg, file=sys.stderr, flush=True),
+            size=len(load_golden(GOLDEN_PATH)),
+        )
     hub = RunHub(
         live_models=(models.small, models.large) if models else None,
         incidents=load_incidents(DEFAULT_PATH),
         investigator=investigator,
-        recall=lazy_recall(RECALL_K) if models else None,
+        recall=retrieval.recall(RECALL_K) if retrieval else None,
+        live_eval=live_eval_suite,
     )
     dev = ROOT if os.environ.get("FINDYFIXY_DEV") else None
     server = serve(hub, port=port, dev_root=dev)

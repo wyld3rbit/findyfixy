@@ -12,6 +12,7 @@ The `code/harness/` package is the evaluation harness: it scores an LLM system's
 - `code/harness/eval/stats.py`: bootstrap intervals and aggregation. Each expected label `L` is scored as `L_match`.
 - `code/harness/eval/provenance.py`: the stamp on every report. The app's `describe()` keys are merged in flat.
 - `code/harness/eval/report.py`: report and baseline files, the gate, the table and the case viewer.
+- `code/harness/eval/events.py`: the harness's own event vocabulary, which the runner reports to an optional viewer while a run is in flight.
 - `code/harness/eval/runner.py`: runs every case through a system under test and builds the report.
 - `code/harness/eval/cli.py`: the command line an app's entry point calls with its own wiring.
 

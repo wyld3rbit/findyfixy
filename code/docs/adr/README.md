@@ -6,7 +6,7 @@ A record has a decision, a diagnosis, guiding policies, coherent actions, a buil
 
 Records are append-only. A later phase adds a record and never edits an earlier one. Records 0001 to 0005 were written on 2026-10-29, after their phases closed, from the day notes, the changelog and the decision log. From Day 6 each record is written in the commit that closes its phase.
 
-Each diagram is drawn from the live architecture page by `make adr-snapshot`. A test fails if the page and the latest phase disagree.
+The diagrams for phases 1 to 4 are frozen files, drawn from the page's earlier one-lane layout and checked by hash. From phase 5 on, `make adr-snapshot` draws each diagram from the live architecture page. A test fails if a frozen file changes, or if the page and the latest phase disagree.
 
 | ADR | Phase | Decision | Code at close |
 |---|---|---|---|
