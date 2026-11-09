@@ -13,7 +13,7 @@ The recall step uses hybrid search (BM25 and vector, fused by reciprocal rank) f
 
 Vector search missed 3 of 10 exact-token queries in the top 5. recall@5 on token queries was 0.70.
 
-On meaning queries all three retrievers reached recall@5 of 1.00. Hybrid and rerank lowered MRR there, because each failure pattern appears in about 9 incidents and a paraphrase matches all of them.
+On meaning queries all three retrievers reached recall@5 of 1.00. Hybrid and rerank lowered MRR there, because each failure pattern has 9 originals, plus any seeded twins, and a paraphrase matches all of them.
 
 ## Guiding policies
 
