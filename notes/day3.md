@@ -32,7 +32,7 @@ Query: "auth latency spike after certificate rotation"
 
 - All five hits are certificate-rotation summaries. The distances are 0.089 to 0.157.
 - INC-0054 ("14 times normal") sits between the twins INC-0073 and INC-0074 ("41 times normal"), 0.003 away from INC-0074. The model ranks shared wording about as close as shared facts. It does not separate 14 from 41.
-- One query on template data is close to a best case. Nine incidents share the certificate pattern, so the family as a whole ranks high. Day 4 measures recall across all 20 pairs.
+- One query on template data is close to a best case. Ten incidents share the certificate pattern (nine originals and one seeded twin), so the family as a whole ranks high. Day 4 measures recall across all 20 pairs.
 
 ## Assistant runs (not the learner's)
 

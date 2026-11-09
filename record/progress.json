@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-30",
+  "updated": "2026-11-08",
   "plannedStart": "2026-10-17",
   "plannedEnd": "2026-10-26",
   "countdownStart": "2026-10-17T18:51:00",
@@ -127,7 +127,11 @@
     },
     {
       "date": "2026-10-30",
-      "entry": "README gif replaced with a captured live run of the visualizer (recall, deploy tool, small model, forced escalation to Qwen3 8B). Recorded after a warm-up run, because a cold console spent about three quarters of the clip loading the reranker; 18.7 s, 665 KB, the long waits sped up. Re-record it on Day 10 once the dashed boxes are built. Next: Day 6, observability."
+      "entry": "README gif replaced with a captured live run of the visualizer (recall, deploy tool, small model, forced escalation to Qwen3 8B). Recorded after a warm-up run, because a cold console spent about three quarters of the clip loading the reranker; 18.7 s, 665 KB, the long waits sped up. Re-record it on Day 10 once the dashed boxes are built. Next: Day 6, observability. The README was cut to 49 lines (run it, try it, disclaimer, license) at the learner's request; PR #2 is open and awaiting his approval. Rule agreed: ask before circumventing any permission block or ruleset, and use a branch and PR for main."
+    },
+    {
+      "date": "2026-11-08",
+      "entry": "Day 4 close-out: the RRF explanation, the drill answer and the evidence line were written by Claude at the learner's request and marked as such in notes/day4.md and notes/evidence.md, so self-check item 2 stays unticked. The pattern size was corrected in notes/day3.md, notes/day4.md and ADR 0004 (9 originals per pattern plus any seeded twins). The retrieval eval re-run today matched every quality number (recall@5 0.93, 0.97, 1.00). Blog parts 03 and 04 were rewritten and peer reviewed; part 03 is scheduled for 2026-11-10."
     }
   ],
   "decisions": [

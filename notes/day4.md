@@ -46,7 +46,7 @@ Identical quality numbers on a second run show the eval is deterministic. Only l
 
 - Exact tokens: recall@5 goes 0.70 (vector), 0.90 (hybrid), 1.00 (rerank). Vector missed 3 of 10 hostnames in the top 5 (t03 at rank 10, t06 at rank 9, t09 at rank 8). BM25 finds them. This is the point of hybrid.
 - Meaning queries: all three have recall@5 of 1.00. Hybrid and rerank do not improve it. They slightly lower MRR (0.864, 0.828, 0.763) and all@5 (0.73, 0.60, 0.57).
-- Why meaning gets worse, from the per-query ranks (assistant diagnostic, not saved): each failure pattern appears in about nine incidents (different services and numbers). A paraphrase matches all of them. The twin's partner is often outranked by other incidents of the same pattern, at ranks 4 to 9. That is retrieval working on meaning, but the label only counts the twin, so all@5 and MRR punish it. The labels measure "find this exact incident", and the queries ask "find incidents like this".
+- Why meaning gets worse, from the per-query ranks (assistant diagnostic, not saved): each failure pattern has nine originals (different services and numbers), plus any seeded twins. A paraphrase matches all of them. The twin's partner is often outranked by other incidents of the same pattern, at ranks 4 to 9. That is retrieval working on meaning, but the label only counts the twin, so all@5 and MRR punish it. The labels measure "find this exact incident", and the queries ask "find incidents like this".
 - Rerank costs about 340 ms per query against about 18 ms. That is 20 times the latency for 0.07 of overall recall@5 (0.93 to 1.00), all of it on token queries.
 - t06 (`notifications-001`): hybrid ranked it outside the top 10 (BM25 weight diluted), the reranker, which sees the top 30 chunks, put it at rank 1. A rerank stage can rescue a candidate that fusion left low, but only if it is in the pool.
 
@@ -68,3 +68,10 @@ Identical quality numbers on a second run show the eval is deterministic. Only l
 - Audit: `filelock` 4.2.0 to 4.2.1 and `setuptools` 84.0.0 to 84.2.0 (approved), `make audit` clean afterwards.
 - Tests: 371 pass (fast). Mutations, each caught: BM25 ignores the service filter, no incident collapsing, hybrid ignores BM25, rerank pool uncapped, prior incidents not passed to the models.
 - `rank-bm25` 0.2.2: Apache-2.0, last release 2022-02-16, about 8.7 million downloads in the last month (pypistats, 2026-10-25).
+
+## Self-check item 3 and drill (written by Claude at the learner's request, 2026-11-08)
+
+The learner asked Claude to answer these. They are not the learner's own recall.
+
+- RRF in one minute: vector search and BM25 each return a ranked list, and their scores sit on different scales (a BM25 score of 12 against a cosine distance of 0.17), so they cannot be added. Reciprocal rank fusion ignores the scores and uses ranks: each chunk scores the sum over both lists of 1 / (60 + rank). A chunk high in both lists wins. The 60 flattens the curve, so rank 1 is worth only a little more than rank 5. It needs no training and no weights to tune. In this project: BM25 top 50 and vector top 50, k = 60, then the reranker takes the top 30.
+- Drill, "Your RAG system gives confident wrong answers. Where do you look first?": retrieval, before generation. If the right incident never reaches the prompt, no prompt fixes it. Measure recall on a labelled set first. Here, vector search missed 3 of 10 exact-hostname queries in the top 5 (recall@5 0.70); BM25 with fusion brought it to 0.90 and the reranker to 1.00, at about 340 ms against 14 ms. Then check what reaches the prompt: for one alert, 2 of the 3 slots held the same incident told twice.
