@@ -552,11 +552,14 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 - The stale "Where we stopped" section from 2026-10-21 was removed; its still-current environment notes and the 2026-10-29 lessons entry are kept above.
 - Results are in `lessons/d05.md`.
 
+### Day 6, step 0: test isolation for the privacy-scanner tests (2026-11-09)
+
+- `tests/test_scan_private.py`: the `git()` helper now runs git with every `GIT_*` variable removed (`isolated_env()`). Before, a hook run under `git commit -a` set `GIT_INDEX_FILE` to the real repo's temporary index, the scratch repos staged into it, and 8 tests failed. `git commit -a` is safe again.
+- New test: `GIT_INDEX_FILE` set to a foreign path; a staged local path must still be blocked and the foreign index must not be created. Mutation: keeping the `GIT_*` variables fails it (1 failed, 55 passed); restored, 56 passed. The whole file also passes with `GIT_INDEX_FILE` exported to a foreign path. `make test`: 698 passed.
+
 ### Next
 
-- Part 05 article and post (part of closing the day), then push and open the pull request.
-- Day 6: answer first and judge after, with per-phase timing, before Langfuse.
+- Day 6, step 1: answer first and judge after, with per-phase timing, before Langfuse.
 - Day 9 (container build): Linux installs pull PyTorch's CUDA libraries, about 3.1 GB (torch 555 MB, cuDNN 553 MB, cuBLAS 423 MB, Triton 248 MB), although nothing uses a GPU; CI's check job still takes about 2 minutes. Fix with the image: CPU-only PyTorch wheels for Linux through a uv source with a platform marker, then `make audit` and a supply-chain check of that index; measure the image before and after.
 - Done: CI fails an unattested change. Draft PR #6 changed one comment in `code/app/triage.py`; the `attestation` job failed in 6 s naming the file and `check` was skipped. Closed without merging.
-- Open: `tests/test_scan_private.py` builds throwaway git repos but inherits `GIT_INDEX_FILE` from a `git commit -a` hook run, so 8 of its tests read the real temporary index and fail; `git add` then `git commit` works. Fix: the fixture clears `GIT_*` variables for its subprocesses.
 - Open: batching context-recall verdicts alone (met the 0.9 bar; about 1.5 judge calls saved per case), untried.
