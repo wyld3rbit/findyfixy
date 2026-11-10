@@ -546,7 +546,8 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 ### Day 5: first attestation, batched verdicts rejected, phase closed (2026-11-09)
 
 - The first live `make eval-gate` passed: report `eval-20261110T025827Z` at `b1fe199`, 30 of 30 cases, 0 run errors, means equal to the frozen baseline at two decimals, 846.4 s. `evals/attestation.json` (38 files) is committed in `75e3675`.
-- Batching the per-item judge verdicts into one call per case was measured against that run's saved verdicts and rejected: faithfulness agreement 0.839 (kappa 0.52), context recall 0.917 with a mean shift of minus 0.059 and one malformed batch. The bar was 0.9 agreement. One call per item stays; the comment in `_fraction_supported` is now a measured result.
+- Batching the per-item judge verdicts into one call per case was measured against that run's saved verdicts. Faithfulness failed the pre-set bar (agreement 0.839, kappa 0.52; bar 0.9). Context recall met it (0.917; mean shift minus 0.059, inside its interval) with one malformed batch. Faithfulness was the change under test, so one call per item stays; batching context recall alone is untried. An earlier version of this entry, the Results and ADR 0006 said context recall failed on the shift; the peer review of the part 05 article caught it and all three are corrected.
+- The 2026-11-10 run reproduced all 30 answers and every per-case score of the 2026-10-26 run exactly; only latency differs.
 - ADR 0006 records the rebuilt phase. ADR pictures are now keyed by ADR number (`RECORDS` in `tools/adr_snapshot.py`): ADR 0005's original picture was restored from git and frozen by hash, because the rebuilt visualizer had redrawn it; ADR 0006 is drawn from the page.
 - The stale "Where we stopped" section from 2026-10-21 was removed; its still-current environment notes and the 2026-10-29 lessons entry are kept above.
 - Results are in `lessons/d05.md`.

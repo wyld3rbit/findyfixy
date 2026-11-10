@@ -27,7 +27,7 @@ The harness is the product and FindyFixy is the app it is tested on. The first g
 - Done: `code/harness/eval/` with the seam, runner, events and CLI; `app/eval_adapter.py`; the equivalence proof.
 - Done: `harness/eval/attest.py` (standard library only), `make eval-gate` writing `evals/attestation.json`, `make verify-attestation`, and a CI job that verifies first and alone, then the product tests.
 - Done: the visualizer shows a harness lane and a live Eval run mode; tests fail if a box claims code that does not exist.
-- Done: batched judge verdicts were measured and rejected (Evidence).
+- Done: batched judge verdicts were measured; rejected for faithfulness, untried for context recall alone (Evidence).
 - Open: answer first and judge after, with per-phase timing, to cut run time without changing scores (Day 6).
 - Open: the learner's own hand-check of three judged cases.
 
@@ -61,10 +61,10 @@ First attested run, report `eval-20261110T025827Z` at `b1fe199`, Qwen3 4B-instru
 | context recall | 0.93 | 0.86 to 0.98 | 0 |
 | action quality | 0.92 | 0.82 to 0.98 | 0 |
 
-The paired incident was recalled in 95% of twin cases. Wall time 846.4 s, 2.13 cases per minute. The attestation covers 38 files.
+The paired incident was recalled in 95% of twin cases. Wall time 846.4 s, 2.13 cases per minute. The attestation covers 38 files. All 30 answers and every per-case score are identical to the run of 2026-10-26; only latency differs.
 
-Batched judge verdicts, re-judging the saved per-item verdicts of that run with one call per case: faithfulness agreed on 0.839 of 143 claims (Cohen's kappa 0.52); context recall agreed on 0.917 of 72 sentences (kappa 0.53) but moved the case mean by minus 0.059, and one batch came back malformed. The bar set before the run was 0.9 agreement. Rejected; one judge call per item stays.
+Batched judge verdicts, re-judging the saved per-item verdicts of that run with one call per case: faithfulness agreed on 0.839 of 143 claims (Cohen's kappa 0.52); context recall agreed on 0.917 of 72 sentences (kappa 0.53), moved the case mean by minus 0.059, inside its 95% interval, and one batch came back malformed. The bar set before the run was 0.9 agreement and a shift inside the interval. Faithfulness failed it and context recall met it. Faithfulness was the change under test, so batching was rejected and one judge call per item stays. Batching context recall alone is untried.
 
 ## Limits
 
-30 cases, synthetic, local models. One live run of the gate. The attestation is a process control: a pull request can edit the checker or the attestation, and branch protection with review is the real control. A stale database is refused, but a bumped embedding-model revision without a re-ingest still looks current. The batched-verdict comparison is against one per-item run, not per-item against itself.
+30 cases, synthetic, local models. One live run of the gate. The attestation is a process control: a pull request can edit the checker or the attestation, and branch protection with review is the real control. A stale database is refused, but a bumped embedding-model revision without a re-ingest still looks current. The batched-verdict comparison is against one per-item run, and its script is not committed. Model names come from the developer's untracked `.env`, so a model swap changes answers without failing CI; only the judge digest is checked, through the baseline. Both answering tiers were the same model, so the escalation path was not exercised. The judge, Qwen2.5 7B, is an older generation from the same vendor as the answering model, Qwen3 4B-instruct, so self-preference is possible; it has not been calibrated against human labels.

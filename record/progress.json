@@ -139,7 +139,7 @@
     },
     {
       "date": "2026-11-09",
-      "entry": "Day 5 closed in code: the attested CI gate is built and the first live make eval-gate passed (30 of 30 cases, 0 run errors, means equal to the baseline: severity 0.77, faithfulness 0.79, relevancy 0.67, context recall 0.93, action quality 0.92; 846 s), attestation of 38 files committed. Batched judge verdicts were measured and rejected (faithfulness agreement 0.839, kappa 0.52). ADR 0006 written; ADR 0005 keeps its original picture. 697 tests pass. Next: the part 05 article, then the pull request."
+      "entry": "Day 5 closed in code: the attested CI gate is built and the first live make eval-gate passed (30 of 30 cases, 0 run errors, means equal to the baseline: severity 0.77, faithfulness 0.79, relevancy 0.67, context recall 0.93, action quality 0.92; 846 s), attestation of 38 files committed. Batched judge verdicts were measured and rejected for faithfulness (agreement 0.839, kappa 0.52; context recall met the bar and stays untried alone). The run reproduced all 30 answers and scores of 2026-10-26 exactly. ADR 0006 written; ADR 0005 keeps its original picture. 697 tests pass. Next: the part 05 article, then the pull request."
     }
   ],
   "decisions": [
