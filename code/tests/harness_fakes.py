@@ -20,7 +20,8 @@ from harness.eval.runner import run_eval
 from harness.eval.sut import Answer
 
 NOW = datetime(2026, 10, 26, 12, 30, 5, tzinfo=timezone.utc)
-PROV = {"judge_digest": "d1", "prompt_versions": {"m": "h"}, "golden_sha256": "g1", "git_sha": "abc1234"}
+# A clean tree: the traceability rules refuse an unknown git state (None).
+PROV = {"judge_digest": "d1", "prompt_versions": {"m": "h"}, "golden_sha256": "g1", "git_sha": "abc1234", "git_dirty": False}
 
 
 def case(cid: str, group: str = "a", kind: str | None = "x", **meta: Any) -> Case:

@@ -6,7 +6,7 @@
 # its own, so the real commands stay readable in one place each.
 
 .DEFAULT_GOAL := help
-.PHONY: help adr-snapshot setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-negative case golden ingest audit tracker ui check
+.PHONY: help adr-snapshot setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-negative case golden ingest audit verify-attestation tracker ui check
 
 help:
 	@echo "First time:       make setup"
@@ -14,6 +14,7 @@ help:
 	@echo "Run the product:  make console   make triage   make ingest"
 	@echo "Measure / test:   make test   make eval-retrieval"
 	@echo "Answer quality:   make eval   make eval-gate   make eval-baseline   make eval-negative"
+	@echo "CI gate:          make verify-attestation   (the attestation eval-gate writes on a pass)"
 	@echo "See test cases:   make golden   make case ID=g07"
 	@echo "Freeze baseline:  make eval-freeze REPORT=reports/eval-<timestamp>.json"
 	@echo "Tracker page:     make tracker"
@@ -22,7 +23,7 @@ help:
 	@echo "Before a commit:  make check   make audit"
 
 # Product targets: see code/Makefile for what each one runs.
-setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-negative golden ingest audit:
+setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-negative golden ingest audit verify-attestation:
 	$(MAKE) -C code $@
 
 # Targets that take a value are forwarded explicitly, because the pattern rule

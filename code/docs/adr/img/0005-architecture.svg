@@ -99,10 +99,10 @@ text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-se
         <text class="badge" x="21" y="-43" id="b_eval"> </text>
         <text class="badge" x="21" y="-28" id="b_evalscore"> </text>
       </g>
-<g class="node" data-status="planned">
+<g class="node" data-status="built">
         <rect x="124" y="-96" width="130" height="64" rx="8"/>
         <text class="t" x="189" y="-70">CI gate</text>
-        <text class="s" x="189" y="-52">Day 5, attested</text>
+        <text class="s" x="189" y="-52">local run, attested</text>
       </g>
 <g class="node" data-status="planned">
         <rect x="292" y="-96" width="130" height="64" rx="8"/>

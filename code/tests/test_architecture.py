@@ -161,7 +161,7 @@ def test_only_entry_points_import_the_composition_root_and_settings() -> None:
 PURE_MODULES = ("triage", "events", "golden", "paths", "settings", "eval_adapter")
 # The harness's pure core. judge.py and provenance.py are left out on purpose:
 # they hold the one lazy Ollama import each (the real judge call, the digest).
-HARNESS_PURE_MODULES = ("case", "sut", "stats", "report", "metrics", "runner")
+HARNESS_PURE_MODULES = ("case", "sut", "stats", "report", "metrics", "runner", "attest")
 VENDOR_CLIENTS = ("langchain", "ollama", "psycopg", "pgvector", "sentence_transformers", "mcp")
 
 

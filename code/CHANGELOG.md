@@ -582,6 +582,18 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 
 - `code/docs/demo.gif` now shows a live Eval run of 2 golden cases (g01, g02) in the two-lane visualizer: Qwen3 4B-instruct answering, Qwen2.5 7B judging, 0 run errors, ending with "subset, gate not applied". Recorded from headless Chrome through its DevTools protocol (no extension), 64 s of run time, unchanged frames dropped and waits shortened to 28.8 s, 679 KB. The README caption, intro and "Try it" now describe the harness and the Eval run mode.
 
+### Day 5: the attested CI gate (2026-11-09)
+
+- `harness/eval/attest.py`, standard library only. The answer-affecting files are computed, not listed by hand: the import closure (by AST) of the eval entry module plus the data and lock files the app declares (`ATTEST_ENTRY`, `ATTEST_EXTRA` in `app/eval_answers.py`). 35 files today; console-only modules are excluded, so a console change does not force a rerun. A test enforces that.
+- `make eval-gate` writes `evals/attestation.json` only on a pass of a full, comparable, non-control run on a clean tree with a known judge digest, and only if no input changed during the run. The file holds repo-relative paths, hashes, model names, digests, the short git SHA and UTC times; nothing personal (the repo is public).
+- CI (`.github/workflows/check.yml`) gains two steps: the product tests (`uv sync --locked`, then `make test`; Linux wheels include torch and CUDA, about 3 GB, no cache yet) and the attestation check (`python3 -I code/harness/eval/attest.py verify`, which reads and hashes files and imports none). Trigger stays `pull_request`, permissions read-only, no secrets, checkout credentials not persisted. New `make verify-attestation`.
+- The visualizer's CI gate box is now built; ADR 0001 to 0004 pictures unchanged.
+- Trust trade-off: CI trusts the local run, and a pull request can edit the checker or the attestation. Branch protection with review is the real control.
+- Open: a stale database that was not re-ingested is invisible to the fingerprint.
+- A fresh-agent review found 10 issues; all fixed. Most important: the gate now checks that the database matches the incident files and ingest code (ingest's own diff) before a run starts, and refuses with "the database is stale: run make ingest", because the run reads passages from Postgres, not from the files. The attestation check now runs first, in its own CI job, so test code cannot alter what is hashed. Attestation fields are type-checked and every printed string is sanitised so it cannot inject GitHub Actions commands. The attestation is written only when the whole command exits 0. Every tracked file under `data/` plus `docker-compose.yml` is declared. One set of traceability rules (an unknown dirty state is now refused by both the baseline and the attestation).
+- Known gaps: a bumped embedding-model revision without a re-ingest still looks current; files under `data/` that the eval does not read also force a rerun.
+- Tests: `make test` 697 passed, 14 deselected. `make check` OK.
+
 ### Next
 
-- Day 5 step 4: the attested CI gate (`lessons/d05.md`).
+- Live `make eval-gate` on all 30 cases to write the first attestation; then the Day 5 ADR and Results.

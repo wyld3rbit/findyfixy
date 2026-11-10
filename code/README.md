@@ -6,7 +6,7 @@ FindyFixy, an event detection, determination and mitigation agent, and the evalu
 - `code/harness/` is the evaluation harness. It never imports the app. `code/harness/README.md` explains the seam.
 - `code/tests/` holds the product tests, which use fakes and need no model or database.
 - `code/data/` holds the synthetic data the system reads.
-- `code/evals/` holds the frozen evaluation baseline.
+- `code/evals/` holds the frozen evaluation baseline and the attestation of the last passing gate run, which CI checks.
 - `code/docs/` holds the architecture page.
 - `code/Makefile` holds the commands. Run `make help` to list them.
 - `code/CHANGELOG.md` records what was done in each step, what differs from the lessons, and what is open.

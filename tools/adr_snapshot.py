@@ -42,7 +42,7 @@ FIRST_BUILT = {
     "Question": 1, "Small model": 1, "Route": 1, "Large model": 1, "Triage record": 1,
     "Investigate": 2, "Deploy tool": 2, "Validate": 2,
     "Recall": 4,
-    "Eval gate": 5,
+    "Eval gate": 5, "CI gate": 5,
 }
 PHASES = range(1, 6)
 

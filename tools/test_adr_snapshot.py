@@ -53,10 +53,10 @@ def test_phase_five_draws_both_lanes_and_the_loop_between_them() -> None:
                    'id="e_eval_q"', 'id="e_rec_eval"'):
         assert needle in svg, needle
     for name in ("Question", "Recall", "Investigate", "Deploy tool", "Small model", "Validate", "Route",
-                 "Large model", "Triage record", "Eval gate"):
+                 "Large model", "Triage record", "Eval gate", "CI gate"):
         block = svg.split(f">{name}<")[0].rsplit("<g ", 1)[1]
         assert 'data-status="built"' in block, name
-    for name in ("CI gate", "Tracing", "Policy", "Gateway", "Human review"):
+    for name in ("Tracing", "Policy", "Gateway", "Human review"):
         block = svg.split(f">{name}<")[0].rsplit("<g ", 1)[1]
         assert 'data-status="planned"' in block, name
     assert "data-code" not in svg and "<title>" not in svg and "tool step off" not in svg

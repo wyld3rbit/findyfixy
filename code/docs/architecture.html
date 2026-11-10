@@ -249,7 +249,7 @@
   <section class="panel" aria-label="Architecture schematic">
     <div class="schematic">
     <svg viewBox="-60 -128 1000 594" role="img" aria-labelledby="svgtitle">
-      <title id="svgtitle">Two lanes. The top lane is the harness: an eval gate that is built, and a CI gate, tracing, policy, gateway and human review that are planned. The bottom lane is FindyFixy, the app under test. The eval gate sends each golden case into the app as a question. The question goes to a recall step that looks up similar past incidents, then to an investigate step that may look up deploys with a tool, then to the small model, then validation, then a route that either ends or escalates to the large model, and finally a triage record. The triage record goes back to the eval gate, which scores the answer.</title>
+      <title id="svgtitle">Two lanes. The top lane is the harness: an eval gate and a CI gate that are built, and tracing, policy, gateway and human review that are planned. The bottom lane is FindyFixy, the app under test. The eval gate sends each golden case into the app as a question. The question goes to a recall step that looks up similar past incidents, then to an investigate step that may look up deploys with a tool, then to the small model, then validation, then a route that either ends or escalates to the large model, and finally a triage record. The triage record goes back to the eval gate, which scores the answer.</title>
 
       <!-- lanes: the harness on top, the app it tests below -->
       <rect class="lane harness" x="-54" y="-122" width="988" height="114" rx="10"/>
@@ -354,11 +354,11 @@
         <text class="badge" x="21" y="-43" id="b_eval"> </text>
         <text class="badge" x="21" y="-28" id="b_evalscore"> </text>
       </g>
-      <g class="node" data-status="planned" data-layer="harness" data-code="harness/eval/attest.py">
-        <title>Planned for Day 5, step 4. Not built, no behavior yet.&#10;A passing local eval run writes an attestation: a fingerprint of every file that changes answers, plus the verdict. CI fails a change to those files that has no matching passing attestation.</title>
+      <g class="node" data-status="built" data-layer="harness" data-code="harness/eval/attest.py">
+        <title>In: A make eval-gate command that passes as a whole: the full golden set, a clean tree, a known judge digest, and a database that matches the corpus (a stale ingest stops the run). Never a subset or the negative control.&#10;Out: evals/attestation.json, committed with the change: the SHA-256 of every answer-affecting file, the report hash, the verdict, the models, the judge digest and the git SHA.&#10;Logic: The answer-affecting files are computed, not listed: the import closure of the eval entry point, read from the source, plus the data directory, the lock file and the compose file the app declares. A console change is outside it, so it needs no rerun. CI rehashes them first, in its own job, with plain python3, imports none of them, and fails a pull request whose files differ from the attested ones, naming each changed, added or removed file.&#10;Trust: A process control, not a security control. CI trusts the local run: whoever can push can also edit the attestation. It stops an honest change from merging without a passing run; review stops a dishonest one. At scale a GPU runner replaces it with a real run.</title>
         <rect x="124" y="-96" width="130" height="64" rx="8"/>
         <text class="t" x="189" y="-70">CI gate</text>
-        <text class="s" x="189" y="-52">Day 5, attested</text>
+        <text class="s" x="189" y="-52">local run, attested</text>
       </g>
       <g class="node" data-status="planned" data-layer="harness" data-code="none">
         <title>Planned for Day 6. Not built, no behavior yet.</title>

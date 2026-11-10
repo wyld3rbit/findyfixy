@@ -19,6 +19,27 @@ Why so thin
     twins) in the adapter. A change to either does not touch the wiring, and
     the wiring can change without a test of the policy noticing.
 
+What the attestation covers
+    `make eval-gate` writes `evals/attestation.json` on a pass (see
+    harness/eval/attest.py). The harness computes the code half of the
+    answer-affecting set: the import closure of `ATTEST_ENTRY`. This module
+    declares the other half, `ATTEST_EXTRA`: files read at runtime, which no
+    import statement reveals. The console, the stress test and the MCP
+    modules are outside the closure, so changing them needs no new run.
+
+    One input is not a file: the database. The run reads its passages from
+    Postgres, loaded by `make ingest` from `data/incidents.jsonl`. A table
+    loaded from an older corpus would pass with today's file hashes, so
+    `check_database` runs ingest's own diff before the run and again before
+    the attestation is written. If a re-ingest would change anything, the
+    gate does not run and says "the database is stale: run make ingest".
+
+    Why `.env.example` is not declared: the run never reads it. The model
+    names come from the developer's own `.env`, which CI cannot see and which
+    is never committed. So the attestation records the models and the judge
+    digest the run actually used, and the gate's comparability check
+    (judge digest, prompts, golden set) guards what a name cannot.
+
 Failure model
     - A missing SMALL_MODEL or LARGE_MODEL becomes the harness `ConfigError`,
       so the command prints "set the environment variable ..." and exits 2.
@@ -34,7 +55,7 @@ What changes at scale
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 import sys
@@ -48,9 +69,32 @@ from app.paths import EVALS, REPORTS, ROOT
 from app.settings import MissingEnvironment, load_env, read_models
 from app.wiring import SharedRetrieval
 from harness.eval import cli
-from harness.eval.cli import ConfigError, Session, SessionFactory
+from harness.eval.attest import Inputs
+from harness.eval.cli import AttestationSpec, ConfigError, Session, SessionFactory
 
 BASELINE_PATH = EVALS / "baseline.json"
+ATTESTATION_PATH = EVALS / "attestation.json"
+# The eval path: this module's import closure reaches the adapter, the graph,
+# triage, retrieval, ingest (its chunking and embedding model decide what the
+# table holds) and the harness itself.
+ATTEST_ENTRY: tuple[str, ...] = ("app.eval_answers",)
+# What the eval path reads that no import shows, relative to code/.
+#
+# The whole data directory, not a hand-picked list: a file added there is
+# covered without anyone remembering it, at the cost of a rerun when an
+# unused file (the retrieval eval's queries) changes. A test fails when code
+# on the eval path builds a path from app/paths.py that falls outside this set.
+#
+# The residual gap: a path that is not built from those constants (an
+# environment variable, a string, a model downloaded by name into a cache) is
+# invisible to that test. The embedding and reranker weights are pinned by
+# name and revision in the code, which is fingerprinted, not by their bytes.
+ATTEST_EXTRA: tuple[str, ...] = (
+    "data/",  # the golden set, the corpus `make ingest` loads (and its twin pairs), the deploy tool's data
+    "evals/baseline.json",  # what the gate compared against
+    "uv.lock",  # library versions change answers (tokenizers, rerankers, clients)
+    "docker-compose.yml",  # pins the Postgres and pgvector image the retrieval runs on
+)
 PROG = "python -m app.eval_answers"
 NO_RECALL_HELP = "negative control: run without the recall step. Never saved as a baseline."
 # How FindyFixy marked a control run before the harness had `negative_control`:
@@ -58,6 +102,25 @@ NO_RECALL_HELP = "negative control: run without the recall step. Never saved as 
 # harness refuses such a report as a baseline and keeps the key out of one, which
 # is also what lets the committed baseline be refrozen byte for byte.
 LEGACY_CONTROL = MappingProxyType({"recall_enabled": False})
+
+
+def check_database() -> list[str]:
+    """Why the live database does not hold the current corpus, or nothing.
+
+    One short read-only connection, no model loaded: ingest's own diff of
+    `data/incidents.jsonl` against the stored hashes and model names. A
+    database that cannot be reached is a reason too, with the fix.
+    """
+    import psycopg
+
+    from app.ingest import database_staleness
+    from app.wiring import connect
+
+    try:
+        with connect() as conn:
+            return database_staleness(conn)
+    except psycopg.Error as err:
+        return [f"cannot check that the database is current ({type(err).__name__}): run make up, then make ingest"]
 
 
 @contextmanager
@@ -125,11 +188,15 @@ def main(
     open_session: SessionFactory = open_live_session,
     reports_dir: Path = REPORTS,
     baseline_path: Path = BASELINE_PATH,
+    attestation_path: Path = ATTESTATION_PATH,
+    database_check: Callable[[], Sequence[str]] = check_database,
 ) -> int:
     """Run the harness command line on the live FindyFixy wiring. Returns the exit code.
 
     The session factory and the paths are injected so tests drive this with a
-    fake adapter and a temp directory.
+    fake adapter and a temp directory. The attestation is fingerprinted over
+    the real tree (`ROOT`) either way; only where it is written moves.
+    `database_check` is the attestation's precondition; tests pass a fake.
     """
     return cli.main(
         argv,
@@ -141,6 +208,13 @@ def main(
         control_flag="--no-recall",
         control_help=NO_RECALL_HELP,
         legacy_control=LEGACY_CONTROL,
+        attestation=AttestationSpec(
+            path=attestation_path,
+            root=ROOT,
+            inputs=Inputs(ATTEST_ENTRY, ATTEST_EXTRA),
+            case_ids=lambda: [g.id for g in load_golden(GOLDEN_PATH)],
+            preconditions=database_check,
+        ),
     )
 
 

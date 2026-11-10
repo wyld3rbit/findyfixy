@@ -308,8 +308,10 @@ def offline(monkeypatch) -> None:
 
 
 def entry(argv: list[str], tmp_path: Path, **kw: Any) -> int:
-    """The app's real `main`, with test paths for reports and baseline."""
-    return eval_answers.main(argv, reports_dir=tmp_path / "r", baseline_path=tmp_path / "b.json", **kw)
+    """The app's real `main`, with test paths and an in-sync database unless `kw` says otherwise."""
+    kw.setdefault("database_check", lambda: [])
+    return eval_answers.main(argv, reports_dir=tmp_path / "r", baseline_path=tmp_path / "b.json",
+                             attestation_path=tmp_path / "attestation.json", **kw)
 
 
 def test_no_recall_runs_the_negative_control_and_it_can_never_become_a_baseline(
@@ -368,3 +370,31 @@ def test_an_unset_model_name_exits_2_through_the_real_live_session(tmp_path: Pat
     assert entry([], tmp_path) == 2
     assert "error: set the environment variable SMALL_MODEL" in capsys.readouterr().err
     assert not (tmp_path / "r").exists()  # no report for a run that never started
+
+
+STALE = "the database is stale: run make ingest (3 chunk(s) to write, 0 to delete)"
+
+
+def test_a_stale_database_stops_the_gate_before_any_case_runs(tmp_path: Path, monkeypatch, capsys) -> None:
+    """The real wiring passes the database check to the harness: stale means exit 2, no session, no report."""
+    offline(monkeypatch)
+    assert entry(["--write-baseline"], tmp_path, open_session=fake_session()) == 0
+    log: list[bool] = []
+    assert entry(["--gate"], tmp_path, open_session=fake_session(log=log), database_check=lambda: [STALE]) == 2
+    assert f"error: {STALE}" in capsys.readouterr().err
+    assert log == [] and len(list((tmp_path / "r").glob("eval-*.json"))) == 1  # only the baseline run's report
+    assert not (tmp_path / "attestation.json").exists()
+
+
+def test_the_database_check_turns_an_unreachable_database_into_a_reason(monkeypatch) -> None:
+    """No traceback and no host in the message: the reason names the fix."""
+    import psycopg
+
+    def down():
+        """Fail like a stopped database."""
+        raise psycopg.OperationalError("connection to server at 127.0.0.1 failed")
+
+    monkeypatch.setattr(wiring, "connect", down)
+    assert eval_answers.check_database() == [
+        "cannot check that the database is current (OperationalError): run make up, then make ingest"
+    ]

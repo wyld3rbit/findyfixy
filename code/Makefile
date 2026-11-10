@@ -7,7 +7,7 @@
 #      how a hijacked package can persist. Only the known shims are allowed.
 # On any finding, stop and read it. Do not upgrade or remove to make it pass.
 
-.PHONY: audit hooks scan up down setup ingest console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-negative case golden
+.PHONY: audit hooks scan up down setup ingest console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-negative case golden verify-attestation
 
 # Memory for the Colima VM, in GB. 6 on most days, 8 on Langfuse days:
 #   make up COLIMA_MEMORY=8
@@ -96,7 +96,10 @@ eval-retrieval:
 # harness in harness/eval/. Needs make up and Ollama. Each run takes many
 # minutes. Reports land in code/reports/ (git-ignored).
 #   eval          run and print the scores, no gate
-#   eval-gate     the release gate: exit 1 if answers got worse vs evals/baseline.json
+#   eval-gate     the release gate: exit 1 if answers got worse vs evals/baseline.json.
+#                 A pass of the full set on a clean tree also writes
+#                 evals/attestation.json. Commit it: CI checks it. It does
+#                 not run on a stale database: run make ingest first.
 #   eval-baseline freeze this run as the new baseline. Review the diff before committing.
 #   eval-negative the proof the gate works: run WITHOUT recall; it must fail
 eval:
@@ -110,6 +113,14 @@ eval-baseline:
 
 eval-negative:
 	uv run python -m app.eval_answers --no-recall --gate
+
+# verify-attestation: what CI runs. Rehashes the answer-affecting files and
+# exits 1 unless evals/attestation.json is a pass over exactly these files.
+# Plain python3 and the standard library: no uv sync, and no file it hashes
+# is imported. -I keeps the environment and the script's folder off the
+# import path. The workflow runs the same command from the training root.
+verify-attestation:
+	python3 -I harness/eval/attest.py verify --root . --attestation evals/attestation.json
 
 # golden: print the 30 golden cases (alert, expected severity, reference) to read
 # and check by eye. Read-only.
