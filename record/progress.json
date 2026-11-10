@@ -152,6 +152,10 @@
     {
       "date": "2026-11-10",
       "entry": "Audit before pushing Day 6 steps 0 to 5: part 05 article corrected (commit links, an interval claim), a trace_id run-error bug fixed, tracing setup in one place, dead code removed, stale docs fixed. Live gate run identical case by case to the previous run; attestation over 45 files; 799 tests pass."
+    },
+    {
+      "date": "2026-11-10",
+      "entry": "PR #8 (Day 6 steps 0 to 5) merged as 61b6f07. main's ruleset now requires attestation as well as check, with 0 approvals; auto-merge and branch deletion on."
     }
   ],
   "decisions": [
@@ -343,6 +347,13 @@
       "decision": "Everything the project does is observable: every entry point that touches a model, the database, a tool or the network makes a trace; judge calls and recall stages are their own spans; sessions for eval runs and hunts; user.id from a setting.",
       "rejected": "Trace only console and eval runs, as the lesson first planned",
       "why": "The learner's rule (2026-11-09): a harness that cannot see its own commands cannot explain them. Pure generators stay untraced: nothing happens at runtime."
+    },
+    {
+      "date": "2026-11-10",
+      "day": 6,
+      "decision": "The maintainer's pull requests auto-merge (merge commit) once the attestation and check jobs pass; 0 required approvals; attestation is a required check.",
+      "rejected": "One required approval with an admin bypass on every merge; an Action that auto-merges by author",
+      "why": "Only the maintainer has write access, so the approval only forced a bypass click. A skipped check counts as passing, so with only check required a failed attestation (which skips check) could merge. An Action merges as github-actions, and that merge would start no CI run on main."
     }
   ],
   "days": [
