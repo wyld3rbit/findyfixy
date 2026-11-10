@@ -43,6 +43,7 @@ from pydantic import BaseModel, Field, ValidationError
 from app.events import Emit, no_emit
 
 
+# CI gate proof: this comment changes an attested file without a new attestation.
 # The closed set of severities. One definition, used by the triage record, the
 # recalled incidents and the passages loaded from the database. Because it is a
 # closed set, a severity can never carry injected text into a prompt, unlike a
