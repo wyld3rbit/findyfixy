@@ -1,10 +1,10 @@
 {
-  "created_utc": "2026-11-10T08:56:44+00:00",
+  "created_utc": "2026-11-10T18:49:32+00:00",
   "files": {
     "app/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "app/corpus.py": "9ca21e617d785967727cc5b5ff00b021dede5208158c121cdde6d36c3a2beb3d",
     "app/eval_adapter.py": "b34029934f03dc216f8744062d2ec261bad79f6153990e41c94acdd7af404377",
-    "app/eval_answers.py": "d36cae7c7c83695a3f4190c0bc3df8ce9f4fc440f16b6ba8d9d0c9f9153ac361",
+    "app/eval_answers.py": "c8edfd6168803917e1ec0e9e82f1a8db4f713af9334c4fb573a945cc932b84e9",
     "app/events.py": "d73de4d4a47f27376177699898e77a310177c73a45929b1007e8a2bf42c45eee",
     "app/golden.py": "b699fa7a4494ffb20430fea0e76c26319f096ec68363803d89db62ee92660c72",
     "app/graph.py": "07429deae1925e58c7527b4b0d13b82ec1e4bb5638a02a8de6dfaa82514a46b7",
@@ -16,10 +16,10 @@
     "app/search.py": "a554f54e9dccf61560e24c3f718c9941177eb10ff9a0a65c6acda2e3f27f991f",
     "app/settings.py": "944d8889be9527b5cdd77418c4a7d3e7f110588d265b6fc723d60b988480d0b1",
     "app/tools.py": "aa70f11b1b3a2dc262692a4a723fc7fb3a6e8daa3a7b8684e51c66719fc0d018",
-    "app/trace_adapter.py": "1cf2537d6adfca23699043a5a2d12ac08f07ebd7b7b1e0bfe12e167d4c5d7cff",
-    "app/tracing.py": "b7346454f73c3fb1de93621607281dc6c26364e872a82bf40f7227adf916986a",
+    "app/trace_adapter.py": "f7b3dbdfde426e9e539f457d38265742e3a030f702bdfa516bc9eccbdacf4f26",
+    "app/tracing.py": "763de55f9d4baab5eb1f6dad7d26299d514fe8460eea81b334677fc73e7dc1bc",
     "app/triage.py": "df42a5c4ee54098f00cd03a37ace6e0fafe24900c32d7a3de6382169338f1cf4",
-    "app/wiring.py": "03e5b4b6fd8893a41ad5c0e70a4bcc9f3ca231fdbe15269b7dccf45fc39a83a1",
+    "app/wiring.py": "716a06a5d66130c4749f2f6f69fa48e2a5993a006f4d0892a279d47dab687a79",
     "data/deploys.json": "c1c9fa59e3c07706a618dc5d65a461b34a08c71b50491cfb537713e135e9b2f8",
     "data/golden.jsonl": "2d005967149bbc1fc3e9572ba042a5edbac13e471f3b4ffc9cbbb4a7d1d22a1f",
     "data/incidents.json": "9aa661d01b6fe69778911f8383132df2cf187299f078ebe893ea27a6080bacc8",
@@ -32,22 +32,22 @@
     "harness/eval/attest.py": "c3c1d8a53e198845a7887ff0811b71c7cda245b296190255cd9f0bc6a66c74f4",
     "harness/eval/case.py": "bc88eff221e5e4f37f4821139fa6911f2a10ea5e1010f5ce2f7a910d675db4ef",
     "harness/eval/cli.py": "45d2bc47b24801a2b97839d00a19a8690dbe61e4ec1dd4e5e56dc56421ad50c4",
-    "harness/eval/events.py": "85e9d84028c114dd4d66d017ad5848cef6a90495c83773178d4341dd2fd0eeae",
+    "harness/eval/events.py": "e052e8cdf7b01e2551216c6bc07d9058c157e58db67efaa7f3024cbf3ee5939c",
     "harness/eval/judge.py": "33009c33ce65c63aa40b19641313777dc84621e28d396c05cdbc5fa5376212f8",
     "harness/eval/metrics.py": "cf37f46e1922e4b7901d0e77e0f368aed7a52667b97f7b200002757da2e67865",
     "harness/eval/provenance.py": "8febd4d4d9967a05bd9e212f6bcffcbb8ecdd5aa5f8504609184195ec08256cb",
     "harness/eval/report.py": "9f097d34d021361a070469e5e98228d8c761b2bc93f629bc793bffd940dd4189",
-    "harness/eval/runner.py": "5c2e90d41a4eb0dfe1592642567e24a18f720fd33a9c62a2988b6c57c78a4ba3",
+    "harness/eval/runner.py": "b2927f8fd38596f368675c9dfe62ab9256a77beccde03e541ee4680de6aef035",
     "harness/eval/stats.py": "91a283da97de3ef1777c428d8fe3407e1a87dea5e2e1827ee51dcedffdecacff",
     "harness/eval/sut.py": "94281a8bb57696ac321da883fab938f1f22ccabe2386a11ea3c0deebbd36feee",
-    "harness/trace/__init__.py": "e714ea025e8c490837ae9f82f5d893ee313ad515e24795808c1054a95340fdee",
-    "harness/trace/command.py": "133c319a69c36508686e870e6237f87f497410e39cec67a39e39399c667819f1",
+    "harness/trace/__init__.py": "521517842a0cc13770ace6067abf6d2cee17e02e39d7c2763370005656057870",
+    "harness/trace/command.py": "725eb53cc4a8490394b25a4d144a6e470afdcba2210819602160da64011174c8",
     "harness/trace/scores.py": "1b11182a773d841cd6aba76b156be7e651bbbdfb44b8d47b9a6399e6df636b38",
-    "harness/trace/spans.py": "22212e14e2b79a5141f8bf3fd8b07e57e1fb9587cf19e7a696544a1153cba4d2",
+    "harness/trace/spans.py": "ac5d89872909433a72383fb685325e904d532f37f659799754fa91cfb76ee419",
     "harness/trace/tracing.py": "73826c34ea235434920f2e4c6ab7072f2d813c5633bd219dd686b220c135a6df",
     "uv.lock": "d693e217e6297afa9fce10a78e1069009c736d3bc0f758fba16e0d27133d9565"
   },
-  "fingerprint": "af1df6f6a0df326ac86d1c71c0ea7118bf07c502ce9c07154304e58261ea567f",
+  "fingerprint": "14797dd0fc63cfea2bb5e31e755636fb4894e5a36f281691b3c88beed92963df",
   "inputs": {
     "entry_modules": [
       "app.eval_answers"
@@ -60,16 +60,16 @@
     ]
   },
   "report": {
-    "name": "eval-20261110T085644Z.json",
-    "sha256": "18d5ef104c482b82d0ca407c4eae84740c8b1aa7ce91c3c20be82269d1f611f5"
+    "name": "eval-20261110T184932Z.json",
+    "sha256": "31a445ec4e9972fbaf8a4c85907a12ea7d5d98aeeee6adc83bab48505e053806"
   },
   "run": {
-    "git_sha": "9282eaa",
+    "git_sha": "0b725ef",
     "judge_digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
     "judge_model": "qwen2.5:7b",
     "large_model": "qwen3:4b-instruct",
     "small_model": "qwen3:4b-instruct",
-    "timestamp_utc": "2026-11-10T08:45:33+00:00"
+    "timestamp_utc": "2026-11-10T18:38:13+00:00"
   },
   "verdict": "pass",
   "version": 1

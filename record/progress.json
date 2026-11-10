@@ -148,6 +148,10 @@
     {
       "date": "2026-11-10",
       "entry": "Day 6 steps 3 to 5: every console run, eval case and command is a Langfuse trace (judge calls as generations, recall stages, user.id, sessions for eval runs and hunts); scores on case traces. Two live gate runs, each identical case by case to the run before; the last one 670 s (answer 86 s, judge 585 s), attestation over 45 files. 797 tests pass."
+    },
+    {
+      "date": "2026-11-10",
+      "entry": "Audit before pushing Day 6 steps 0 to 5: part 05 article corrected (commit links, an interval claim), a trace_id run-error bug fixed, tracing setup in one place, dead code removed, stale docs fixed. Live gate run identical case by case to the previous run; attestation over 45 files; 799 tests pass."
     }
   ],
   "decisions": [
