@@ -140,6 +140,10 @@
     {
       "date": "2026-11-09",
       "entry": "Day 5 closed in code: the attested CI gate is built and the first live make eval-gate passed (30 of 30 cases, 0 run errors, means equal to the baseline: severity 0.77, faithfulness 0.79, relevancy 0.67, context recall 0.93, action quality 0.92; 846 s), attestation of 38 files committed. Batched judge verdicts were measured and rejected for faithfulness (agreement 0.839, kappa 0.52; context recall met the bar and stays untried alone). The run reproduced all 30 answers and scores of 2026-10-26 exactly. ADR 0006 written; ADR 0005 keeps its original picture. 697 tests pass. Next: the part 05 article, then the pull request."
+    },
+    {
+      "date": "2026-11-09",
+      "entry": "Day 6 steps 0 to 2. Scanner tests isolated from hook GIT_* variables (698 tests). Eval runs in two passes; live gate passed, identical case by case to the attested run, 663 s instead of 846 s (answer 84 s, judge 579 s), new attestation. Langfuse v4.72.0 stack up on 127.0.0.1:3000 with Valkey and Postgres 17.11, every image scanned with Grype."
     }
   ],
   "decisions": [
@@ -303,6 +307,27 @@
       "decision": "Fix PyTorch's CUDA download on Linux with the Day 9 container build: CPU-only wheels for Linux via a uv source with a platform marker, then make audit and a supply-chain check of the PyTorch index.",
       "rejected": "Change the lock now; split heavy dependencies into an optional group",
       "why": "CI cost today is about 2 minutes on a free public-repo runner; the 3.1 GB of unused GPU libraries matters for the container image, so the fix belongs with it."
+    },
+    {
+      "date": "2026-11-09",
+      "day": 6,
+      "decision": "Run the eval in two passes: answer every case, then judge every answer.",
+      "rejected": "Keep answering and judging case by case; serve the judge from a second machine",
+      "why": "Measured: the 16 GB machine holds one Ollama model at a time and each load takes 2 to 3 s, so case by case cost 2 loads per case. Two passes cut the run from 846 s to 663 s with identical scores."
+    },
+    {
+      "date": "2026-11-09",
+      "day": 6,
+      "decision": "Take Postgres 17.11 for Langfuse now, a named exception to the 7-day cooldown; Alpine builds for Postgres and Valkey.",
+      "rejected": "Postgres 17.10 until 17.11 clears the cooldown on 2026-11-13",
+      "why": "17.10 carries 17 PostgreSQL server CVEs fixed in 17.11; the 17.11 Alpine scan shows 1 critical (zlib) and 0 high."
+    },
+    {
+      "date": "2026-11-09",
+      "day": 6,
+      "decision": "Replace Langfuse's redis:7 with Valkey 8.1.11.",
+      "rejected": "Redis 7.4 or later as shipped",
+      "why": "Redis 7.4 and later are RSALv2/SSPL, not OSI licenses; Valkey is BSD-3-Clause and protocol compatible."
     }
   ],
   "days": [

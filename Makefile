@@ -6,7 +6,7 @@
 # its own, so the real commands stay readable in one place each.
 
 .DEFAULT_GOAL := help
-.PHONY: help adr-snapshot setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative case golden ingest audit verify-attestation tracker ui check
+.PHONY: help adr-snapshot setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative obs-secrets obs-up obs-down case golden ingest audit verify-attestation tracker ui check
 
 help:
 	@echo "First time:       make setup"
@@ -73,3 +73,6 @@ check:
 	@$(UV_TOOLS) --offline --with pytest pytest tools -q; rc=$$?; \
 	  if [ $$rc -eq 2 ]; then echo "(cache miss, retrying online)"; $(UV_TOOLS) --with pytest pytest tools -q; else exit $$rc; fi
 	python3 tools/scan_private.py --tree
+
+obs-secrets obs-up obs-down:
+	$(MAKE) -C code $@

@@ -31,6 +31,7 @@ DOCS = (
     "code/README.md",
     "code/app/README.md",
     "code/harness/README.md",
+    "code/infra/README.md",
     "code/tests/README.md",
     "code/data/README.md",
     "code/evals/README.md",
@@ -40,7 +41,7 @@ DOCS = (
 
 # Paths a doc may name that are absent from a fresh clone on purpose: secrets
 # the user creates, and generated output that is git-ignored.
-ALLOWED_MISSING = ("code/.env", "code/.venv", ".audit-req.txt", "reports/", "code/reports/", "code/evals/baseline.json")
+ALLOWED_MISSING = ("code/.env", "code/infra/langfuse/.env", "code/.venv", ".audit-req.txt", "reports/", "code/reports/", "code/evals/baseline.json")
 
 # Targets the docs name before they exist, on purpose. Remove an entry when the
 # target is built; the check then covers it like any other.
