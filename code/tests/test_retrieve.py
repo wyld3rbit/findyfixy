@@ -190,3 +190,24 @@ def test_a_passage_with_an_unknown_severity_stops_loading(bad: str) -> None:
     with pytest.raises(ValueError, match="unknown severity"):
         Passage("X:summary", "X", "summary", "auth", bad, "body")  # type: ignore[arg-type]
 
+
+
+def test_each_retrieval_stage_runs_inside_its_named_stage() -> None:
+    """The injected stage hook wraps every stage, in order, so tracing sees each one."""
+    from contextlib import contextmanager
+
+    seen: list[str] = []
+
+    @contextmanager
+    def stage(name):
+        """Record the stage name."""
+        seen.append(name)
+        yield
+
+    order = [p.chunk_id for p in PASSAGES]
+    r = Retriever(PASSAGES, fake_vector(order), rerank=lambda q, texts: [0.0] * len(texts), stage=stage)
+    r.hybrid_rerank("auth certificate", 2)
+    assert seen == ["keyword search", "vector search", "merge", "rerank"]
+    seen.clear()
+    r.vector("auth certificate", 2)
+    assert seen == ["vector search"]

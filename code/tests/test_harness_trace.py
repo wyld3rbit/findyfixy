@@ -217,3 +217,74 @@ def test_siblings_opened_under_a_named_parent_close_independently(traced) -> Non
     assert parent_name(spans, spans["tool a"]) == parent_name(spans, spans["tool b"]) == "node investigate"
     assert spans["tool a"].attributes[LF_OUTPUT] == "result a"
     assert spans["tool b"].attributes[LF_OUTPUT] == "result b"
+
+
+def test_a_current_span_parents_spans_made_inside_it_and_restores_the_context(traced) -> None:
+    """Code that makes its own spans while a node is current nests them under the node."""
+    from opentelemetry import trace
+
+    tracing, exporter = traced
+    tree = SpanTree(tracing.tracer(), "run")
+    before = trace.get_current_span()
+    tree.open("node", "node recall", current=True)
+    with tracing.tracer().start_as_current_span("recall rerank"):
+        pass
+    tree.close("node")
+    assert trace.get_current_span() is before
+    tree.finish()
+    spans = finished(tracing, exporter)
+    assert parent_name(spans, spans["recall rerank"]) == "node recall"
+
+
+def test_a_current_span_closed_from_another_context_ends_quietly(traced, caplog) -> None:
+    """LangGraph runs a node in a context copy; a node that raises is closed outside it. No traceback."""
+    import contextvars
+
+    tracing, exporter = traced
+    tree = SpanTree(tracing.tracer(), "run")
+    contextvars.copy_context().run(tree.open, "node", "node large", current=True)
+    tree.finish(error="TriageError")
+    assert "Failed to detach" not in caplog.text
+    assert finished(tracing, exporter)["node large"].status.status_code is StatusCode.ERROR
+
+
+def test_a_generation_records_the_call_and_marks_a_failure(traced) -> None:
+    """The helper for model calls outside an event stream: model, prompt, reply, tokens; errors re-raised."""
+    from harness.trace.spans import generation
+
+    tracing, exporter = traced
+    with generation(tracing.tracer(), "judge-m", "is it supported?") as gen:
+        gen.done('{"supported": true}', input_tokens=40, output_tokens=6, response_model="judge-m")
+    with pytest.raises(TimeoutError), generation(tracing.tracer(), "judge-m", "again?", name="judge retry"):
+        raise TimeoutError("stalled")
+    spans = finished(tracing, exporter)
+    ok = spans["model judge-m"].attributes
+    assert ok[LF_TYPE] == "generation" and ok[GEN_AI_REQUEST_MODEL] == "judge-m"
+    assert ok[GEN_AI_INPUT_TOKENS] == 40 and ok[LF_OUTPUT] == '{"supported": true}'
+    assert spans["judge retry"].status.status_code is StatusCode.ERROR
+
+
+def test_each_judge_call_is_a_generation_under_the_current_metric(traced) -> None:
+    """A retried judge question is two generations inside its metric span, with the reported tokens."""
+    from pydantic import BaseModel
+
+    from harness.eval.judge import ChatText, make_ollama_judge
+
+    class Verdict(BaseModel):
+        """A one-field answer."""
+
+        supported: bool
+
+    replies = iter([ChatText("not json", 30, 2, "judge-m"), ChatText('{"supported": true}', 50, 6, "judge-m")])
+    tracing, exporter = traced
+    judge = make_ollama_judge("judge-m", chat=lambda m, p, s: next(replies), tracer=tracing.tracer())
+    tree = SpanTree(tracing.tracer(), "judge")
+    tree.open("metric", "faithfulness", current=True)
+    assert judge.ask("is it supported?", Verdict).supported is True
+    tree.close("metric")
+    tree.finish()
+    spans = list(exporter.get_finished_spans()) if tracing.flush() else []
+    calls = [s for s in spans if s.name == "judge judge-m"]
+    by = {s.context.span_id: s.name for s in spans}
+    assert len(calls) == 2 and all(by[c.parent.span_id] == "faithfulness" for c in calls)
+    assert sorted(c.attributes[GEN_AI_INPUT_TOKENS] for c in calls) == [30, 50]

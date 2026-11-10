@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, get_args
 
@@ -94,6 +95,16 @@ RERANKER_REVISION = "2cfc18c9415c912f9d8155881c133215df768a70"
 VectorSearch = Callable[[str, int, str | None], list[tuple[str, float]]]
 # (query, texts) -> one relevance score per text, higher is better.
 Rerank = Callable[[str, Sequence[str]], list[float]]
+# name -> a context around one stage of a retrieval ("vector search",
+# "keyword search", "merge", "rerank"). The composition root passes one that
+# makes a tracing span; the default does nothing. Injected, so this module
+# never imports a tracing library.
+Stage = Callable[[str], AbstractContextManager[object]]
+
+
+def no_stages(name: str) -> AbstractContextManager[object]:
+    """The default `Stage`: nothing around a stage."""
+    return nullcontext()
 
 # A hostname-like token with parts: `scheduler-3de`. Matched whole, and its
 # parts are added too, so `scheduler-3de` finds the exact host (rare, high
@@ -175,6 +186,7 @@ class Retriever:
         passages: Sequence[Passage],
         vector_search: VectorSearch,
         rerank: Rerank | None = None,
+        stage: Stage = no_stages,
     ) -> None:
         if not passages:
             raise ValueError("no passages to retrieve from")
@@ -186,13 +198,15 @@ class Retriever:
         self._bm25 = BM25Okapi([tokenize(p.text) for p in self._passages])
         self._vector_search = vector_search
         self._rerank = rerank
+        self._stage = stage
 
     # -- the three retrievers -------------------------------------------------
 
     def vector(self, query: str, k: int = 5, service: str | None = None) -> list[Found]:
         """Nearest chunks by meaning, collapsed to incidents."""
         _check(query, k)
-        hits = self._vector_search(query, k * SECTIONS, service)
+        with self._stage("vector search"):
+            hits = self._vector_search(query, k * SECTIONS, service)
         return self._collapse([(cid, 1.0 - dist) for cid, dist in hits], k)
 
     def hybrid(self, query: str, k: int = 5, service: str | None = None) -> list[Found]:
@@ -210,7 +224,8 @@ class Retriever:
         pool = self._fused(query, service)[:RERANK_POOL]
         if not pool:
             return []
-        scores = self._rerank(query, [self._by_chunk[cid].text for cid, _ in pool])
+        with self._stage("rerank"):
+            scores = self._rerank(query, [self._by_chunk[cid].text for cid, _ in pool])
         if len(scores) != len(pool):
             raise ValueError("the reranker returned a different number of scores")
         # sorted() is stable: equal scores keep the fused order.
@@ -251,9 +266,12 @@ class Retriever:
 
     def _fused(self, query: str, service: str | None) -> list[tuple[str, float]]:
         """The RRF merge of the BM25 list and the vector list, chunk level."""
-        lexical = self._bm25_ranked(query, BM25_POOL, service)
-        dense = [cid for cid, _ in self._vector_search(query, VECTOR_POOL, service)]
-        return rrf([lexical, dense])
+        with self._stage("keyword search"):
+            lexical = self._bm25_ranked(query, BM25_POOL, service)
+        with self._stage("vector search"):
+            dense = [cid for cid, _ in self._vector_search(query, VECTOR_POOL, service)]
+        with self._stage("merge"):
+            return rrf([lexical, dense])
 
     def _collapse(self, ranked: Sequence[tuple[str, float]], k: int) -> list[Found]:
         """Keep each incident's best chunk, in rank order, and stop at `k`."""

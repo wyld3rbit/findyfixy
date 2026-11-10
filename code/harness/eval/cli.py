@@ -166,7 +166,7 @@ def live_runner(
     *,
     golden_path: Path,
     repo_dir: Path,
-    make_judge: Callable[[str], Judge] = make_ollama_judge,
+    make_judge: Callable[..., Judge] = make_ollama_judge,
     digest: Callable[[str], str] = ollama_digest,
     git: Callable[[Path], tuple[str, bool | None]] = git_info,
     now: Callable[[], datetime] = utc_now,
@@ -199,7 +199,9 @@ def live_runner(
             return run_eval(
                 session.cases,
                 sut=session.sut,
-                judge=make_judge(session.judge_model),
+                # With tracing, every judge call is a generation in its case's trace.
+                judge=(make_judge(session.judge_model, tracer=session.tracing.tracer())
+                       if session.tracing is not None else make_judge(session.judge_model)),
                 embed=session.embed,
                 provenance=provenance,
                 progress=progress,

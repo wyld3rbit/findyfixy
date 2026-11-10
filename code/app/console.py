@@ -104,7 +104,7 @@ from app.events import Emit, Event, make_emit, make_stamped_emit
 from app.incidents import DEFAULT_PATH, Incident, load_incidents
 from app.paths import DOCS, EVALS, ROOT
 from app.settings import load_env, optional_models, read_tracing
-from app.wiring import SharedRetrieval
+from app.wiring import SharedRetrieval, stage_spans
 from app.investigate import build_investigator
 from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
 from app.tools import make_deploys_tool
@@ -465,7 +465,8 @@ class RunHub:
         watch = _Watch(self._publish)
         # Tracing is one more reader of the same events. It never blocks: spans
         # are built in memory and exported on the exporter's own thread.
-        sink = watch.sink if self._tracing is None else tee(watch.sink, EventSpans(self._tracing.tracer()))
+        # Tracing first: the trace is complete before any viewer hears the run end.
+        sink = watch.sink if self._tracing is None else tee(EventSpans(self._tracing.tracer()), watch.sink)
         emit = make_emit(sink, self._clock)
         # Confidence is at most 1.0 and the route keeps a record only when
         # confidence >= threshold. A threshold above 1.0 therefore sends every
@@ -859,10 +860,10 @@ def main(argv: list[str] | None = None) -> None:
         )
     # One database connection, embedder and reranker for the whole process:
     # triage recall and the eval session share it, so a live eval loads no copy.
-    retrieval = SharedRetrieval() if models else None
     # One tracer provider for the process: triage runs and live eval runs share it.
     trace_config = read_tracing()
     tracing = Tracing.start(trace_config) if trace_config else None
+    retrieval = SharedRetrieval(stage=stage_spans(tracing)) if models else None
     live_eval_suite = None
     if retrieval is not None:
         from app.eval_answers import GOLDEN_PATH, open_live_session

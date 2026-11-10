@@ -604,6 +604,14 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 - Seen in Langfuse (learner, 2026-11-09): a console run with tools took 20.1 s: recall 3.8 s (first use), investigate 11.5 s (two model calls, 5.0 s and 6.5 s; the tool 0.015 s), small 4.8 s. Recorded as the Day 8 latency baseline; the levers (a one-call tool step, a warm reranker, a capped investigate reply) all move answers, so each needs a gate run.
 - Live run `eval-20261110T080005Z`: gate pass, attestation over 43 files (the tracing modules joined the eval path), identical case by case to `eval-20261110T064445Z`; 30 case traces in Langfuse in one session (`eval 2026-11-10T07:44:31+00:00`), no score dropped. Judge pass 848.0 s against 579.1 s the run before, answer pass unchanged (85.5 s against 84.3 s). Not yet explained; untested guess is memory pressure from the Langfuse stack next to the judge model. One run each side.
 
+### Day 6, step 5, part 1: judge calls and recall stages are spans (2026-11-10)
+
+- `harness/trace/spans.py`: `open(..., current=True)` makes a strictly nested span (a graph node, a metric) the current context until it closes, so code that makes its own spans nests them under it; a close from a context copy that no longer exists (LangGraph runs nodes in copies; a raising node is closed from outside) skips the reset quietly instead of logging a traceback. `generation(...)`: a span for one model call outside an event stream.
+- `harness/eval/judge.py`: `ChatText` (reply text with tokens and serving model), `traced_chat`; `make_ollama_judge(tracer=...)` makes every judge attempt a generation under its metric span. `live_runner` passes the session's tracer.
+- `app/retrieve.py`: an injected `Stage` hook around keyword search, vector search, merge and rerank (no tracing import there); `app/wiring.py` `stage_spans(tracing)` makes them spans; the console and the eval session pass it.
+- Fixed while testing: the console handed each event to the viewer before tracing, so a viewer could see a run end before its spans ended (a test that flushed on `run_failed` found an empty trace). Tracing now sees each event first.
+- Tests: current-span parenting and context restore, the quiet cross-context close, `generation`, a retried judge question as two generations under its metric with tokens, the four retrieval stages in order. Mutations caught: `current` ignored (2 failed), the rerank stage missing (1), judge calls untraced (1). `make test`: 784 passed.
+
 ### Next
 
 - Day 6, step 5: observe everything (judge generations and recall stages, then every command, then sessions and user.id); one live gate run at the end.

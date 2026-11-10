@@ -68,7 +68,7 @@ from app.graph import Recall
 from app.paths import EVALS, REPORTS, ROOT
 from app.settings import MissingEnvironment, load_env, read_models, read_tracing
 from app.trace_adapter import RunTracer
-from app.wiring import SharedRetrieval
+from app.wiring import SharedRetrieval, stage_spans
 from harness.eval import cli
 from harness.eval.attest import Inputs
 from harness.eval.cli import AttestationSpec, ConfigError, Session, SessionFactory
@@ -187,7 +187,7 @@ def open_live_session(
         # The score backend is chosen here, in the composition root; the
         # harness only sees the ScoreSink seam.
         scores = LangfuseScores(tracing.config) if tracing is not None else None
-        shared = SharedRetrieval() if retrieval is None else retrieval
+        shared = SharedRetrieval(stage=stage_spans(tracing)) if retrieval is None else retrieval
         shared.candidates(goldens[0].question, 1)  # warm-up, not measured
 
         def make_graph(recall: Recall) -> Invokable:

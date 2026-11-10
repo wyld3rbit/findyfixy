@@ -121,7 +121,9 @@ class EventSpans:
         kind = event.kind
         if kind == "node_entered":
             node = d["node"]
-            tree.open("node", f"node {node}", kind=_NODE_KIND.get(node, "span"),
+            # Current while the node runs, so spans made inside it (recall's
+            # stages) nest under it. Nodes open and close strictly nested.
+            tree.open("node", f"node {node}", kind=_NODE_KIND.get(node, "span"), current=True,
                       attributes={"findyfixy.node": node, GEN_AI_REQUEST_MODEL: d.get("model")})
         elif kind == "node_exited":
             # Tool calls the model asked for but the loop never ran (it stopped
@@ -238,7 +240,11 @@ def _scalar(value: Any) -> str | int | float | bool | None:
 
 
 def tee(*sinks: Callable[[Event], None]) -> Callable[[Event], None]:
-    """One sink that hands each event to every sink in order. For console sink plus tracing."""
+    """One sink that hands each event to every sink in order. For tracing plus the console sink.
+
+    Put tracing first: a viewer that sees `run_finished` may read or flush the
+    trace at once, so its spans must already be ended.
+    """
 
     def each(event: Event) -> None:
         """Pass `event` to every sink."""

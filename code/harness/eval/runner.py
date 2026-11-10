@@ -391,7 +391,8 @@ def _judge(
     results: dict[str, MetricResult] = {}
     for name, compute in metrics:
         if judge_tree is not None:
-            judge_tree.open("metric", name, attributes={"eval.metric": name})
+            # Current while the metric runs, so each judge call nests under it.
+            judge_tree.open("metric", name, attributes={"eval.metric": name}, current=True)
         result = _safe_metric(compute)
         if judge_tree is not None:
             judge_tree.close("metric", output=result.score, error=result.error if result.failed else None)

@@ -83,6 +83,27 @@ MAX_VALUE_CHARS = 20_000
 Attributes = Mapping[str, str | int | float | bool | None]
 
 
+def _restore(token: Any, detach: Any) -> None:
+    """Undo an `attach`, unless the context it was made in is already gone.
+
+    LangGraph runs each node in a copy of the context. A node that raises is
+    closed from outside that copy (by the run's failure event), where its
+    token cannot be reset: the copy, and the span it made current, are
+    already discarded, so there is nothing to restore. OpenTelemetry's
+    `detach` would log a traceback for that; resetting the context variable
+    directly lets the mismatch pass quietly. Tokens of another runtime
+    context (no `var`) go through `detach` as usual.
+    """
+    var = getattr(token, "var", None)
+    if var is None:
+        detach(token)
+        return
+    try:
+        var.reset(token)
+    except ValueError:
+        pass  # made in a context copy that no longer exists: nothing to restore
+
+
 def as_text(value: Any) -> str:
     """A value as span text: strings as they are, anything else as JSON. Cut and marked when long."""
     text = value if isinstance(value, str) else json.dumps(value, default=str, ensure_ascii=False)
@@ -103,6 +124,7 @@ class _Open:
     key: str
     span: Span
     parent: Span | None
+    token: object | None = None  # set when the span was made current; detached when it ends
 
 
 class SpanTree:
@@ -126,8 +148,11 @@ class SpanTree:
         joins.
         """
         # Resolved once per run, not per span: the run's thread makes every span.
-        from opentelemetry import trace
+        from opentelemetry import context as otel_context, trace
         from opentelemetry.trace import Status, StatusCode
+
+        self._attach = otel_context.attach
+        self._detach = otel_context.detach
 
         self._in_context = trace.set_span_in_context
         self._error_status = lambda text: Status(StatusCode.ERROR, text)
@@ -200,18 +225,28 @@ class SpanTree:
         attributes: Attributes | None = None,
         input: Any = None,  # noqa: A002
         under: str | None = None,
+        current: bool = False,
     ) -> None:
         """Start a child of the innermost open span, or of the open span named `under`.
 
         `key` is what `close` names it by. Several open spans may share a key;
         `close` ends the innermost one.
+
+        `current=True` also makes the span the current one on this thread
+        until it closes, so code that makes its own spans (a retriever's
+        stages, a judge's calls) nests them under it with no span handed over.
+        Use it only for spans that open and close strictly nested, such as a
+        graph node: the current context is a stack, and closing out of order
+        would restore the wrong one. Siblings open at the same time (tool
+        calls) stay not current.
         """
         attrs = {**_clean(attributes), LF_TYPE: kind}
         if input is not None:
             attrs[LF_INPUT] = as_text(input)
         parent = self._parent(under)
         span = self._tracer.start_span(name, context=self._in_context(parent), attributes=attrs)
-        self._open.append(_Open(key, span, None if parent is self._root else parent))
+        token = self._attach(self._in_context(span)) if current else None
+        self._open.append(_Open(key, span, None if parent is self._root else parent, token))
 
     def close(
         self,
@@ -227,10 +262,15 @@ class SpanTree:
             return
         target = self._open[index]
         for entry in reversed([e for e in self._open if self._inside(e, target.span)]):
-            self._end(entry.span)
-            self._open.remove(entry)
-        self._end(target.span, attributes=attributes, output=output, error=error)
-        self._open.remove(target)
+            self._close_entry(entry)
+        self._close_entry(target, attributes=attributes, output=output, error=error)
+
+    def _close_entry(self, entry: _Open, **closing: Any) -> None:
+        """End one open span, restore the context it replaced if it was current, forget it."""
+        self._end(entry.span, **closing)
+        if entry.token is not None:
+            _restore(entry.token, self._detach)
+        self._open.remove(entry)
 
     def open_keys(self) -> list[str]:
         """The keys of the spans still open, outermost first. For an adapter's bookkeeping."""
@@ -247,7 +287,7 @@ class SpanTree:
     def finish(self, *, output: Any = None, error: str | None = None) -> None:
         """End every open span, innermost first, then the root. Call once, at the run's end."""
         while self._open:
-            self._end(self._open.pop().span, error=error)
+            self._close_entry(self._open[-1], error=error)
         extra = {LF_TRACE_OUTPUT: as_text(output)} if output is not None and self._is_trace_root else None
         self._end(self._root, attributes=extra, output=output, error=error)
 
@@ -266,4 +306,54 @@ class SpanTree:
         if error is not None:
             span.set_attributes({LF_LEVEL: "ERROR", LF_STATUS: as_text(error)})
             span.set_status(self._error_status(as_text(error)))
+        span.end()
+
+
+class Generation:
+    """One model call in progress, made by `generation`. Call `done` with what came back."""
+
+    def __init__(self, span: Span) -> None:
+        """Hold the span."""
+        self._span = span
+
+    def done(
+        self,
+        output: Any,
+        *,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+        response_model: str | None = None,
+    ) -> None:
+        """Record the reply and what the server reported about it."""
+        self._span.set_attributes(_clean({
+            LF_OUTPUT: as_text(output),
+            GEN_AI_INPUT_TOKENS: input_tokens,
+            GEN_AI_OUTPUT_TOKENS: output_tokens,
+            GEN_AI_RESPONSE_MODEL: response_model,
+        }))
+
+
+@contextmanager
+def generation(tracer: Tracer, model: str, prompt: Any, *, name: str | None = None,
+               attributes: Attributes | None = None) -> Iterator[Generation]:
+    """A generation span for one model call, a child of the current span. Ends when the block ends.
+
+    For code that calls a model outside an app's event stream, such as the
+    harness's judge. An exception in the block marks the span as failed and
+    is re-raised.
+    """
+    from opentelemetry.trace import Status, StatusCode
+
+    span = tracer.start_span(name or f"model {model}", attributes={
+        **_clean(attributes), LF_TYPE: "generation", GEN_AI_OPERATION: "chat",
+        GEN_AI_PROVIDER: "ollama", GEN_AI_REQUEST_MODEL: model, LF_INPUT: as_text(prompt),
+    })
+    try:
+        yield Generation(span)
+    except BaseException as err:
+        text = as_text(f"{type(err).__name__}: {err}")
+        span.set_attributes({LF_LEVEL: "ERROR", LF_STATUS: text})
+        span.set_status(Status(StatusCode.ERROR, text))
+        raise
+    finally:
         span.end()
