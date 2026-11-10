@@ -20,7 +20,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
-import hashlib
 from pathlib import Path
 import subprocess
 from typing import Any
@@ -45,11 +44,6 @@ CORE_KEYS: tuple[str, ...] = (
 )
 
 # ---- Provenance -------------------------------------------------------------
-
-
-def file_sha256(path: Path) -> str:
-    """SHA-256 hex of a file's bytes. Pins the golden set into the report."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def build_provenance(

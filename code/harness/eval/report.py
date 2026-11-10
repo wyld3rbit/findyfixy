@@ -21,13 +21,19 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 import json
-import os
 from pathlib import Path
 import sys
-import tempfile
-from types import MappingProxyType
 from typing import Any
 
+# The traceability rules and the control marker live in attest.py, the leaf,
+# so a baseline and an attestation refuse the same runs for the same reasons.
+from harness.eval.attest import (
+    NO_LEGACY_CONTROL,
+    UNKNOWN,
+    LegacyControl,
+    atomic_write_json,
+    traceability_problems,
+)
 from harness.eval.stats import (
     CORE_AGGREGATE_KEYS,
     CORE_RECORD_KEYS,
@@ -44,19 +50,10 @@ COMPARABLE_KEYS: tuple[str, ...] = ("judge_digest", "prompt_versions", "golden_s
 # the harness naming them. These are left out because they describe how one
 # run was made, not what the baseline stands for: a dirty flag, the bootstrap
 # settings, and the control flag (a control run is refused anyway). An app's
-# legacy control keys (see `LegacyControl`) are left out as well.
+# legacy control keys (see attest.LegacyControl) are left out as well.
 BASELINE_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {"git_dirty", "bootstrap_seed", "bootstrap_resamples", "negative_control"}
 )
-
-# An app's own older way of marking a control run in provenance: key -> the
-# value that means "this was a control". Reports written before the harness had
-# `negative_control` carry the app's flag instead, and the harness cannot know
-# its name. The app passes it in. Such keys are also kept out of a baseline,
-# because they describe one run, like `negative_control` does.
-LegacyControl = Mapping[str, Any]
-NO_LEGACY_CONTROL: LegacyControl = MappingProxyType({})
-
 
 class BaselineMissing(Exception):
     """The baseline file does not exist. Distinct from a failed gate."""
@@ -65,30 +62,11 @@ class BaselineMissing(Exception):
 class BaselineRefused(Exception):
     """A baseline must not be written from this run. The message says why."""
 
-
-
-
 # ---- Files ------------------------------------------------------------------
-
-
-def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    """Write JSON to a temp file in the same directory, then rename over `path`.
-
-    The rename is atomic on one filesystem, so a reader or a crash never sees
-    a half-written report or baseline. The temp file is removed on failure.
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle = tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=path.parent, prefix=path.name + ".", suffix=".tmp", delete=False
-    )
-    try:
-        with handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.write("\n")
-        os.replace(handle.name, path)
-    except BaseException:
-        Path(handle.name).unlink(missing_ok=True)
-        raise
+#
+# The atomic writer lives in attest.py, the one harness module that must run
+# alone with the standard library in CI. Reports, baselines and attestations
+# then share one writer instead of two copies that could drift.
 
 
 def report_path(now: datetime, directory: Path) -> Path:
@@ -100,7 +78,7 @@ def report_path(now: datetime, directory: Path) -> Path:
 def write_report(report: Mapping[str, Any], now: datetime, directory: Path) -> Path:
     """Write the report atomically and return its path."""
     path = report_path(now, directory)
-    _atomic_write_json(path, report)
+    atomic_write_json(path, report)
     return path
 
 
@@ -121,36 +99,18 @@ def load_baseline(path: Path, command: str | None = None) -> dict[str, Any]:
 # ---- Baseline and gate ------------------------------------------------------
 
 
-def is_negative_control(
-    provenance: Mapping[str, Any], legacy_control: LegacyControl = NO_LEGACY_CONTROL
-) -> bool:
-    """True for a run built to fail the gate.
-
-    `negative_control` is the harness flag. A `legacy_control` key holding its
-    marking value is the same fact in a report written before the flag existed.
-    The key must be present and equal that value: a missing key is not a control.
-    """
-    if provenance.get("negative_control") is True:
-        return True
-    return any(key in provenance and provenance[key] == value for key, value in legacy_control.items())
-
-
 def baseline_refusals(
     report: Mapping[str, Any],
     max_failure_rate: float,
     legacy_control: LegacyControl = NO_LEGACY_CONTROL,
 ) -> list[str]:
-    """Reasons not to write a baseline from this run. Empty means fine."""
+    """Reasons not to write a baseline from this run. Empty means fine.
+
+    The traceability rules are the attestation's (attest.traceability_problems):
+    a control, a dirty or unknown tree, an unknown judge digest or SHA.
+    """
     overall = report["aggregates"]["overall"]
-    reasons = []
-    if is_negative_control(report["provenance"], legacy_control):
-        # A control exists to fail. Freezing it would make failure the standard.
-        reasons.append("this run was a negative control, built to fail the gate")
-    if report["provenance"].get("git_dirty") is True:
-        reasons.append("the working tree had uncommitted changes, so the code is not traceable")
-    for key in ("judge_digest", "git_sha"):
-        if report["provenance"].get(key) in (None, "unknown"):
-            reasons.append(f"{key} is unknown, so this baseline could not be traced or compared later")
+    reasons = traceability_problems(report["provenance"], legacy_control)
     if overall["n_run_errors"]:
         reasons.append(f"{overall['n_run_errors']} case(s) had a run error")
     for name in METRIC_NAMES:
@@ -202,7 +162,7 @@ def write_baseline(
         },
         "max_failure_rate": max_failure_rate,
     }
-    _atomic_write_json(path, payload)
+    atomic_write_json(path, payload)
 
 
 def comparability_problems(report: Mapping[str, Any], baseline: Mapping[str, Any]) -> list[str]:
@@ -210,7 +170,7 @@ def comparability_problems(report: Mapping[str, Any], baseline: Mapping[str, Any
     problems = []
     for key in COMPARABLE_KEYS:
         now, then = report["provenance"].get(key), baseline["provenance"].get(key)
-        if key == "judge_digest" and (now in (None, "unknown") or then in (None, "unknown")):
+        if key == "judge_digest" and (now in UNKNOWN or then in UNKNOWN):
             # Two unknowns are not equal: neither side shows which judge scored.
             problems.append("judge_digest is unknown, so the judge cannot be shown to be the same")
         elif now != then:

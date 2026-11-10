@@ -1,9 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -164 1000 630" width="1000" height="630" role="img" aria-label="Architecture at the close of Day 5. Solid is built. Dashed is planned.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 20 940 450" width="940" height="450" role="img" aria-label="Architecture at the close of Day 5. Solid is built. Dashed is planned.">
 <style>
-.lane { fill: #0d1729; stroke: #2a3a5c; stroke-width: 1; }
-.lane.harness { stroke: #c084fc; stroke-opacity: .45; }
-.lane-label { fill: #8da2c8; font-size: 12px; font-weight: 600; letter-spacing: .04em; }
-.lane-label.harness { fill: #c084fc; }
 .node rect, .node polygon { fill: #0b1220; stroke: #5cc8ff; stroke-width: 1.5; }
 .node .t { fill: #dbe6ff; font-size: 14px; font-weight: 600; text-anchor: middle; }
 .node .s, .node .badge { fill: #8da2c8; font-size: 11px; text-anchor: middle; }
@@ -16,14 +12,8 @@
 text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
 </style>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,1 L10,5 L0,9 z" fill="#5b6f99"/></marker><marker id="arrow-tool" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,1 L10,5 L0,9 z" fill="#fbbf24"/></marker></defs>
-<rect x="-60" y="-164" width="1000" height="630" fill="#0b1220"/>
-<text class="caption" x="-46" y="-140">Architecture at the close of Day 5. Solid is built. Dashed is planned.</text>
-<rect class="lane harness" x="-54" y="-122" width="988" height="114" rx="10"/>
-<text class="lane-label harness" x="-44" y="-106">Harness</text>
-<rect class="lane" x="-54" y="24" width="988" height="436" rx="10"/>
-<text class="lane-label" x="-20" y="44">FindyFixy</text>
-<path id="e_eval_q" class="edge" d="M-28,-16 L-28,260 L10,260"/>
-<path id="e_rec_eval" class="edge" d="M845,228 L845,10 L70,10 L70,-16"/>
+<rect x="0" y="20" width="940" height="450" fill="#0b1220"/>
+<text class="caption" x="14" y="44">Architecture at the close of Day 5. Solid is built. Dashed is planned.</text>
 <path id="e_q_inv" class="edge" d="M120,260 L142,260"/>
 <path id="e_inv_small" class="edge" d="M272,260 L294,260"/>
 <path id="e_small_val" class="edge" d="M424,260 L446,260"/>
@@ -31,15 +21,14 @@ text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-se
 <path id="e_retry" class="edge" d="M511,292 C511,352 359,352 359,292"/>
 <path id="e_route_rec" class="edge" d="M718,260 L780,260"/>
 <path id="e_route_large" class="edge" d="M658,305 L658,388"/>
-<path id="e_large_rec" class="edge" d="M723,420 C845,420 845,330 845,292"/>
+<path id="e_large_rec" class="edge" d="M723,405 C780,405 845,350 845,292"/>
 <path id="e_q_recall" class="edge tool" d="M65,228 L65,126"/>
 <path id="e_inv_tool" class="edge tool" d="M207,228 L207,126"/>
-<text class="edge-label" x="-36" y="130" transform="rotate(-90 -36 130)">cases in</text>
-<text class="edge-label" x="460" y="4">answers scored</text>
 <text class="edge-label" x="435" y="366">retry with the error text (once)</text>
 <text class="edge-label" x="749" y="250">confident</text>
-<text class="edge-label" x="745" y="352">low confidence or invalid</text>
 <text class="edge-label" x="71" y="182">similar incidents</text>
+<text class="edge-label" x="745" y="352">low confidence or invalid</text>
+<text class="edge-label" x="749" y="250">confident</text>
 <g class="node" id="n_q" data-status="built">
         <rect x="10" y="228" width="110" height="64" rx="8"/>
         <text class="t" x="65" y="256">Question</text>
@@ -92,36 +81,29 @@ text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-se
         <text class="s" x="207" y="103">get_recent_deploys</text>
         <text class="badge" x="207" y="119" id="b_tool"> </text>
       </g>
-<g class="node" id="n_eval" data-status="built">
-        <rect x="-44" y="-96" width="130" height="80" rx="8"/>
-        <text class="t" x="21" y="-74">Eval gate</text>
-        <text class="s" x="21" y="-58">harness, any app</text>
-        <text class="badge" x="21" y="-43" id="b_eval"> </text>
-        <text class="badge" x="21" y="-28" id="b_evalscore"> </text>
+<g class="node" data-status="planned">
+        <rect x="294" y="70" width="130" height="56" rx="8"/>
+        <text class="t" x="359" y="94">Tracing</text>
+        <text class="s" x="359" y="112">Day 6, Langfuse</text>
       </g>
 <g class="node" data-status="planned">
-        <rect x="124" y="-96" width="130" height="64" rx="8"/>
-        <text class="t" x="189" y="-70">CI gate</text>
-        <text class="s" x="189" y="-52">Day 5, attested</text>
+        <rect x="446" y="70" width="130" height="56" rx="8"/>
+        <text class="t" x="511" y="94">Policy</text>
+        <text class="s" x="511" y="112">Day 7, guardrails</text>
       </g>
 <g class="node" data-status="planned">
-        <rect x="292" y="-96" width="130" height="64" rx="8"/>
-        <text class="t" x="357" y="-70">Tracing</text>
-        <text class="s" x="357" y="-52">Day 6, Langfuse</text>
+        <rect x="598" y="70" width="130" height="56" rx="8"/>
+        <text class="t" x="663" y="94">Gateway</text>
+        <text class="s" x="663" y="112">Day 8, routing</text>
+      </g>
+<g class="node" data-status="built">
+        <rect x="10" y="396" width="130" height="56" rx="8"/>
+        <text class="t" x="75" y="420">Evals</text>
+        <text class="s" x="75" y="438">golden set, gate</text>
       </g>
 <g class="node" data-status="planned">
-        <rect x="460" y="-96" width="130" height="64" rx="8"/>
-        <text class="t" x="525" y="-70">Policy</text>
-        <text class="s" x="525" y="-52">Day 7, guardrails</text>
-      </g>
-<g class="node" data-status="planned">
-        <rect x="628" y="-96" width="130" height="64" rx="8"/>
-        <text class="t" x="693" y="-70">Gateway</text>
-        <text class="s" x="693" y="-52">Day 8, routing</text>
-      </g>
-<g class="node" data-status="planned">
-        <rect x="796" y="-96" width="130" height="64" rx="8"/>
-        <text class="t" x="861" y="-70">Human review</text>
-        <text class="s" x="861" y="-52">Day 9, approval</text>
+        <rect x="780" y="396" width="130" height="56" rx="8"/>
+        <text class="t" x="845" y="420">Human review</text>
+        <text class="s" x="845" y="438">Day 9, approval</text>
       </g>
 </svg>

@@ -11,14 +11,19 @@ from pathlib import Path
 import pytest
 
 from app.corpus import build_corpus, write_jsonl
+import psycopg
+
 from app.ingest import (
     DIMENSIONS,
+    MODEL_NAME,
     SECTIONS,
     chunk_incident,
     content_hash,
+    database_staleness,
     embed_in_batches,
     plan_changes,
     read_chunks,
+    staleness,
 )
 
 ROW = {
@@ -111,6 +116,51 @@ def test_retracted_incident_is_deleted() -> None:
     existing = {c.id: c.hash for c in chunks} | {"INC-0042:summary": "x"}
     plan = plan_changes(chunks, existing)
     assert plan.to_delete == ("INC-0042:summary",)
+
+
+def test_an_in_sync_table_is_not_stale_and_any_diff_or_other_model_is() -> None:
+    """Stale means exactly: a re-run would write or delete something, or rows name another model."""
+    chunks = chunk_incident(ROW)
+    synced = {c.id: c.hash for c in chunks}
+    assert staleness(plan_changes(chunks, synced), {MODEL_NAME}) == []
+    edited = staleness(plan_changes(chunk_incident({**ROW, "root_cause": "Other."}), synced), {MODEL_NAME})
+    assert edited == ["the database is stale: run make ingest (1 chunk(s) to write, 0 to delete)"]
+    retracted = staleness(plan_changes(chunks, synced | {"INC-0042:summary": "x"}), {MODEL_NAME})
+    assert retracted == ["the database is stale: run make ingest (0 chunk(s) to write, 1 to delete)"]
+    other = staleness(plan_changes(chunks, synced), {MODEL_NAME, "old/model"})
+    assert other == [f"the database is stale: run make ingest (chunks embedded with old/model, not {MODEL_NAME})"]
+
+
+class FakeConnection:
+    """Answers the two read-only queries `database_staleness` makes, or raises like a missing table."""
+
+    def __init__(self, hashes: dict[str, str] | None, models: set[str] = frozenset({MODEL_NAME})) -> None:
+        """`hashes` None means the table does not exist."""
+        self.hashes, self.models, self.queries = hashes, models, []
+
+    def execute(self, query: str) -> "FakeConnection":
+        """Record the query and remember which rows to return."""
+        self.queries.append(query)
+        if self.hashes is None:
+            raise psycopg.errors.UndefinedTable("relation chunks does not exist")
+        self.rows = list(self.hashes.items()) if "hash" in query else [(m,) for m in self.models]
+        return self
+
+    def fetchall(self) -> list[tuple]:
+        """The rows of the last query."""
+        return self.rows
+
+
+def test_the_live_check_reads_the_source_against_the_table(tmp_path: Path) -> None:
+    """In sync, stale, or no table at all: each is a clear answer, and nothing is written."""
+    path = tmp_path / "incidents.jsonl"
+    path.write_text(json.dumps(ROW) + "\n")
+    synced = {c.id: c.hash for c in read_chunks(path)}
+    conn = FakeConnection(synced)
+    assert database_staleness(conn, path) == []
+    assert all(q.lstrip().upper().startswith("SELECT") for q in conn.queries)
+    assert database_staleness(FakeConnection({}), path)[0].startswith("the database is stale: run make ingest (4")
+    assert database_staleness(FakeConnection(None), path) == ["the database has no chunks table: run make ingest"]
 
 
 def test_read_chunks_gives_800_from_the_corpus(tmp_path: Path) -> None:

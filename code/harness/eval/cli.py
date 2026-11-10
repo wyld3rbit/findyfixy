@@ -10,6 +10,18 @@ What it does
     --show-case ID      print one case of a saved report (`--report` picks the file)
     --baseline-from F   freeze a saved report as the baseline, without running
 
+The attestation (harness/eval/attest.py)
+    When the app passes an `AttestationSpec`, a `--gate` command that ends
+    with exit 0 on a full, real run from a clean tree also writes the
+    attestation CI checks. Anything that fails the command (the gate, a
+    refused baseline) writes none. The fingerprint is taken before the run
+    and again after it, so a file edited during an hour-long run cannot be
+    attested as if it had run. The app's preconditions (FindyFixy: the
+    database holds the current corpus) are checked before the run, which
+    then does not start, and again before writing. A refused attestation is
+    printed with every reason and does not change the exit code: CI fails on
+    the missing attestation instead.
+
 Why the app passes everything in
     The harness cannot know where an app keeps its golden set, its reports or
     its baseline, or how to build its system. `main` takes those as
@@ -19,30 +31,41 @@ Why the app passes everything in
     lifecycle and the harness owns the policy.
 
 Exit codes: 0 pass, 1 gate problems or baseline refused, 2 baseline missing,
-a bad report file, or a missing setting (`ConfigError`).
+a bad report file, a missing setting (`ConfigError`), answer-affecting files
+that cannot be fingerprinted, or an unmet attestation precondition.
 """
 
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 import sys
 from typing import Protocol
 
+from harness.eval.attest import (
+    NO_LEGACY_CONTROL,
+    AttestationRefused,
+    Fingerprint,
+    FingerprintError,
+    Inputs,
+    LegacyControl,
+    file_sha256,
+    fingerprint,
+    utc_now,
+    write_attestation,
+)
 from harness.eval.case import Case
 from harness.eval.events import EvalEmit, no_eval_emit
 from harness.eval.judge import Judge, make_ollama_judge
 from harness.eval.metrics import Embed
-from harness.eval.provenance import build_provenance, file_sha256, git_info, ollama_digest
+from harness.eval.provenance import build_provenance, git_info, ollama_digest
 from harness.eval.report import (
-    NO_LEGACY_CONTROL,
     BaselineMissing,
     BaselineRefused,
-    LegacyControl,
     format_table,
     freeze_baseline,
     gate,
@@ -78,6 +101,26 @@ class Session:
     embed: Embed
 
 
+@dataclass(frozen=True)
+class AttestationSpec:
+    """What a passing gate attests and where it writes it. The app declares it once.
+
+    `root` is the folder that holds the app's packages; every attested path
+    is relative to it. `case_ids` returns the ids of the full golden set, so
+    a run of fewer cases is refused. `preconditions` returns every reason the
+    app's live state does not match its files (empty means it does), for
+    state no file hash can show, such as a database loaded from an older
+    corpus. Both are functions: reading the golden set and the database is
+    the app's job, and the harness calls them only around a gate run.
+    """
+
+    path: Path
+    root: Path
+    inputs: Inputs
+    case_ids: Callable[[], Collection[str]]
+    preconditions: Callable[[], Sequence[str]] = lambda: ()
+
+
 # negative_control -> a context manager that yields the open session.
 SessionFactory = Callable[[bool], AbstractContextManager[Session]]
 
@@ -103,11 +146,6 @@ class RunFn(Protocol):
         ...
 
 
-def _utc_now() -> datetime:
-    """The current time in UTC. A function so tests can replace it."""
-    return datetime.now(timezone.utc)
-
-
 def live_runner(
     open_session: SessionFactory,
     *,
@@ -116,7 +154,7 @@ def live_runner(
     make_judge: Callable[[str], Judge] = make_ollama_judge,
     digest: Callable[[str], str] = ollama_digest,
     git: Callable[[Path], tuple[str, bool | None]] = git_info,
-    now: Callable[[], datetime] = _utc_now,
+    now: Callable[[], datetime] = utc_now,
 ) -> RunFn:
     """Compose a live run from the app's session factory. Builds nothing until called.
 
@@ -194,14 +232,17 @@ def main(
     control_flag: str = "--negative-control",
     control_help: str = "negative control: a run built to fail the gate. Never saved as a baseline.",
     legacy_control: LegacyControl = NO_LEGACY_CONTROL,
-    now: Callable[[], datetime] = _utc_now,
+    attestation: AttestationSpec | None = None,
+    now: Callable[[], datetime] = utc_now,
 ) -> int:
     """Run the eval, print the table and the report path. Returns the exit code.
 
     `run`, `now` and the paths are injected so tests drive this without a
     model. Progress goes to stderr. `display_root` shortens the printed report
     path (relative to it when the report lies under it). `legacy_control` is
-    the app's older control flag in saved reports (see report.LegacyControl).
+    the app's older control flag in saved reports (see attest.LegacyControl).
+    `attestation`, when given, is written after a passing `--gate` run (see
+    the module docstring); without it no attestation is ever written.
     """
     args = _parser(prog, control_flag, control_help).parse_args(argv)
 
@@ -217,6 +258,21 @@ def main(
         except BaselineMissing as err:
             print(f"error: {err}", file=sys.stderr)
             return 2
+    armed: tuple[AttestationSpec, Fingerprint] | None = None
+    if baseline is not None and attestation is not None:
+        # Fingerprint and preconditions first: a broken import, a missing
+        # declared file or a stale database fails in seconds, not after the run.
+        try:
+            armed = (attestation, _fingerprint(attestation))
+        except FingerprintError as err:
+            print(f"error: cannot fingerprint the answer-affecting files: {err}", file=sys.stderr)
+            return 2
+        blockers = attestation.preconditions()
+        if blockers:
+            for blocker in blockers:
+                print(f"error: {blocker}", file=sys.stderr)
+            print("error: not running: this gate run could not be attested", file=sys.stderr)
+            return 2
 
     try:
         report = run(
@@ -229,8 +285,7 @@ def main(
         return 2
     path = write_report(report, now(), reports_dir)
     print(format_table(report))
-    shown = path.relative_to(display_root) if display_root and path.is_relative_to(display_root) else path
-    print(f"report: {shown}")
+    print(f"report: {_shown(path, display_root)}")
     timing = report.get("timing")
     if timing:
         print(
@@ -256,4 +311,60 @@ def main(
         except BaselineRefused as err:
             print(f"baseline refused: {err}", file=sys.stderr)
             code = 1
+    if armed is not None:
+        # Last on purpose: only a command that succeeded as a whole attests,
+        # and a run that also rewrote the baseline changed an attested file.
+        _attest(*armed, report=report, report_file=path, code=code, display_root=display_root)
     return code
+
+
+def _shown(path: Path, display_root: Path | None) -> Path:
+    """`path` relative to `display_root` when it lies under it, else unchanged."""
+    return path.relative_to(display_root) if display_root and path.is_relative_to(display_root) else path
+
+
+def _fingerprint(spec: AttestationSpec) -> Fingerprint:
+    """The fingerprint of the spec's inputs. Raises `FingerprintError`."""
+    return fingerprint(spec.root, spec.inputs.entry_modules, spec.inputs.extra_files)
+
+
+def _attest(
+    spec: AttestationSpec,
+    started: Fingerprint,
+    *,
+    report: Report,
+    report_file: Path,
+    code: int,
+    display_root: Path | None,
+) -> None:
+    """Write the attestation after a command that succeeded, or say why not. Never raises a refusal.
+
+    A failed command writes nothing: the previous attestation, if any, still
+    describes the files it was made over, and CI compares against those.
+    Reaching here with `code == 0` means the gate passed, so the gate's
+    problems are empty by construction.
+    """
+    if code:
+        print(f"attestation not written: the command failed (exit {code})")
+        return
+    blockers = spec.preconditions()  # again: the state may have moved during the run
+    if blockers:
+        print(f"attestation not written: {'; '.join(blockers)}")
+        return
+    try:
+        finished = _fingerprint(spec)
+        write_attestation(
+            spec.path,
+            report,
+            (),
+            finished,
+            inputs=spec.inputs,
+            report_file=report_file,
+            expected_case_ids=spec.case_ids(),
+            started=started,
+        )
+    except (AttestationRefused, FingerprintError) as err:
+        print(f"attestation not written: {err}")
+        return
+    print(f"attestation written: {_shown(spec.path, display_root)} ({len(finished.files)} files)")
+    print("commit it with this change: CI fails a change to these files without a matching attestation")

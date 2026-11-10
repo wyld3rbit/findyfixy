@@ -65,71 +65,20 @@ Step 1 done: Postgres with pgvector, plus Adminer to look at it.
 - **Firewall note:** a firewall prompt shows `limactl usernet` sending DNS (UDP 53) to the router for `ntp.ubuntu.com` each time Colima starts. It is the VM's clock sync, forwarded by Lima's network helper. Allow it. "Process lifetime" re-prompts on every start; "Always" does not.
 - **Next:** Day 4. Start with `make up`, because search and ingest need the database.
 
-## Where we stopped (read this first when resuming)
+## Environment notes (still current)
 
-Written 2026-10-21, end of the evening. Next session: Day 4, `resume day 4`.
-
-### Lessons moved to lessons/, a README in every folder (2026-10-29)
-
-- `00-plan.md` and `d01.md` to `d10.md` moved from the repository root to `lessons/` with `git mv`, so history follows. `tools/lessons.py`, `tools/check.py`, `record/progress.json` and `CLAUDE.md` now name the new paths. The lesson text itself is unchanged. Earlier entries in this file name the old root paths on purpose.
-- Every folder has a short README that says what it is for. `tools/check_docs.py` now checks all of them for names that do not exist, and a test fails if a tracked README is left out of its list.
-
-### State
-- Day 3 is complete in the tracker at 4 of 4. The drill was ticked at the learner's request with no answer (same as Day 2). Day 1's drill was skipped and its evidence line is still missing.
-- Everything up to commit `21b4c4a` is pushed to `origin/main`. This section is the only uncommitted change, unless git says otherwise. Check `git status`.
-- Colima is OFF. Postgres and Adminer are down. The data is safe in the `pgdata` volume. Run `make up` from `code/` before anything that needs the database (`COLIMA_MEMORY=8` on Langfuse days). The learner runs `make down` himself. Do not offer to, and do not re-ask about a `CLAUDE.md` step for it.
-- Tests: `uv run pytest` gives 324 passed, 13 deselected. Database tests: `uv run pytest -m integration tests/integration/test_ingest_db.py tests/integration/test_search_db.py` (7, need `make up`). Ollama integration tests are separate and need Ollama.
-- Dependencies are unchanged since Day 3's `make audit`. The cooldown in `pyproject.toml` is still `2026-10-17`.
-
-### Day 4 status
-- The learner skipped the warm-up (we had just narrated Day 3). `d04.md` has been read. He reads each lesson's concept himself: do not offer to teach it.
-- Day 4 lab: `uv add rank-bm25`; 40 labelled queries; `app/retrieve.py` with `vector`, `hybrid` (BM25 top 50 plus vector top 50, RRF with k = 60) and `hybrid_rerank` (top 30 reranked with `BAAI/bge-reranker-base`), each with an optional `service` filter; `app/eval_retrieval.py` printing recall@5, MRR and p50 latency; a `recall` node before `small` that puts the top 3 prior incidents in the prompt.
-- Day 4 self-check: a table of three retrievers; hybrid beats vector on the exact-token queries; explain RRF in one minute. Drill: "Your RAG system gives confident wrong answers. Where do you look first?"
-- NOTHING is built for Day 4. The step 1 plan below was shown and is waiting for the learner's approval.
-
-### Step 1 plan (waiting for approval): the labelled queries
-- Writes `data/retrieval_eval.jsonl`: 40 queries and the incident ids that should come back.
-- 20 meaning queries: one per twin pair, in a third wording that matches neither voice. Expected: the pair.
-- 10 host queries: an exact hostname (for example `auth-240`) plus a little context. Expected: the incidents that mention that host.
-- 10 number queries: for example "auth latency 41 times normal after a certificate rotation". Nine incidents share a pattern and only the number tells them apart. This targets the 14x versus 41x weakness from Day 3.
-- Files: new `app/eval_set.py` and `tests/test_eval_set.py`; a small refactor of `app/corpus.py` to expose each incident's facts and scenario (output must stay byte-identical: check `git diff --stat data/incidents.jsonl`); new `data/retrieval_eval.jsonl`; a Day 4 changelog entry.
-- Tests: 40 queries with the right mix; every expected id exists; expected ids are really a twin pair; no query repeats stored text verbatim. Break one on purpose once.
-- No packages in step 1.
-
-### Things to get right in Day 4 (found while planning, not yet acted on)
-- Compute each query's expected ids from the data. Do not assume them. A host such as `auth-240` or a number such as 41 may appear in more than one incident. Drop or replace ambiguous queries.
-- Only scenarios whose steps use `{host}` put a hostname in the text. The corpus has hostnames, and versions in some scenarios, but no error codes. Host queries are limited to those pairs.
-- BM25 tokenising must keep hostnames whole. A tokenizer that splits on hyphens turns `auth-240` into `auth` and `240`, and the exact-token advantage disappears.
-- The labels come from the same generator as the data, so every number is a ceiling, not a forecast. Say so in `notes/day4.md`.
-- `search` (Day 3) is vector only and never reads `twin_of`. Keep it that way. The eval harness reads labels from `retrieval_eval.jsonl` only.
-- The `service` filter: with HNSW the WHERE runs after the index scan, so a narrow filter can return fewer than k rows. At 800 rows Postgres scans sequentially and is exact, so this will not show yet. Mention it, and consider pgvector's iterative scan.
-- `rank-bm25`: check name, license (believed Apache-2.0), maintainers and downloads before adding. It has had few releases for years. An in-repo BM25 of about 30 lines is an alternative: no dependency, and it shows the maths. Recommend and ask.
-- `BAAI/bge-reranker-base`: check size (large, about 1 GB, I believe), license, safetensors weights and revision. Pin the revision, record it in `notes/models.md`. Memory is tight: Colima 6 GB plus the 7B model (about 5 GB) plus a reranker on a 16 GB Mac. Latency on CPU for 30 candidates is unmeasured.
-- Step 4 (wire-in): add the `recall` node in `app/graph.py` (its docstring already says Day 4 adds it). Then update `docs/architecture.html`: Retrieval becomes a built, animated node and it needs the Memory store, which the learner reverted as a static box on Day 3. Update the replay tests (`tests/js/replay.js`, `tests/test_page_lag.py`) and the console's event handling. The console then needs the database.
-
-### What Day 3 taught (context for Day 4 numbers)
-- Query "auth latency spike after certificate rotation": top 5 were all certificate-rotation summaries at distances 0.089 to 0.157; 2 of 5 belong to a seeded pair; both members of INC-0073 and INC-0074 were present.
-- INC-0054 ("14 times normal") sat between the twins INC-0073 and INC-0074 ("41 times normal"), 0.003 from the latter. The model did not separate 14 from 41. That is the case BM25 and a cross-encoder should help with.
-- At 800 rows Postgres uses a sequential scan (1.27 ms); forced HNSW took 0.78 ms. Larger sizes are not measured. The learner asked how HNSW is guaranteed to take over: it is not. An optional 50,000 to 100,000 vector experiment was offered and not run.
-- The ingest hash covers the model name, the embedded text and the date, so a model change re-embeds everything.
-
-### Environment quirks
 - Firewall (LuLu) prompts: `limactl usernet` sends DNS (UDP 53) to the router for `ntp.ubuntu.com` on every Colima start. Allow it. Earlier timeouts in `make audit`, `uvx` and `uv run --with` were also firewall prompts: approve and retry.
 - `node --check` fails with the learner's `NODE_OPTIONS`. Use `env -u NODE_OPTIONS node --check`.
 - The privacy hook flags anything shaped like `user:password@host`, including inside docs and the changelog. Do not write such strings. The default database connection uses psycopg's keyword form for this reason.
 - `git push` output shows the remote path. Do not echo it.
 - Use the scratchpad for temp files, never `/tmp`. Run `make audit` and `make scan` before dependency commits. Commit and push only when asked.
+- A container GUI (Portainer CE as a compose service) is optional.
+- The one-command bootstrap (`make demo`) waits until the build is complete.
 
-### Deferred or optional
-- A container GUI (Portainer CE as a compose service) is optional, not before Day 6.
-- The one-command bootstrap waits until the lesson is done (see memory).
-- The tracker still shows the planned dates (Day 3 was 2026-10-19 but happened 2026-10-21). Not changed. Ask if he wants the later days shifted.
-- The Day 1 evidence line and the Day 1 drill.
+## Lessons moved to lessons/, a README in every folder (2026-10-29)
 
-### Working preferences (also in Claude's memory)
-- Before every new build step: a short architecture note, then the plan, then wait for approval.
-- Explanations must form one continuous story that ties what was learned to what was built, in order. He objected to a run of disconnected fragments. Short plain sentences. No em-dashes. Bottom line first.
-- Evidence lines are in his words. Never invent numbers. His own runs are the evidence; mark assistant runs as such.
+- `00-plan.md` and `d01.md` to `d10.md` moved from the repository root to `lessons/` with `git mv`, so history follows. `tools/lessons.py`, `tools/check.py`, `record/progress.json` and `CLAUDE.md` now name the new paths. The lesson text itself is unchanged. Earlier entries in this file name the old root paths on purpose.
+- Every folder has a short README that says what it is for. `tools/check_docs.py` now checks all of them for names that do not exist, and a test fails if a tracked README is left out of its list.
 
 ## Day 1: setup and first graph (complete except drill and evidence line)
 
@@ -582,6 +531,31 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 
 - `code/docs/demo.gif` now shows a live Eval run of 2 golden cases (g01, g02) in the two-lane visualizer: Qwen3 4B-instruct answering, Qwen2.5 7B judging, 0 run errors, ending with "subset, gate not applied". Recorded from headless Chrome through its DevTools protocol (no extension), 64 s of run time, unchanged frames dropped and waits shortened to 28.8 s, 679 KB. The README caption, intro and "Try it" now describe the harness and the Eval run mode.
 
+### Day 5: the attested CI gate (2026-11-09)
+
+- `harness/eval/attest.py`, standard library only. The answer-affecting files are computed, not listed by hand: the import closure (by AST) of the eval entry module plus the data and lock files the app declares (`ATTEST_ENTRY`, `ATTEST_EXTRA` in `app/eval_answers.py`). 35 files today; console-only modules are excluded, so a console change does not force a rerun. A test enforces that.
+- `make eval-gate` writes `evals/attestation.json` only on a pass of a full, comparable, non-control run on a clean tree with a known judge digest, and only if no input changed during the run. The file holds repo-relative paths, hashes, model names, digests, the short git SHA and UTC times; nothing personal (the repo is public).
+- CI (`.github/workflows/check.yml`) gains two steps: the product tests (`uv sync --locked`, then `make test`; Linux wheels include torch and CUDA, about 3 GB, no cache yet) and the attestation check (`python3 -I code/harness/eval/attest.py verify`, which reads and hashes files and imports none). Trigger stays `pull_request`, permissions read-only, no secrets, checkout credentials not persisted. New `make verify-attestation`.
+- The visualizer's CI gate box is now built; ADR 0001 to 0004 pictures unchanged.
+- Trust trade-off: CI trusts the local run, and a pull request can edit the checker or the attestation. Branch protection with review is the real control.
+- Open: a stale database that was not re-ingested is invisible to the fingerprint.
+- A fresh-agent review found 10 issues; all fixed. Most important: the gate now checks that the database matches the incident files and ingest code (ingest's own diff) before a run starts, and refuses with "the database is stale: run make ingest", because the run reads passages from Postgres, not from the files. The attestation check now runs first, in its own CI job, so test code cannot alter what is hashed. Attestation fields are type-checked and every printed string is sanitised so it cannot inject GitHub Actions commands. The attestation is written only when the whole command exits 0. Every tracked file under `data/` plus `docker-compose.yml` is declared. One set of traceability rules (an unknown dirty state is now refused by both the baseline and the attestation).
+- Known gaps: a bumped embedding-model revision without a re-ingest still looks current; files under `data/` that the eval does not read also force a rerun.
+- Tests: `make test` 697 passed, 14 deselected. `make check` OK.
+
+### Day 5: first attestation, batched verdicts rejected, phase closed (2026-11-09)
+
+- The first live `make eval-gate` passed: report `eval-20261110T025827Z` at `b1fe199`, 30 of 30 cases, 0 run errors, means equal to the frozen baseline at two decimals, 846.4 s. `evals/attestation.json` (38 files) is committed in `75e3675`.
+- Batching the per-item judge verdicts into one call per case was measured against that run's saved verdicts. Faithfulness failed the pre-set bar (agreement 0.839, kappa 0.52; bar 0.9). Context recall met it (0.917; mean shift minus 0.059, inside its interval) with one malformed batch. Faithfulness was the change under test, so one call per item stays; batching context recall alone is untried. An earlier version of this entry, the Results and ADR 0006 said context recall failed on the shift; the peer review of the part 05 article caught it and all three are corrected.
+- The 2026-11-10 run reproduced all 30 answers and every per-case score of the 2026-10-26 run exactly; only latency differs.
+- ADR 0006 records the rebuilt phase. ADR pictures are now keyed by ADR number (`RECORDS` in `tools/adr_snapshot.py`): ADR 0005's original picture was restored from git and frozen by hash, because the rebuilt visualizer had redrawn it; ADR 0006 is drawn from the page.
+- The stale "Where we stopped" section from 2026-10-21 was removed; its still-current environment notes and the 2026-10-29 lessons entry are kept above.
+- Results are in `lessons/d05.md`.
+
 ### Next
 
-- Day 5 step 4: the attested CI gate (`lessons/d05.md`).
+- Part 05 article and post (part of closing the day), then push and open the pull request.
+- Day 6: answer first and judge after, with per-phase timing, before Langfuse.
+- Day 9 (container build): Linux installs pull PyTorch's CUDA libraries, about 3.1 GB (torch 555 MB, cuDNN 553 MB, cuBLAS 423 MB, Triton 248 MB), although nothing uses a GPU; CI's check job still takes about 2 minutes. Fix with the image: CPU-only PyTorch wheels for Linux through a uv source with a platform marker, then `make audit` and a supply-chain check of that index; measure the image before and after.
+- Open: prove CI fails an unattested change (a throwaway draft PR after PR #5 merges), if the learner wants it.
+- Open: batching context-recall verdicts alone (met the 0.9 bar; about 1.5 judge calls saved per case), untried.

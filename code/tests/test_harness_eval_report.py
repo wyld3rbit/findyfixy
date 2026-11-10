@@ -181,7 +181,7 @@ def test_the_baseline_keeps_the_apps_provenance_and_drops_the_per_run_keys(tmp_p
             "bootstrap_resamples": 1000, "negative_control": False}
     write_baseline(report_with(GOOD, prov=prov), tmp_path / "b.json")
     kept = json.loads((tmp_path / "b.json").read_text())["provenance"]
-    assert set(kept) == {*PROV, "fake_model"}
+    assert set(kept) == {*PROV, "fake_model"} - {"git_dirty"}
 
 
 def test_write_baseline_refuses_run_errors_and_high_failure_rates(tmp_path: Path) -> None:
@@ -213,10 +213,11 @@ def test_an_apps_legacy_control_flag_is_refused_and_kept_out_of_the_baseline(tmp
     assert json.loads((tmp_path / "c.json").read_text())["provenance"]["old_flag"] is False
 
 
-def test_a_dirty_tree_is_refused(tmp_path: Path) -> None:
-    """Uncommitted code cannot be traced, so it cannot be a baseline."""
-    with pytest.raises(BaselineRefused, match="uncommitted changes"):
-        write_baseline(report_with(GOOD, prov={**PROV, "git_dirty": True}), tmp_path / "b.json")
+@pytest.mark.parametrize("dirty", [True, None])
+def test_a_dirty_or_unknown_tree_is_refused(tmp_path: Path, dirty: bool | None) -> None:
+    """Uncommitted code cannot be traced, and neither can a tree git could not read (None)."""
+    with pytest.raises(BaselineRefused, match="uncommitted changes, or git could not tell"):
+        write_baseline(report_with(GOOD, prov={**PROV, "git_dirty": dirty}), tmp_path / "b.json")
 
 
 @pytest.mark.parametrize("key", ["judge_digest", "git_sha"])

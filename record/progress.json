@@ -136,6 +136,10 @@
     {
       "date": "2026-11-09",
       "entry": "Lessons became the single source of truth (notes folded in) and all docs moved to code/docs. Day 5 rebuilt harness-first: the eval gate moved into code/harness/eval behind a SystemUnderTest interface with FindyFixy as its first consumer; the saved final run still passes, the no-recall control fails with the same 8 problems, and re-freezing reproduces the baseline byte for byte. The visualizer now has a harness lane and a live Eval run mode, with tests that fail if a box claims code that does not exist; 650 product tests pass. Blog part 03 published, part 04 scheduled for 2026-11-10. Next: Day 5 step 4, the attested CI gate."
+    },
+    {
+      "date": "2026-11-09",
+      "entry": "Day 5 closed in code: the attested CI gate is built and the first live make eval-gate passed (30 of 30 cases, 0 run errors, means equal to the baseline: severity 0.77, faithfulness 0.79, relevancy 0.67, context recall 0.93, action quality 0.92; 846 s), attestation of 38 files committed. Batched judge verdicts were measured and rejected for faithfulness (agreement 0.839, kappa 0.52; context recall met the bar and stays untried alone). The run reproduced all 30 answers and scores of 2026-10-26 exactly. ADR 0006 written; ADR 0005 keeps its original picture. 697 tests pass. Next: the part 05 article, then the pull request."
     }
   ],
   "decisions": [
@@ -285,6 +289,20 @@
       "decision": "The harness is the product and FindyFixy is the app it is tested on. Day 5 moves the eval gate into a harness package behind a SystemUnderTest interface, with FindyFixy as the first consumer. Each later day builds its control as a harness component.",
       "rejected": "Keep each control inside the app, as the lessons build it",
       "why": "A control wired to one app's types cannot be reused or shipped. The articles now lead with what the harness gains."
+    },
+    {
+      "date": "2026-11-09",
+      "day": 5,
+      "decision": "Keep the project's own eval gate. From Day 6 on, adopt an established open-source blueprint first and build custom only for the gap. Articles name two harnesses: the build harness around the coding agent and the runtime harness in code/harness.",
+      "rejected": "Rebuild the gate on Inspect AI (MIT, UK AISI) or promptfoo (MIT, OpenAI-owned since 2026-03)",
+      "why": "The gate is built and proven equivalent to the frozen baseline, and it carries bootstrap intervals, the baseline and the attestation that those tools do not provide as-is. Rebuilding would cost a day for no measured gain."
+    },
+    {
+      "date": "2026-11-09",
+      "day": 5,
+      "decision": "Fix PyTorch's CUDA download on Linux with the Day 9 container build: CPU-only wheels for Linux via a uv source with a platform marker, then make audit and a supply-chain check of the PyTorch index.",
+      "rejected": "Change the lock now; split heavy dependencies into an optional group",
+      "why": "CI cost today is about 2 minutes on a free public-repo runner; the 3.1 GB of unused GPU libraries matters for the container image, so the fix belongs with it."
     }
   ],
   "days": [

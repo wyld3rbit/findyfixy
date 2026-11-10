@@ -32,7 +32,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, get_args
@@ -50,6 +50,10 @@ if TYPE_CHECKING:
 MODEL_NAME = "BAAI/bge-small-en-v1.5"
 MODEL_REVISION = "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a"
 DIMENSIONS = 384
+
+# The corpus this job loads. The eval reads the table, not this file, so the
+# eval gate checks the two agree (`database_staleness`) before it attests.
+SOURCE_PATH = DATA / "incidents.jsonl"
 
 Section = Literal["summary", "timeline", "root_cause", "remediation"]
 SECTIONS: tuple[Section, ...] = get_args(Section)
@@ -235,6 +239,48 @@ def existing_hashes(conn: Connection) -> dict[str, str]:
     return dict(conn.execute("SELECT id, hash FROM chunks").fetchall())
 
 
+def stored_models(conn: Connection) -> set[str]:
+    """The embedding model names the table holds. One name when it is consistent."""
+    return {row[0] for row in conn.execute("SELECT DISTINCT embedding_model FROM chunks").fetchall()}
+
+
+def staleness(plan: Plan, models: Collection[str], model: str = MODEL_NAME) -> list[str]:
+    """Why the table does not hold what an ingest of the source would leave. Empty means in sync. Pure.
+
+    The plan is this job's own diff, so "in sync" means exactly "a re-run
+    would write and delete nothing". The model check is belt and braces: the
+    hash already covers the model name, but a row written by hand or by an
+    older schema would carry the wrong name with a matching hash.
+
+    Not covered: `MODEL_REVISION`. It is not in the hash or the table, so a
+    revision bump without a re-ingest leaves old vectors that look current.
+    ingest.py is on the eval path, so the bump itself still forces a new run.
+    """
+    reasons = []
+    if plan.to_write or plan.to_delete:
+        reasons.append(
+            f"the database is stale: run make ingest "
+            f"({len(plan.to_write)} chunk(s) to write, {len(plan.to_delete)} to delete)"
+        )
+    other = sorted(set(models) - {model})
+    if other:
+        reasons.append(f"the database is stale: run make ingest (chunks embedded with {', '.join(other)}, not {model})")
+    return reasons
+
+
+def database_staleness(conn: Connection, path: Path = SOURCE_PATH) -> list[str]:
+    """`staleness` of the live table against the source file. Reads ids, hashes and names, no vectors.
+
+    Read-only, and no model is loaded: the plan needs only the source text
+    and the stored hashes. A missing table is stale too, with its own fix.
+    """
+    try:
+        existing, models = existing_hashes(conn), stored_models(conn)
+    except psycopg.errors.UndefinedTable:
+        return ["the database has no chunks table: run make ingest"]
+    return staleness(plan_changes(read_chunks(path), existing), models)
+
+
 def embed_in_batches(
     embed: Embedder, texts: Sequence[str], batch_size: int
 ) -> list[list[float]]:
@@ -337,7 +383,7 @@ def main() -> None:
 
     The data path is resolved from this file, not the working directory.
     """
-    chunks = read_chunks(DATA / "incidents.jsonl")
+    chunks = read_chunks(SOURCE_PATH)
     with psycopg.connect(database_url(), autocommit=True) as conn:
         ensure_schema(conn)
         # Registering after the extension exists lets psycopg send `Vector` values.

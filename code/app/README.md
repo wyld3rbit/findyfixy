@@ -17,7 +17,7 @@ The `code/app/` package. Dependencies point inward: only entry points import the
 **Evaluation**
 - `code/app/golden.py`: the golden set, built from the corpus.
 - `code/app/eval_adapter.py`: FindyFixy as a system under test for the harness in `code/harness/`: holdout recall, the severity label and the twin data.
-- `code/app/eval_answers.py`: the answer evaluation's entry point. It builds the live adapter and hands it to the harness command line.
+- `code/app/eval_answers.py`: the answer evaluation's entry point. It builds the live adapter and hands it to the harness command line. It also declares what the CI gate attests: the entry module whose imports make up the eval path, the data directory, the baseline, the lock file and the compose file, and the database check that stops a gate run on a stale ingest.
 - `code/app/eval_queries.py` and `code/app/eval_retrieval.py`: the labelled queries and the retrieval evaluation.
 
 **Entry points and wiring**

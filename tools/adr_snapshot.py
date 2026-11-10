@@ -14,12 +14,15 @@ accepted ADR already shows, which is the drift this script exists to prevent.
 Teaching the script both layouts would keep a second copy of the old geometry
 in code, for pictures that must never change again. So those pictures are
 frozen instead: the committed files are the source, `FROZEN` holds the SHA-256
-of each, and `make adr-snapshot` checks them and leaves them alone. Phase 5 on
-is drawn from the page. The root .gitattributes marks the pictures `-text`, so
+of each, and `make adr-snapshot` checks them and leaves them alone. ADR 0005's
+picture is frozen too: it shows the eval gate as first built inside the app, and
+Day 5 was rebuilt after that ADR was accepted. Pictures are keyed by ADR number
+(`RECORDS` maps each to the phase it shows), so ADR 0006 draws the rebuilt
+phase 5 from the page while 0005 keeps its own. The root .gitattributes marks the pictures `-text`, so
 no checkout converts line endings: the hash and a byte compare see the same
 bytes on every machine. Hashing normalised text instead would accept a copy
-that is no longer byte-identical to what the ADR was accepted with. If the page's layout changes again, freeze the phases
-drawn from the old layout the same way.
+that is no longer byte-identical to what the ADR was accepted with. If the page's layout changes again, or a phase is rebuilt
+after its ADR, freeze the older pictures the same way.
 
 The drift guard is a test (tools/test_adr_snapshot.py): the nodes the page marks
 built must equal the nodes of the latest phase here. Flip a node on the page
@@ -42,16 +45,23 @@ FIRST_BUILT = {
     "Question": 1, "Small model": 1, "Route": 1, "Large model": 1, "Triage record": 1,
     "Investigate": 2, "Deploy tool": 2, "Validate": 2,
     "Recall": 4,
-    "Eval gate": 5,
+    "Eval gate": 5, "CI gate": 5,
 }
 PHASES = range(1, 6)
 
-# Pictures drawn from the one-lane page, kept byte for byte (see the docstring).
+# ADR number -> the phase its picture shows. Usually the same number. Day 5 was
+# rebuilt after ADR 0005 was accepted, so ADR 0006 records the rebuilt phase 5
+# and ADR 0005 keeps the picture it was accepted with.
+RECORDS: dict[int, int] = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 5}
+
+# ADR pictures kept byte for byte, by ADR number (see the docstring). 1 to 4 were
+# drawn from the one-lane page; 5 is the in-app eval gate as first accepted.
 FROZEN = {
     1: "87c495615b5f14a3bc67bd4e33907c444fa58057731744e89eb3813d680cfcfb",
     2: "244bb1d66ecb89649da913d5178a8554d80b5a0312fcb5112a2dfe24ecdd1f53",
     3: "105d9c2b0a306330e1f832ea1d158b2999f7881ed4b3061f26b215acb9c2c6bb",
     4: "a387d05a9fbd9564d59fd59e0b69c195ecf0aba4fd7cf7fa940b1f94523d2912",
+    5: "ca6999cfd79e413a76eb39e5f30a89374aa9c7fe10e2ccd7e0b899f5aee639a2",
 }
 
 # Planned nodes added to the page after a phase closed. They are drawn only from
@@ -160,11 +170,9 @@ def _number(value: float) -> str:
 def snapshot(phase: int, page: str) -> str:
     """A standalone SVG of the architecture at the close of `phase`, drawn from the page.
 
-    Only for phases after the frozen ones: earlier pictures were drawn from a
+    Frozen ADR pictures are never drawn (see `render`); earlier pictures were drawn from a
     layout the page no longer has.
     """
-    if phase in FROZEN:
-        raise ValueError(f"phase {phase} is frozen: its picture is the committed file")
     nodes, edges, labels, lanes = page_parts(page)
     built = built_in_phase(phase)
     out = []
@@ -201,33 +209,40 @@ def snapshot(phase: int, page: str) -> str:
     )
 
 
-def image_path(phase: int) -> Path:
-    """Where the picture for `phase` lives."""
-    return OUT / f"{phase:04d}-architecture.svg"
+def image_path(record: int) -> Path:
+    """Where the picture for ADR `record` lives."""
+    return OUT / f"{record:04d}-architecture.svg"
 
 
-def check_frozen(phase: int) -> None:
+def render(record: int, page: str) -> str:
+    """The picture for ADR `record`, drawn from the page. Refuses a frozen record."""
+    if record in FROZEN:
+        raise ValueError(f"ADR {record:04d} is frozen: its picture is the committed file")
+    return snapshot(RECORDS[record], page)
+
+
+def check_frozen(record: int) -> None:
     """Raise `FrozenImageChanged` unless the frozen picture still has its recorded hash."""
-    digest = hashlib.sha256(image_path(phase).read_bytes()).hexdigest()
-    if digest != FROZEN[phase]:
-        raise FrozenImageChanged(f"{image_path(phase).name} changed; restore it with git, it is frozen")
+    digest = hashlib.sha256(image_path(record).read_bytes()).hexdigest()
+    if digest != FROZEN[record]:
+        raise FrozenImageChanged(f"{image_path(record).name} changed; restore it with git, it is frozen")
 
 
 def main() -> int:
-    """Check the frozen pictures, then redraw every later phase from the page."""
+    """Check the frozen pictures, then redraw every other ADR picture from the page."""
     page = PAGE.read_text()
     OUT.mkdir(parents=True, exist_ok=True)
-    for phase in PHASES:
-        path = image_path(phase)
-        if phase in FROZEN:
+    for record in RECORDS:
+        path = image_path(record)
+        if record in FROZEN:
             try:
-                check_frozen(phase)
+                check_frozen(record)
             except FrozenImageChanged as err:
                 print(f"error: {err}", file=sys.stderr)
                 return 1
             print(f"kept {path.relative_to(ROOT)} (frozen)")
             continue
-        path.write_text(snapshot(phase, page))
+        path.write_text(render(record, page))
         print(f"wrote {path.relative_to(ROOT)}")
     return 0
 
