@@ -1,22 +1,23 @@
 {
-  "created_utc": "2026-11-10T18:49:32+00:00",
+  "created_utc": "2026-11-10T20:55:18+00:00",
   "files": {
     "app/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "app/corpus.py": "9ca21e617d785967727cc5b5ff00b021dede5208158c121cdde6d36c3a2beb3d",
     "app/eval_adapter.py": "b34029934f03dc216f8744062d2ec261bad79f6153990e41c94acdd7af404377",
     "app/eval_answers.py": "c8edfd6168803917e1ec0e9e82f1a8db4f713af9334c4fb573a945cc932b84e9",
-    "app/events.py": "d73de4d4a47f27376177699898e77a310177c73a45929b1007e8a2bf42c45eee",
+    "app/events.py": "a0c61af12976dd18de553333461cf9a323093df2a64e55fd8b245e611bcea70b",
     "app/golden.py": "b699fa7a4494ffb20430fea0e76c26319f096ec68363803d89db62ee92660c72",
     "app/graph.py": "07429deae1925e58c7527b4b0d13b82ec1e4bb5638a02a8de6dfaa82514a46b7",
-    "app/ingest.py": "ddbd5dccc5274288b97a36b7bae4ec9f68c60d2b59f3da2d73a36f8ec8be2e98",
+    "app/ingest.py": "860f98c601404c46db85f68c4805ae247b59030fd4e8b4a368b925cb07195699",
     "app/investigate.py": "05a658c146bb60a2c23aa2e2b589c0ca86daf2151ac05fcfcd24b69cf62435ce",
     "app/llm.py": "a3f0b30ae6f5c64650a8af30934d25f265a9ad57451a8cbb5afb71a3e8a6fe42",
+    "app/model_cache.py": "5d7be354d6c4c1a8b059c76ac2175818ebffb5ca13d9294d9119736e93a4c373",
     "app/paths.py": "a9f9a00d88c3b0b186231f7b56edb6ac941f3bb87afbb1ff6d24d663bf63eeb3",
-    "app/retrieve.py": "50b0a19c45d742e6df5535a3ee3bfc6d03fd18f7d0ad14580bf725c32f1b1ebf",
+    "app/retrieve.py": "c7a0e2937e215b039e2b0db2ad4515dcbbc09ac4740cdb0a5d5ecb523375217b",
     "app/search.py": "a554f54e9dccf61560e24c3f718c9941177eb10ff9a0a65c6acda2e3f27f991f",
-    "app/settings.py": "944d8889be9527b5cdd77418c4a7d3e7f110588d265b6fc723d60b988480d0b1",
+    "app/settings.py": "3215781a4b3323ef468a833ccf6259ad40d1aee2668436b20aec12a4b5f76474",
     "app/tools.py": "aa70f11b1b3a2dc262692a4a723fc7fb3a6e8daa3a7b8684e51c66719fc0d018",
-    "app/trace_adapter.py": "f7b3dbdfde426e9e539f457d38265742e3a030f702bdfa516bc9eccbdacf4f26",
+    "app/trace_adapter.py": "a6ed8d7c7d35814ac9410b24b920e92cae50efb8ef40ed3bd1e06987b2ac2a56",
     "app/tracing.py": "763de55f9d4baab5eb1f6dad7d26299d514fe8460eea81b334677fc73e7dc1bc",
     "app/triage.py": "df42a5c4ee54098f00cd03a37ace6e0fafe24900c32d7a3de6382169338f1cf4",
     "app/wiring.py": "716a06a5d66130c4749f2f6f69fa48e2a5993a006f4d0892a279d47dab687a79",
@@ -44,10 +45,10 @@
     "harness/trace/command.py": "725eb53cc4a8490394b25a4d144a6e470afdcba2210819602160da64011174c8",
     "harness/trace/scores.py": "1b11182a773d841cd6aba76b156be7e651bbbdfb44b8d47b9a6399e6df636b38",
     "harness/trace/spans.py": "ac5d89872909433a72383fb685325e904d532f37f659799754fa91cfb76ee419",
-    "harness/trace/tracing.py": "73826c34ea235434920f2e4c6ab7072f2d813c5633bd219dd686b220c135a6df",
+    "harness/trace/tracing.py": "6646ac25c2d46da817ebde5d68feabdfa7ed1c0012b02855e594e92ee361b37b",
     "uv.lock": "d693e217e6297afa9fce10a78e1069009c736d3bc0f758fba16e0d27133d9565"
   },
-  "fingerprint": "14797dd0fc63cfea2bb5e31e755636fb4894e5a36f281691b3c88beed92963df",
+  "fingerprint": "580e02454043b691f915ac838dc49b7d083f21ecb8e1a457037488b538cfcdd4",
   "inputs": {
     "entry_modules": [
       "app.eval_answers"
@@ -60,16 +61,16 @@
     ]
   },
   "report": {
-    "name": "eval-20261110T184932Z.json",
-    "sha256": "31a445ec4e9972fbaf8a4c85907a12ea7d5d98aeeee6adc83bab48505e053806"
+    "name": "eval-20261110T205517Z.json",
+    "sha256": "c4c390ed5d27e408e29e79853abb5c84245f38eac77a25e8e1793c2efcbe20fa"
   },
   "run": {
-    "git_sha": "0b725ef",
+    "git_sha": "e157a28",
     "judge_digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
     "judge_model": "qwen2.5:7b",
     "large_model": "qwen3:4b-instruct",
     "small_model": "qwen3:4b-instruct",
-    "timestamp_utc": "2026-11-10T18:38:13+00:00"
+    "timestamp_utc": "2026-11-10T20:43:16+00:00"
   },
   "verdict": "pass",
   "version": 1
