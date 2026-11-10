@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-09",
+  "updated": "2026-11-10",
   "plannedStart": "2026-10-17",
   "plannedEnd": "2026-11-17",
   "countdownStart": "2026-10-17T18:51:00",
@@ -144,6 +144,10 @@
     {
       "date": "2026-11-09",
       "entry": "Day 6 steps 0 to 2. Scanner tests isolated from hook GIT_* variables (698 tests). Eval runs in two passes; live gate passed, identical case by case to the attested run, 663 s instead of 846 s (answer 84 s, judge 579 s), new attestation. Langfuse v4.72.0 stack up on 127.0.0.1:3000 with Valkey and Postgres 17.11, every image scanned with Grype."
+    },
+    {
+      "date": "2026-11-10",
+      "entry": "Day 6 steps 3 to 5: every console run, eval case and command is a Langfuse trace (judge calls as generations, recall stages, user.id, sessions for eval runs and hunts); scores on case traces. Three live gate runs, each identical case by case to the attested run; the last one 670 s (answer 86 s, judge 585 s), attestation over 45 files. 797 tests pass."
     }
   ],
   "decisions": [

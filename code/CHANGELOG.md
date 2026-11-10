@@ -621,11 +621,17 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 - Tests: `tests/test_observe_everything.py` (9). Mutations, each caught: `user.id` on every span (1 failed), a hunt session never cleared (1), `/favicon.ico` traced (1), the command span not current (1).
 - Found by the learner in Langfuse: 48 "mcp tool" traces from one `make test`. The MCP tests start the real server, which read the stack's keys and traced to the live backend; the MCP library starts the server with a minimal environment, so a client-side switch never reached it. Fixed twice over: `tests/conftest.py` sets `TRACING=off` for the session, and `app/mcp_client.py` passes the client's tracing settings (`TRACING_SETTINGS`) to the server. Proven by counting: 57 traces before a full `make test`, 57 after.
 - Fixes from the independent review: `command_trace` loads `code/.env` first (ingest, search and the retrieval eval ignored `TRACING=off` set there); the MCP server exports with a 1 s timeout (per-call mode starts and stops it on every call); the model loads are their own steps ("load embedder", "load retriever"); console `/events` is not traced as a request (an idle stream would skew request latency), the status code is an attribute, and one list of quiet routes with one path parser; `record_run` shared by the direct and MCP paths; precise types for the command and run parameters; a stale docstring pointer. `make test`: 797 passed.
+- Live run `eval-20261110T085644Z`: gate pass, attestation over 45 files, identical case by case to `eval-20261110T080005Z`; Langfuse shows judge-call generations inside each metric and recall's four stages inside the recall node. Judge pass 584.7 s, in line with 579.1 s two runs earlier, Langfuse running in both: the 848 s run was not Langfuse's memory (cause unknown).
+
+### Where we stopped (2026-11-10, early morning)
+
+- Day 6 steps 0 to 5 are built, tested, reviewed and committed on `day6-observability` (not pushed). The attestation matches the code.
+- Next: step 6 (the visualizer's Tracing box built, docs, ADR 0007 at day close) and step 7 (the three dashboard questions, which need a price table in config; the answers are the learner's).
+- Proposed, not built: `HF_HUB_OFFLINE=1` for every run, so the pinned, cached models never contact huggingface.co (the learner's firewall prompts during runs); Langfuse monitors once step 7 gives the thresholds.
 
 ### Next
 
-- Day 6, step 5: observe everything (judge generations and recall stages, then every command, then sessions and user.id); one live gate run at the end.
-- Open: why the judge pass slowed from 579 s to 848 s with Langfuse running (measure with the stack stopped).
+- Day 6, step 6: visualizer Tracing box and docs; step 7: dashboard questions (price table in config).
 - Day 9 (container build): Linux installs pull PyTorch's CUDA libraries, about 3.1 GB (torch 555 MB, cuDNN 553 MB, cuBLAS 423 MB, Triton 248 MB), although nothing uses a GPU; CI's check job still takes about 2 minutes. Fix with the image: CPU-only PyTorch wheels for Linux through a uv source with a platform marker, then `make audit` and a supply-chain check of that index; measure the image before and after.
 - Done: CI fails an unattested change. Draft PR #6 changed one comment in `code/app/triage.py`; the `attestation` job failed in 6 s naming the file and `check` was skipped. Closed without merging.
 - Open: batching context-recall verdicts alone (met the 0.9 bar; about 1.5 judge calls saved per case), untried.
