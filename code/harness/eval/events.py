@@ -17,8 +17,8 @@ Who emits what
     `case_started` and `case_answered` for every case, then in the judge pass
     one `metric_scored` per metric as each finishes and `case_scored`, case
     by case. A case with a run error has nothing to judge: its `case_scored`
-    follows its `case_answered` at once, in the answer pass. It never emits the last two kinds:
-    `eval_finished` and `eval_failed` belong to whoever drives the run and
+    follows its `case_answered` at once, in the answer pass. It never emits
+    `eval_finished` or `eval_failed`: those belong to whoever drives the run and
     decides the gate. The runner never sees a baseline, so it cannot say
     whether the run passed.
 

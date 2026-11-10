@@ -209,7 +209,8 @@ def test_siblings_opened_under_a_named_parent_close_independently(traced) -> Non
     tree.open("a", "tool a", kind="tool", under="node")
     tree.open("b", "tool b", kind="tool", under="node")
     tree.close("a", output="result a")
-    assert tree.open_keys() == ["node", "b"]
+    assert tracing.flush()
+    assert [s.name for s in exporter.get_finished_spans()] == ["tool a"]  # b and the node still open
     tree.close("b", output="result b")
     tree.close("node")
     tree.finish()

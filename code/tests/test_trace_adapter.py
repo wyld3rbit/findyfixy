@@ -92,7 +92,6 @@ def test_every_scenario_maps_without_a_swallowed_error_and_ends_its_trace(traced
     assert len({s.context.trace_id for s in spans}) == 1
     roots = [s for s in spans if s.parent is None]
     assert [r.name for r in roots] == ["findyfixy run"]
-    assert format(roots[0].context.trace_id, "032x") == made[0].trace_ids[0]
     assert all(s.end_time is not None for s in spans)
 
 

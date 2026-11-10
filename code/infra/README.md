@@ -10,6 +10,6 @@ Langfuse v4 receives the harness's OpenTelemetry traces and shows them at `http:
 - `make obs-up`: starts the stack and waits until every container is healthy. It needs Colima at 8 GB.
 - `make obs-down`: stops it and keeps its data.
 
-`code/infra/langfuse/docker-compose.yml` is the official file of Langfuse v4.72.0 with a short list of changes at its top: images pinned by digest, Redis replaced by Valkey (Redis 7.4 and later are not OSI-licensed), every published port on 127.0.0.1, telemetry off, no default secrets. Upgrade by diffing against the next release's file. `code/tests/test_langfuse_env.py` fails when the file requires a secret the generator does not write, or when a secret falls back to a default.
+`code/infra/langfuse/docker-compose.yml` is the official file of Langfuse v4.72.0 with a short list of changes at its top: images pinned by digest, the upstream `redis:7` replaced by Valkey (Redis 7.4 is RSALv2/SSPL only, not OSI-licensed), every published port on 127.0.0.1, telemetry off, no default secrets. Upgrade by diffing against the next release's file. `code/tests/test_langfuse_env.py` fails when the file requires a secret the generator does not write, or when a secret falls back to a default.
 
 Image choices and their Grype scans (critical and high only) are recorded in `code/CHANGELOG.md` under Day 6, step 2. Accepted because everything is local, the data is synthetic, and only ports 3000 and 9090 on 127.0.0.1 are reachable. Rescan when a digest moves.

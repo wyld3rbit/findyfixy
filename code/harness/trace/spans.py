@@ -92,7 +92,8 @@ def _restore(token: Any, detach: Any) -> None:
     already discarded, so there is nothing to restore. OpenTelemetry's
     `detach` would log a traceback for that; resetting the context variable
     directly lets the mismatch pass quietly. Tokens of another runtime
-    context (no `var`) go through `detach` as usual.
+    context (selected with `OTEL_PYTHON_CONTEXT`; no `var`) go through
+    `detach` as usual.
     """
     var = getattr(token, "var", None)
     if var is None:
@@ -110,6 +111,22 @@ def as_text(value: Any) -> str:
     if len(text) > MAX_VALUE_CHARS:
         return text[:MAX_VALUE_CHARS] + f"... [cut, {len(text)} chars]"
     return text
+
+
+def attribute_value(value: Any) -> str | int | float | bool | None:
+    """A value as an attribute value: None, numbers and bools as they are, anything else as cut text."""
+    if value is None or isinstance(value, (int, float, bool)):
+        return value
+    return as_text(value)
+
+
+def mark_failed(span: Span, error: str) -> None:
+    """Mark a span as failed, for OpenTelemetry (its status) and for Langfuse (its level and message)."""
+    from opentelemetry.trace import Status, StatusCode
+
+    text = as_text(error)
+    span.set_attributes({LF_LEVEL: "ERROR", LF_STATUS: text})
+    span.set_status(Status(StatusCode.ERROR, text))
 
 
 def _clean(attributes: Attributes | None) -> dict[str, str | int | float | bool]:
@@ -149,13 +166,10 @@ class SpanTree:
         """
         # Resolved once per run, not per span: the run's thread makes every span.
         from opentelemetry import context as otel_context, trace
-        from opentelemetry.trace import Status, StatusCode
 
         self._attach = otel_context.attach
         self._detach = otel_context.detach
-
         self._in_context = trace.set_span_in_context
-        self._error_status = lambda text: Status(StatusCode.ERROR, text)
         context = trace.set_span_in_context(parent._root) if parent is not None else None
         self._is_trace_root = parent is None and not trace.get_current_span().get_span_context().is_valid
         root_attrs = dict(_clean(attributes))
@@ -176,13 +190,13 @@ class SpanTree:
         """The trace's id as 32 hex characters: what a backend's URL and score API use."""
         return format(self._root.get_span_context().trace_id, "032x")
 
-    def follow(self, name: str, *, attributes: Attributes | None = None) -> SpanTree:
+    def follow(self, name: str) -> SpanTree:
         """A new tree in the same trace, as a child of this one's top span, even after it ended.
 
         For a later step of the same unit of work: the judge pass of an eval
         case runs after the case's answer span has ended.
         """
-        return SpanTree(self._tracer, name, attributes=attributes, parent=self)
+        return SpanTree(self._tracer, name, parent=self)
 
     @contextmanager
     def activate(self) -> Iterator[None]:
@@ -272,10 +286,6 @@ class SpanTree:
             _restore(entry.token, self._detach)
         self._open.remove(entry)
 
-    def open_keys(self) -> list[str]:
-        """The keys of the spans still open, outermost first. For an adapter's bookkeeping."""
-        return [e.key for e in self._open]
-
     def event(self, name: str, attributes: Attributes | None = None) -> None:
         """Mark a moment (a validation result, a retry, a route) on the innermost open span."""
         self._parent().add_event(name, attributes=_clean(attributes))
@@ -304,8 +314,7 @@ class SpanTree:
         if output is not None:
             span.set_attribute(LF_OUTPUT, as_text(output))
         if error is not None:
-            span.set_attributes({LF_LEVEL: "ERROR", LF_STATUS: as_text(error)})
-            span.set_status(self._error_status(as_text(error)))
+            mark_failed(span, error)
         span.end()
 
 
@@ -334,26 +343,21 @@ class Generation:
 
 
 @contextmanager
-def generation(tracer: Tracer, model: str, prompt: Any, *, name: str | None = None,
-               attributes: Attributes | None = None) -> Iterator[Generation]:
+def generation(tracer: Tracer, model: str, prompt: Any, *, name: str | None = None) -> Iterator[Generation]:
     """A generation span for one model call, a child of the current span. Ends when the block ends.
 
     For code that calls a model outside an app's event stream, such as the
     harness's judge. An exception in the block marks the span as failed and
     is re-raised.
     """
-    from opentelemetry.trace import Status, StatusCode
-
     span = tracer.start_span(name or f"model {model}", attributes={
-        **_clean(attributes), LF_TYPE: "generation", GEN_AI_OPERATION: "chat",
+        LF_TYPE: "generation", GEN_AI_OPERATION: "chat",
         GEN_AI_PROVIDER: "ollama", GEN_AI_REQUEST_MODEL: model, LF_INPUT: as_text(prompt),
     })
     try:
         yield Generation(span)
     except BaseException as err:
-        text = as_text(f"{type(err).__name__}: {err}")
-        span.set_attributes({LF_LEVEL: "ERROR", LF_STATUS: text})
-        span.set_status(Status(StatusCode.ERROR, text))
+        mark_failed(span, f"{type(err).__name__}: {err}")
         raise
     finally:
         span.end()

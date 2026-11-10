@@ -18,6 +18,7 @@ help:
 	@echo "See test cases:   make golden   make case ID=g07"
 	@echo "Freeze baseline:  make eval-freeze REPORT=reports/eval-<timestamp>.json"
 	@echo "Compare runs:     make eval-compare REPORT=reports/eval-<timestamp>.json"
+	@echo "Trace backend:    make obs-secrets   make obs-up   make obs-down   (Langfuse on 127.0.0.1:3000)"
 	@echo "Tracker page:     make tracker"
 	@echo "Landing page:     make ui   (tracker with the visualization embedded)"
 	@echo "Decision records:  make adr-snapshot   (redraw the diagram in each ADR)"

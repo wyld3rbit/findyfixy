@@ -28,7 +28,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from typing import TYPE_CHECKING, Any
 
-from harness.trace.spans import Attributes, SpanTree, as_text
+from harness.trace.spans import Attributes, SpanTree, attribute_value, mark_failed
 
 if TYPE_CHECKING:
     from opentelemetry.trace import Span, Tracer
@@ -46,8 +46,7 @@ class Step:
     def set(self, **attributes: Any) -> None:
         """Add attributes; None values are left out (unknown is not zero)."""
         if self._span is not None:
-            self._span.set_attributes({k: v if isinstance(v, (int, float, bool)) else as_text(v)
-                                       for k, v in attributes.items() if v is not None})
+            self._span.set_attributes({k: attribute_value(v) for k, v in attributes.items() if v is not None})
 
 
 class CommandTrace:
@@ -120,15 +119,11 @@ def _no_step() -> Iterator[Step]:
 @contextmanager
 def _step(tracer: Tracer, name: str, attributes: Mapping[str, Any] | None) -> Iterator[Step]:
     """A current span for one step; an exception marks it failed and is re-raised."""
-    from opentelemetry.trace import Status, StatusCode
-
     with tracer.start_as_current_span(name, record_exception=False, set_status_on_exception=False) as span:
         step = Step(span)
         step.set(**dict(attributes or {}))
         try:
             yield step
         except BaseException as err:
-            text = as_text(f"{type(err).__name__}: {err}")
-            span.set_attributes({"langfuse.observation.level": "ERROR", "langfuse.observation.status_message": text})
-            span.set_status(Status(StatusCode.ERROR, text))
+            mark_failed(span, f"{type(err).__name__}: {err}")
             raise

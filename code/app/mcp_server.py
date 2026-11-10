@@ -89,21 +89,14 @@ def build_server(path: Path = DEFAULT_DEPLOYS_PATH, tracing: "Tracing | None" = 
 
 def main() -> None:
     """Serve over stdio until the client closes the connection, tracing each tool call when configured."""
-    from app.settings import load_env, read_tracing
-    from harness.trace.tracing import Tracing as _Tracing
+    from app.tracing import open_tracing
 
-    load_env()
-    config = read_tracing()
     # A short export timeout: in per-call mode every tool call starts and stops
     # this process, and the client stops waiting for it after a grace period.
     # With the backend down, a 5 s flush on exit would slow every call and the
     # client could kill the process before the span is sent.
-    tracing = _Tracing.start(config, export_timeout_s=SERVER_EXPORT_TIMEOUT_S) if config else None
-    try:
+    with open_tracing(export_timeout_s=SERVER_EXPORT_TIMEOUT_S) as tracing:
         build_server(tracing=tracing).run(transport="stdio")
-    finally:
-        if tracing is not None:
-            tracing.close()
 
 
 if __name__ == "__main__":

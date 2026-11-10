@@ -6,11 +6,11 @@
 
 FindyFixy is a prototype incident-triage assistant. You paste in an incident report and it returns a severity, the likely component and a first action, along with the most similar past incidents and what fixed them. It runs on one machine with open-source models and synthetic data.
 
-FindyFixy is also the test subject for a harness: the controls that wrap a model so its output can be trusted. The first control is an eval gate in `code/harness/`. It scores any app that plugs into its interface and blocks a release that makes answers worse. It never imports FindyFixy.
+FindyFixy is also the test subject for a harness: the controls that wrap a model so its output can be trusted. The first control is an eval gate in `code/harness/`. It scores any app that plugs into its interface and blocks a release that makes answers worse. The second is tracing: every run, eval case and command becomes an OpenTelemetry trace in a local Langfuse. The harness never imports FindyFixy.
 
 ## Run it
 
-You need [uv](https://docs.astral.sh/uv/), Docker Compose with a runtime (Colima or Docker) and [Ollama](https://ollama.com/). Plan for 16 GB of memory and about 7 GB of model downloads.
+You need [uv](https://docs.astral.sh/uv/), Docker Compose with a runtime (Colima or Docker) and [Ollama](https://ollama.com/). Plan for 16 GB of memory and about 8.5 GB of model downloads.
 
 ```bash
 cp code/.env.example code/.env    # model names; edit if you use other models
@@ -31,6 +31,8 @@ make triage           # triage five fixed questions in the terminal
 make eval             # score FindyFixy on 30 golden cases through the harness (live models, minutes)
 make case ID=g07      # one case end to end: the alert, the answer, every judge decision
 make test             # the product tests
+make obs-secrets      # once: secrets for the local Langfuse stack
+make obs-up           # then open http://127.0.0.1:3000 to see every run as a trace
 make help             # everything else
 ```
 

@@ -73,11 +73,13 @@ def stage_spans(tracing: "Tracing | None") -> "Stage | None":
     """
     if tracing is None:
         return None
+    from harness.trace.spans import LF_TYPE
+
     tracer = tracing.tracer()
 
     def stage(name: str) -> "AbstractContextManager[object]":
         """One span named for the stage, current while it runs."""
-        return tracer.start_as_current_span(f"recall {name}", attributes={"langfuse.observation.type": "span"})
+        return tracer.start_as_current_span(f"recall {name}", attributes={LF_TYPE: "span"})
 
     return stage
 

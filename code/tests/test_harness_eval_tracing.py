@@ -237,9 +237,27 @@ def test_a_case_span_ends_even_when_a_viewer_raises(traced) -> None:
 def test_an_app_meta_key_named_trace_id_is_a_run_error_not_overwritten(traced) -> None:
     """The record's trace_id goes through the same clash check as every other key."""
     tracing, _ = traced
+    events: list[tuple[str, dict]] = []
     report = run([case("g1")], sut=FakeSUT(meta={"model_used": "small", "trace_id": "the apps own"}),
-                 tracing=tracing)
+                 tracing=tracing, on_event=lambda kind, **data: events.append((kind, data)))
+    record = report["cases"][0]
+    assert "trace_id" in record["run_error"]
+    # Closed like any run error: unlabelled, answered with the error, then scored.
+    assert all(record[label] is None for label in record["labels"])
+    kinds = [(k, d.get("run_error")) for k, d in events if k in ("case_answered", "case_scored")]
+    assert kinds[0][0] == "case_answered" and kinds[0][1] and kinds[1][0] == "case_scored"
+
+
+def test_an_app_meta_key_named_trace_id_is_a_run_error_without_tracing_too() -> None:
+    """Turning tracing on must not change a score: the name is refused either way."""
+    report = run([case("g1")], sut=FakeSUT(meta={"model_used": "small", "trace_id": "the apps own"}))
     assert "trace_id" in report["cases"][0]["run_error"]
+
+
+def test_a_case_meta_key_named_trace_id_stops_the_run_like_any_case_meta_clash() -> None:
+    """A golden set that uses a runner key is a bug in the set: it fails loudly, not as a quiet run error."""
+    with pytest.raises(ValueError, match="trace_id"):
+        run([case("g1", trace_id="x")])
 
 
 class BadStatus(BaseHTTPRequestHandler):

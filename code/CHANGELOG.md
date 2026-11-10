@@ -1,23 +1,15 @@
 # Changelog
 
-Newest entry first. Written so another agent can resume the work.
+Oldest entry first, apart from the early sections below. Written so another agent can resume the work.
 
 ## Conventions (read first)
 
 - Run everything from `code/`. Use `uv run`. Add packages with `uv add`. Never `pip install`.
 - No absolute local paths, usernames or emails in any file or commit. This repo is public.
 - Synthetic data only. Open-source licenses only. Pin versions and image tags.
-- Models: Qwen2.5 1.5B (small) and 7B (large) on Ollama. Names come from `.env`.
+- Models run on Ollama. Names come from `.env`; `record/models.md` lists the pulled IDs.
 - Plan before code: show the plan for each step and wait for approval.
 - Document all generated code for a learner at staff+ depth: a module docstring (what and why), docstrings on every function and class, and comments that explain trade-offs, failure modes and what changes at scale. Short sentences. No local paths or personal data in docs either.
-
-## Tracker log lines (for the learner to paste into tracker.html)
-
-Agents do not edit `tracker.html`. These lines are ready to add to its `log` array.
-
-- "Day 1 complete except the drill. Python pinned to 3.13. Router refactored with an injected model function, 9 routing tests that need no Ollama."
-- "Real-model rerun after the refactor: 0 of 5 escalated again. Confidence came back on mixed scales (0.95, 9.0, 100.0), so self-reported confidence is a weak signal."
-- "Personal data scrubbed from the course files. The Start in Claude Code button now works out its folder from the page address."
 
 ## Scrub of personal data (course folder)
 
@@ -30,9 +22,7 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - One git repo, rooted at the training folder (the one that holds `CLAUDE.md`). The code is in `code/`. There is no inner repo.
 - The four earlier commits were merged in under `code/`, so `git log` keeps the history.
 - One `.gitignore`, at the training root. Its patterns have no leading slash, so they match at any depth and cover `code/` too. The separate `code/.gitignore` was removed. Keep it to one file.
-- Daily notes live in `notes/` at the training root, not in `code/`. Moved with `git mv`, so history follows.
-- Root `README.md` tells a new reader how to start. No license file yet: the owner chooses one.
-- Not done: pushing to GitHub, and choosing a license.
+- Root `README.md` tells a new reader how to start. The license is in `LICENSE` and `NOTICE`.
 
 ## Day 3: memory I, ingestion (complete, 4 of 4)
 
@@ -568,7 +558,7 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 
 ### Day 6, step 2: the Langfuse v4 stack (2026-11-09)
 
-- `code/infra/langfuse/docker-compose.yml`: the official file of Langfuse v4.72.0 (2026-10-29, the newest release before the 7-day cooldown; MIT outside `ee/`, unused). Changes: images pinned by digest; `redis:7` (7.4+, RSALv2/SSPL, not OSI) replaced by Valkey 8.1.11 (BSD-3-Clause); every published port on 127.0.0.1 (upstream published 3000 and 9090 on all interfaces); Postgres, ClickHouse, Valkey and the worker publish nothing (Langfuse's Postgres would also clash with FindyFixy's 5432); telemetry off; no default secrets (`${NAME:?}`), the Valkey password out of the healthcheck command.
+- `code/infra/langfuse/docker-compose.yml`: the official file of Langfuse v4.72.0 (2026-10-29, the newest release before the 7-day cooldown; MIT outside `ee/`, unused). Changes: images pinned by digest; `redis:7` (Redis 7.4 is RSALv2/SSPL only, not OSI) replaced by Valkey 8.1.11 (BSD-3-Clause); every published port on 127.0.0.1 (upstream published 3000 and 9090 on all interfaces); Postgres, ClickHouse, Valkey and the worker publish nothing (Langfuse's Postgres would also clash with FindyFixy's 5432); telemetry off; no default secrets (`${NAME:?}`), the Valkey password out of the healthcheck command.
 - `code/infra/langfuse/new_env.py` (`make obs-secrets`): random secrets and a headless first start (org and project `findyfixy`, API keys, login `admin@example.com`), mode 0600, never overwritten. 5 tests in `tests/test_langfuse_env.py`, including that every `${NAME:?}` in the compose file is generated; mutations caught: a default secret put back, a secret dropped from the generator.
 - `make obs-up` / `make obs-down`. Colima restarted at 8 GB. Measured: health `{"status":"OK","version":"4.72.0"}`, the project API keys list project `findyfixy`, a wrong key gets 401, Valkey answers NOAUTH without its password. Memory: web 1.13 GiB, worker 657 MiB, ClickHouse 339 MiB, MinIO 141 MiB, Postgres 50 MiB, Valkey 10 MiB.
 - Images and Grype v0.121.0 scans (as a container against the registry, linux/arm64; critical/high):
@@ -621,17 +611,20 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 - Tests: `tests/test_observe_everything.py` (9). Mutations, each caught: `user.id` on every span (1 failed), a hunt session never cleared (1), `/favicon.ico` traced (1), the command span not current (1).
 - Found by the learner in Langfuse: 48 "mcp tool" traces from one `make test`. The MCP tests start the real server, which read the stack's keys and traced to the live backend; the MCP library starts the server with a minimal environment, so a client-side switch never reached it. Fixed twice over: `tests/conftest.py` sets `TRACING=off` for the session, and `app/mcp_client.py` passes the client's tracing settings (`TRACING_SETTINGS`) to the server. Proven by counting: 57 traces before a full `make test`, 57 after.
 - Fixes from the independent review: `command_trace` loads `code/.env` first (ingest, search and the retrieval eval ignored `TRACING=off` set there); the MCP server exports with a 1 s timeout (per-call mode starts and stops it on every call); the model loads are their own steps ("load embedder", "load retriever"); console `/events` is not traced as a request (an idle stream would skew request latency), the status code is an attribute, and one list of quiet routes with one path parser; `record_run` shared by the direct and MCP paths; precise types for the command and run parameters; a stale docstring pointer. `make test`: 797 passed.
-- Live run `eval-20261110T085644Z`: gate pass, attestation over 45 files, identical case by case to `eval-20261110T080005Z`; Langfuse shows judge-call generations inside each metric and recall's four stages inside the recall node. Judge pass 584.7 s, in line with 579.1 s two runs earlier, Langfuse running in both: the 848 s run was not Langfuse's memory (cause unknown).
+- Live run `eval-20261110T085644Z`: gate pass, attestation over 45 files, identical case by case to `eval-20261110T080005Z`; Langfuse shows judge-call generations inside each metric and recall's four stages inside the recall node. Judge pass 584.7 s with Langfuse running, in line with 579.1 s in the step 1 run, before Langfuse existed: Langfuse alone does not explain the 848 s judge pass (cause unknown).
 
-### Where we stopped (2026-11-10, early morning)
+### Day 6: audit before the push of steps 0 to 5 (2026-11-10)
 
-- Day 6 steps 0 to 5 are built, tested, reviewed and committed on `day6-observability` (not pushed). The attestation matches the code.
-- Next: step 6 (the visualizer's Tracing box built, docs, ADR 0007 at day close) and step 7 (the three dashboard questions, which need a price table in config; the answers are the learner's).
-- Proposed, not built: `HF_HUB_OFFLINE=1` for every run, so the pinned, cached models never contact huggingface.co (the learner's firewall prompts during runs); Langfuse monitors once step 7 gives the thresholds.
+Three independent read-only reviews (part 05 article, dead code and artifacts, docs and records), each finding checked before it was fixed.
 
-### Next
+- Bug: an app meta key named `trace_id` became a run error only after `case_answered` had gone out with labels and no error, and `case_scored` never followed. The runner now adds its trace id before the system answers, and `RUNNER_KEYS` refuses the name in an app's answer meta whether tracing is on or off (before, an untraced run let the app's value through, so turning tracing on could change the gate) and in a golden case's meta (a loud error, like any case meta clash). The tests check the labels, both events and the untraced path; each failed on the code before the fix.
+- The independent review of this diff found that a golden case's `trace_id` meta now stopped the run, that tracing on and off disagreed, that a failed close in the eval session skipped closing the tracer (now in a `finally`), and that `_restore` must keep its path for a runtime context chosen with `OTEL_PYTHON_CONTEXT`; all fixed, plus two stale doc lines. `make test`: 799 passed.
+- One home each: `app/tracing.py` `open_tracing` starts and closes the provider for every entry point (it was written four times: commands, the eval session, the console, the MCP server); `harness/trace/spans.py` `mark_failed` and `attribute_value` replace three and two copies, and the last hard-coded `langfuse.*` names now use the constants.
+- Removed: `command_trace(tracing=)` (no caller), the `None` command in `app/mcp_run.py`, the unused `attributes=` of `SpanTree.follow` and `generation`, the test-only `EventSpans.trace_ids` and `SpanTree.open_keys`.
+- `tests/test_mcp.py` counted MCP servers across the machine, so a second test run at the same moment failed it; it now counts its own children.
+- Docs: the claim that Langfuse was running during the 663.4 s comparison run was wrong (that run ended before the stack existed), corrected in the lesson and here; the Redis licence wording (Redis 7.4 is RSALv2/SSPL only; Redis 8 added AGPLv3); stale sections of this file; the READMEs (tracing in the root README, `make help` location, the import rule, the harness's two halves, download size about 8.5 GB); the tracing settings in `.env.example`; the Langfuse targets in `make help`.
 
-- Day 6, step 6: visualizer Tracing box and docs; step 7: dashboard questions (price table in config).
+### Open items
+
 - Day 9 (container build): Linux installs pull PyTorch's CUDA libraries, about 3.1 GB (torch 555 MB, cuDNN 553 MB, cuBLAS 423 MB, Triton 248 MB), although nothing uses a GPU; CI's check job still takes about 2 minutes. Fix with the image: CPU-only PyTorch wheels for Linux through a uv source with a platform marker, then `make audit` and a supply-chain check of that index; measure the image before and after.
-- Done: CI fails an unattested change. Draft PR #6 changed one comment in `code/app/triage.py`; the `attestation` job failed in 6 s naming the file and `check` was skipped. Closed without merging.
-- Open: batching context-recall verdicts alone (met the 0.9 bar; about 1.5 judge calls saved per case), untried.
+- Batching context-recall verdicts alone (met the 0.9 bar; about 1.5 judge calls saved per case), untried.

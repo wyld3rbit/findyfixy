@@ -65,7 +65,7 @@ from harness.trace.spans import (
     GEN_AI_RESPONSE_MODEL,
     GEN_AI_TOOL_NAME,
     SpanTree,
-    as_text,
+    attribute_value,
 )
 
 if TYPE_CHECKING:
@@ -90,7 +90,6 @@ class EventSpans:
         self._tool_seq = 0
         self._session: str | None = None  # set during a hunt
         self.errors = 0  # mapping bugs swallowed; tests assert it stays 0
-        self.trace_ids: list[str] = []  # one per run, in order
 
     def __call__(self, event: Event) -> None:
         """Map one event. Never raises: see "Failure modes" above."""
@@ -167,7 +166,7 @@ class EventSpans:
                 tree.close(self._pending_tools.pop(0), output=d.get("result"),
                            error="tool returned an error" if d.get("error") else None)
         elif kind in ("validation", "retry", "fault_injected", "route"):
-            tree.event(kind, {k: _scalar(v) for k, v in d.items()})
+            tree.event(kind, {k: attribute_value(v) for k, v in d.items()})
             if kind == "route":
                 tree.set({"findyfixy.route": d.get("target")})
         elif kind == "run_finished":
@@ -180,7 +179,6 @@ class EventSpans:
         if self._session is not None:
             attributes = {**(attributes or {}), "session.id": self._session}
         self._tree = SpanTree(self._tracer, TRACE_NAME, input=question, attributes=attributes)
-        self.trace_ids.append(self._tree.trace_id)
         self._pending_tools = []
 
     def finish_run(self, *, output: Any = None, error: str | None = None, model_used: str | None = None) -> None:
@@ -242,13 +240,6 @@ class RunTracer:
                 spans(Event(kind, 0.0, data))  # spans use real time; `t` is not read
 
         return traced
-
-
-def _scalar(value: Any) -> str | int | float | bool | None:
-    """An event value as an attribute value: numbers as they are, anything else as cut text."""
-    if value is None or isinstance(value, (int, float, bool)):
-        return value
-    return as_text(value)
 
 
 def tee(*sinks: Callable[[Event], None]) -> Callable[[Event], None]:

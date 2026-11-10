@@ -103,7 +103,7 @@ from app.dev_reload import fingerprint, snapshot
 from app.events import Emit, Event, make_emit, make_stamped_emit
 from app.incidents import DEFAULT_PATH, Incident, load_incidents
 from app.paths import DOCS, EVALS, ROOT
-from app.settings import load_env, optional_models, read_tracing
+from app.settings import load_env, optional_models
 from app.wiring import SharedRetrieval, stage_spans
 from app.investigate import build_investigator
 from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
@@ -111,6 +111,7 @@ from app.tools import make_deploys_tool
 from app.graph import QUESTIONS, THRESHOLD, Recall, build_graph
 from app.llm import answer_options, ollama_ask
 from app.trace_adapter import EventSpans, tee
+from app.tracing import open_tracing
 from app.triage import RECALL_K, Ask, TriageError
 from harness.trace.tracing import Tracing
 
@@ -882,7 +883,8 @@ def main(argv: list[str] | None = None) -> None:
     code changes (app/dev_reload.py). The child is started without the flag and
     with `FINDYFIXY_DEV` set, which turns on the page's auto-reload.
 
-    Like `app.graph.main`, this is the only place that reads `.env`. Missing
+    Like `app.graph.main`, it reads `.env` at the edge (`load_env`, and again in
+    `open_tracing`; loading never overrides a variable already set). Missing
     model names do not stop the server: fake mode needs none. Live mode then
     reports "not configured" instead of failing at startup.
     """
@@ -907,45 +909,43 @@ def main(argv: list[str] | None = None) -> None:
     # One database connection, embedder and reranker for the whole process:
     # triage recall and the eval session share it, so a live eval loads no copy.
     # One tracer provider for the process: triage runs and live eval runs share it.
-    trace_config = read_tracing()
-    tracing = Tracing.start(trace_config) if trace_config else None
-    retrieval = SharedRetrieval(stage=stage_spans(tracing)) if models else None
-    live_eval_suite = None
-    if retrieval is not None:
-        from app.eval_answers import GOLDEN_PATH, open_live_session
-        from app.golden import load_golden
+    # Closed last, which sends what is still queued.
+    with open_tracing() as tracing:
+        retrieval = SharedRetrieval(stage=stage_spans(tracing)) if models else None
+        live_eval_suite = None
+        if retrieval is not None:
+            from app.eval_answers import GOLDEN_PATH, open_live_session
+            from app.golden import load_golden
 
-        live_eval_suite = live_eval(
-            partial(open_live_session, retrieval=retrieval, tracing=tracing),
-            golden_path=GOLDEN_PATH,
-            repo_dir=ROOT,
-            progress=lambda msg: print(msg, file=sys.stderr, flush=True),
-            size=len(load_golden(GOLDEN_PATH)),
+            live_eval_suite = live_eval(
+                partial(open_live_session, retrieval=retrieval, tracing=tracing),
+                golden_path=GOLDEN_PATH,
+                repo_dir=ROOT,
+                progress=lambda msg: print(msg, file=sys.stderr, flush=True),
+                size=len(load_golden(GOLDEN_PATH)),
+            )
+        hub = RunHub(
+            tracing=tracing,
+            live_models=(models.small, models.large) if models else None,
+            incidents=load_incidents(DEFAULT_PATH),
+            investigator=investigator,
+            recall=retrieval.recall(RECALL_K) if retrieval else None,
+            live_eval=live_eval_suite,
         )
-    hub = RunHub(
-        tracing=tracing,
-        live_models=(models.small, models.large) if models else None,
-        incidents=load_incidents(DEFAULT_PATH),
-        investigator=investigator,
-        recall=retrieval.recall(RECALL_K) if retrieval else None,
-        live_eval=live_eval_suite,
-    )
-    dev = ROOT if os.environ.get("FINDYFIXY_DEV") else None
-    server = serve(hub, port=port, dev_root=dev)
-    port = server.server_address[1]
-    print(f"Console: http://127.0.0.1:{port}  (Ctrl-C to stop)", flush=True)
-    live = "on" if hub.live_available else "off (set SMALL_MODEL, LARGE_MODEL)"
-    print(f"Live mode: {live}", flush=True)
-    traces = f"on, to {trace_config.host}" if trace_config else "off (start Langfuse: make obs-up)"
-    print(f"Tracing: {traces}", flush=True)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
-        if tracing is not None:
-            tracing.close()  # send what is still queued
+        dev = ROOT if os.environ.get("FINDYFIXY_DEV") else None
+        server = serve(hub, port=port, dev_root=dev)
+        port = server.server_address[1]
+        print(f"Console: http://127.0.0.1:{port}  (Ctrl-C to stop)", flush=True)
+        live = "on" if hub.live_available else "off (set SMALL_MODEL, LARGE_MODEL)"
+        print(f"Live mode: {live}", flush=True)
+        traces = f"on, to {tracing.config.host}" if tracing else "off (start Langfuse: make obs-up)"
+        print(f"Tracing: {traces}", flush=True)
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.server_close()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # Harness
 
-The `code/harness/` package is the evaluation harness: it scores an LLM system's answers and gates a release on the scores. It knows nothing about any one application. FindyFixy is its first consumer.
+The `code/harness/` package is the harness: evaluation (`code/harness/eval/`) scores an LLM system's answers and gates a release on the scores, and tracing (`code/harness/trace/`) records every run as a trace. It knows nothing about any one application. FindyFixy is its first consumer.
 
 **The seam.** An application implements `SystemUnderTest` in `code/harness/eval/sut.py`: `describe()` returns the settings that shaped its answers, `answer(case)` returns an `Answer` (the text the judge scores, the contexts the model saw, the proposed action, the labels and app data), and `summarise(records)` returns any extra aggregates. Cases arrive as `Case` from `code/harness/eval/case.py`. FindyFixy's implementation is `code/app/eval_adapter.py`.
 
@@ -25,4 +25,4 @@ The `code/harness/` package is the evaluation harness: it scores an LLM system's
 
 **Eval cases as traces.** With tracing configured, the runner makes each golden case one trace: an "eval case" span that is current while the system answers (so an app's own spans nest under it), then a "judge" span with one child per metric. Each label match and each metric score is sent to the backend on that trace through `ScoreSink` (`code/harness/trace/scores.py`, Langfuse's score API, sent in the background, dropped never raised). A failed metric is an error on its span, never a score of 0. Records gain `trace_id`; `--compare` ignores it, and no number in the report changes.
 
-Its tests are `code/tests/test_harness_eval_*.py` and `code/tests/test_harness_trace.py` and `code/tests/test_harness_eval_tracing.py`. They use a fake system that is not FindyFixy.
+Its tests are `code/tests/test_harness_eval_*.py`, `code/tests/test_harness_trace.py` and `code/tests/test_harness_eval_tracing.py`. They use a fake system that is not FindyFixy.

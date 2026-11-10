@@ -158,6 +158,11 @@ def _safe_metric(compute: Callable[[], MetricResult]) -> MetricResult:
         return MetricResult(None, True, (), f"{type(err).__name__}: {str(err)[:200]}")
 
 
+# Record keys the runner adds itself, traced or not: an app's meta must not
+# use them. Refused either way, so turning tracing on cannot change a score.
+RUNNER_KEYS = frozenset({"trace_id"})
+
+
 def _merge(record: dict[str, Any], extra: Mapping[str, Any], source: str) -> None:
     """Add `extra` to `record`, refusing any key the record already has."""
     clash = sorted(set(extra) & set(record))
@@ -194,6 +199,9 @@ def new_record(case: Case) -> dict[str, Any]:
             {label: None, match_name(label): None, f"expected_{label}": expected},
             f"case {case.id} label {label!r}",
         )
+    taken = sorted(RUNNER_KEYS & set(case.meta))
+    if taken:
+        raise ValueError(f"case {case.id} meta uses the runner's record keys: {taken}")
     _merge(record, case.meta, f"case {case.id} meta")
     return record
 
@@ -270,7 +278,9 @@ def answer_case(
                     attributes={**(run_attributes or {}), "eval.case": case.id, "eval.group": case.group})
     try:
         with tree.activate():
-            result = _answer(case, sut=sut, timer=timer, on_event=on_event)
+            # The trace id joins the record before the system answers. An app
+            # meta key of the same name is a run error, traced or not (RUNNER_KEYS).
+            result = _answer(case, sut=sut, timer=timer, on_event=on_event, extra={"trace_id": tree.trace_id})
     except BaseException as err:
         tree.finish(error=f"{type(err).__name__}: {err}")
         raise
@@ -280,11 +290,6 @@ def answer_case(
         tree.finish(error=record["run_error"])
     else:
         tree.finish(output=result.answer.text if result.answer else None)
-    try:
-        _merge(record, {"trace_id": tree.trace_id}, f"tracing for case {case.id}")
-    except ValueError as err:  # the app's meta already uses the name: a run error, like any meta clash
-        record["run_error"] = f"{type(err).__name__}: {err}"
-        return _Answered(case, record, None, tree)
     return _Answered(case, record, result.answer, tree)
 
 
@@ -294,8 +299,12 @@ def _answer(
     sut: SystemUnderTest,
     timer: Callable[[], float],
     on_event: EvalEmit,
+    extra: Mapping[str, Any] | None = None,
 ) -> _Answered:
     """Answer one case and score its labels. No judge call, no tracing.
+
+    `extra` holds record keys the caller owns (the trace id), added before the
+    system answers so its meta cannot take them.
 
     Emits `case_answered`. A case that ends in a run error also emits
     `case_scored` here, so every case still closes on the stream.
@@ -303,6 +312,7 @@ def _answer(
     were one step, so latencies stay comparable with older reports.
     """
     record = new_record(case)
+    _merge(record, extra or {}, f"the runner's keys for case {case.id}")  # cannot clash: see RUNNER_KEYS
     start = timer()
     try:
         answer: Answer = sut.answer(case)
@@ -312,6 +322,9 @@ def _answer(
         return _Answered(case, _unscored(record, case, on_event), None)
     record["latency_s"] = timer() - start
     try:
+        taken = sorted(RUNNER_KEYS & set(answer.meta))
+        if taken:
+            raise ValueError(f"answer meta for case {case.id} uses the runner's record keys: {taken}")
         _merge(record, answer.meta, f"answer meta for case {case.id}")
     except ValueError as err:
         # Known only once the system has answered, so it cannot be checked up

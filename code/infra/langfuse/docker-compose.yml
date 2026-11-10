@@ -4,8 +4,8 @@
 #
 #   - Every image pinned by digest, each built before the 7-day release
 #     cooldown and scanned with Grype before first use (code/infra/README.md).
-#   - redis:7 replaced by Valkey 8.1 (BSD-3-Clause), Alpine build. Redis 7.4 and later are
-#     RSALv2/SSPL, which are not OSI licenses. Valkey speaks the same protocol.
+#   - redis:7 replaced by Valkey 8.1 (BSD-3-Clause), Alpine build. Redis 7.4 is RSALv2/SSPL
+#     only, which are not OSI licenses. Valkey speaks the same protocol.
 #   - Every published port bound to 127.0.0.1. Upstream publishes the web UI
 #     (3000) and MinIO (9090) on all interfaces. Postgres, ClickHouse, Redis
 #     and the worker publish nothing: only Langfuse's own containers use them,

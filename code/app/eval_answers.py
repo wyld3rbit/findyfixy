@@ -56,7 +56,7 @@ What changes at scale
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 import sys
 from types import MappingProxyType
@@ -66,8 +66,9 @@ from app.events import Emit, no_emit
 from app.golden import DEFAULT_PATH as GOLDEN_PATH, load_golden
 from app.graph import Recall
 from app.paths import EVALS, REPORTS, ROOT
-from app.settings import MissingEnvironment, load_env, read_models, read_tracing
+from app.settings import MissingEnvironment, load_env, read_models
 from app.trace_adapter import RunTracer
+from app.tracing import open_tracing
 from app.wiring import SharedRetrieval, stage_spans
 from harness.eval import cli
 from harness.eval.attest import Inputs
@@ -159,7 +160,7 @@ def open_live_session(
 
     `tracing` works the same way: the console passes the provider it already
     runs. The command line passes none, and the session starts one when
-    tracing is configured (`read_tracing`) and closes it at the end, which
+    tracing is configured (`open_tracing`) and closes it at the end, which
     sends what is queued. With tracing, every case's graph run is a trace
     under the harness's case span, and the scores land on it.
     """
@@ -173,14 +174,13 @@ def open_live_session(
         raise ConfigError(f"set the environment variable {err}") from err
     small, large = models.small, models.large
     goldens = load_golden(GOLDEN_PATH)
-    owns_tracing = tracing is None
     owned = retrieval is None
+    own_tracing = ExitStack()
     shared: SharedRetrieval | None = None
     scores: LangfuseScores | None = None
     try:
         if tracing is None:
-            trace_config = read_tracing()
-            tracing = Tracing.start(trace_config) if trace_config else None
+            tracing = own_tracing.enter_context(open_tracing())
         run_tracer = RunTracer(tracing.tracer()) if tracing is not None else None
         if run_tracer is not None:
             emit = run_tracer.wrap(emit)
@@ -205,14 +205,15 @@ def open_live_session(
         yield Session(sut=sut, cases=[to_case(g) for g in goldens], judge_model=models.judge,
                       embed=shared.embed, tracing=tracing, scores=scores)
     finally:
-        if owned and shared is not None:
-            shared.close()
-        if scores is not None:
-            scores.close()
-            if scores.dropped:
-                print(f"warning: {scores.dropped} score(s) not sent to the trace backend", file=sys.stderr)
-        if owns_tracing and tracing is not None:
-            tracing.close()
+        try:
+            if owned and shared is not None:
+                shared.close()
+            if scores is not None:
+                scores.close()
+                if scores.dropped:
+                    print(f"warning: {scores.dropped} score(s) not sent to the trace backend", file=sys.stderr)
+        finally:
+            own_tracing.close()  # last, and even if a close above raised: queued spans still go out
 
 
 def main(

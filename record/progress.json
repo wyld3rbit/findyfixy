@@ -147,7 +147,7 @@
     },
     {
       "date": "2026-11-10",
-      "entry": "Day 6 steps 3 to 5: every console run, eval case and command is a Langfuse trace (judge calls as generations, recall stages, user.id, sessions for eval runs and hunts); scores on case traces. Three live gate runs, each identical case by case to the attested run; the last one 670 s (answer 86 s, judge 585 s), attestation over 45 files. 797 tests pass."
+      "entry": "Day 6 steps 3 to 5: every console run, eval case and command is a Langfuse trace (judge calls as generations, recall stages, user.id, sessions for eval runs and hunts); scores on case traces. Two live gate runs, each identical case by case to the run before; the last one 670 s (answer 86 s, judge 585 s), attestation over 45 files. 797 tests pass."
     }
   ],
   "decisions": [
@@ -330,8 +330,8 @@
       "date": "2026-11-09",
       "day": 6,
       "decision": "Replace Langfuse's redis:7 with Valkey 8.1.11.",
-      "rejected": "Redis 7.4 or later as shipped",
-      "why": "Redis 7.4 and later are RSALv2/SSPL, not OSI licenses; Valkey is BSD-3-Clause and protocol compatible."
+      "rejected": "Redis as pinned upstream (redis:7)",
+      "why": "Redis 7.4 is RSALv2/SSPL only, not an OSI license; Redis 8 added AGPLv3 but is a major version the upstream file does not use. Valkey is BSD-3-Clause and protocol compatible."
     },
     {
       "date": "2026-11-09",

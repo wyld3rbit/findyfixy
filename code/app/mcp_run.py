@@ -88,11 +88,8 @@ async def arun_once(
     return stats_from(final["messages"], clock() - start)
 
 
-async def run_mode(mode: str, runs: int, model_name: str, command: "CommandTrace | None" = None) -> None:
-    """Warm up, then run `runs` measured runs over the chosen MCP transport.
-
-    `command` (a `CommandTrace`) makes each run a step of one trace; None runs untraced.
-    """
+async def run_mode(mode: str, runs: int, model_name: str, command: "CommandTrace") -> None:
+    """Warm up, then run `runs` measured runs over the chosen MCP transport, each a step of `command`'s trace."""
     from langchain_ollama import ChatOllama
 
     t0 = time.perf_counter()
@@ -121,10 +118,8 @@ async def run_mode(mode: str, runs: int, model_name: str, command: "CommandTrace
     )
 
 
-async def _step(command: "CommandTrace | None", name: str, investigator: CompiledStateGraph) -> RunStats:
-    """One run, as a step of the command's trace when there is one."""
-    if command is None:
-        return await arun_once(investigator)
+async def _step(command: "CommandTrace", name: str, investigator: CompiledStateGraph) -> RunStats:
+    """One run, as a step of the command's trace (a no-op step with tracing off)."""
     with command.step(name) as step:
         stats = await arun_once(investigator)
         record_run(step, stats)

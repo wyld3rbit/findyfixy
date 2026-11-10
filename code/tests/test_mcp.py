@@ -24,6 +24,7 @@ What a staff+ reader should notice
 """
 
 import asyncio
+import os
 import subprocess
 
 import pytest
@@ -52,8 +53,13 @@ class ScriptedModel:
 
 
 def server_count() -> int:
-    """How many MCP server processes are running right now."""
-    out = subprocess.run(["pgrep", "-f", "python.* -m app.mcp_server"],
+    """How many MCP servers this test process has running right now.
+
+    Only its own children: a machine-wide count also sees servers started by
+    another test run or session at the same moment, and the test then fails
+    for a process it never started.
+    """
+    out = subprocess.run(["pgrep", "-P", str(os.getpid()), "-f", "python.* -m app.mcp_server"],
                          capture_output=True, text=True)
     return len(out.stdout.split())
 

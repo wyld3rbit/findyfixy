@@ -6,6 +6,9 @@
                    app's adapter as its events arrive. Attribute names follow the
                    OpenTelemetry GenAI conventions; the few the backend needs on
                    top are named here, in one place.
+    command.py     `CommandTrace`: one command as one trace, with a span per step.
+    scores.py      `ScoreSink`, and `LangfuseScores`: eval scores sent onto their
+                   traces in the background.
 
 Why this is the harness's and not the app's
     Every app needs the same three things: a provider that never blocks a run,
