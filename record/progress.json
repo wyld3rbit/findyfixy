@@ -406,11 +406,13 @@
       "date": "2026-11-11",
       "title": "Observability",
       "file": "lessons/d06.md",
-      "outcome": "Langfuse traces with cost, latency, scores",
+      "outcome": "Tracing as a harness component (OpenTelemetry SDK, Langfuse v4 backend), scores on traces, faster eval with identical scores",
       "checks": [
-        "Full trace tree visible",
-        "Scores on traces",
-        "Three dashboard questions answered",
+        "Langfuse shows the full run tree with tokens and latency per model call",
+        "Eval scores visible on their traces",
+        "A run with the tracing backend down is not slowed",
+        "Full eval run identical case by case, report shows answer and judge time",
+        "Three dashboard questions answered with numbers",
         "Drill under 90s"
       ],
       "done": []
