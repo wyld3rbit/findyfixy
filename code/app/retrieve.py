@@ -332,12 +332,15 @@ def postgres_vector_search(conn: Connection, embed: Embedder) -> VectorSearch:
 def make_reranker() -> Rerank:
     """Load the cross-encoder on the CPU. Imported inside, so importing this
     module never loads torch. The first call downloads about 1.1 GB, pinned to
-    `RERANKER_REVISION`."""
+    `RERANKER_REVISION`; later calls load it from the local cache with no
+    network call (app/model_cache.py)."""
     from sentence_transformers import CrossEncoder
 
-    model = CrossEncoder(
-        RERANKER_NAME, revision=RERANKER_REVISION, device="cpu", max_length=512
-    )
+    from app.model_cache import cache_first
+
+    model = cache_first(lambda **hub: CrossEncoder(
+        RERANKER_NAME, revision=RERANKER_REVISION, device="cpu", max_length=512, **hub
+    ))
 
     def rerank(query: str, texts: Sequence[str]) -> list[float]:
         pairs = [(query, text) for text in texts]

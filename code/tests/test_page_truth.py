@@ -240,3 +240,17 @@ def test_a_fake_eval_stream_has_the_shape_the_page_expects() -> None:
     answer_pass = ["case_started", "case_answered"]
     judge_pass = [*["metric_scored"] * 4, "case_scored"]
     assert harness == ["eval_started", *answer_pass, *answer_pass, *judge_pass, *judge_pass, "eval_finished"]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs Node")
+def test_a_trace_link_is_followed_only_for_http_urls() -> None:
+    """The run_traced URL travels in an event; a javascript: or data: URL must never become a link."""
+    page = PAGE.read_text()
+    func = re.search(r"function traceHref\(url\) \{.*?\n\}\n", page, re.S).group(0)
+    cases = ["http://127.0.0.1:3000/project/p/traces/abc", "https://x.example/t", "javascript:alert(1)",
+             "data:text/html,x", "not a url", None]
+    script = func + f"console.log(JSON.stringify({json.dumps(cases)}.map(traceHref)));"
+    env = {k: v for k, v in os.environ.items() if k != "NODE_OPTIONS"}
+    out = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=20, env=env)
+    assert out.returncode == 0, out.stderr
+    assert json.loads(out.stdout) == [cases[0], cases[1], None, None, None, None]

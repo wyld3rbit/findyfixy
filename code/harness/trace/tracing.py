@@ -60,7 +60,8 @@ class TraceConfig:
     `public_key` and `secret_key` are the project's API key pair. The secret is
     a credential: it travels only in the Authorization header and is never
     printed. `repr` hides it, so a config in a traceback or a log line leaks
-    nothing.
+    nothing. `project_id` is the backend project the keys belong to; it is
+    only needed to link to a trace in the backend's web page (`trace_url`).
     """
 
     host: str
@@ -68,11 +69,21 @@ class TraceConfig:
     secret_key: str
     service_name: str
     user_id: str = "local"
+    project_id: str | None = None
 
     def __repr__(self) -> str:
         """Everything but the secret."""
         return (f"TraceConfig(host={self.host!r}, public_key={self.public_key!r}, "
-                f"secret_key='***', service_name={self.service_name!r}, user_id={self.user_id!r})")
+                f"secret_key='***', service_name={self.service_name!r}, user_id={self.user_id!r}, "
+                f"project_id={self.project_id!r})")
+
+    def trace_url(self, trace_id: str) -> str | None:
+        """Where the backend's web page shows one trace, or None when the project is not known."""
+        if not self.project_id:
+            return None
+        from urllib.parse import quote
+
+        return f"{self.host.rstrip('/')}/project/{quote(self.project_id, safe='')}/traces/{quote(trace_id, safe='')}"
 
     @property
     def endpoint(self) -> str:

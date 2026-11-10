@@ -18,7 +18,8 @@ of each, and `make adr-snapshot` checks them and leaves them alone. ADR 0005's
 picture is frozen too: it shows the eval gate as first built inside the app, and
 Day 5 was rebuilt after that ADR was accepted. Pictures are keyed by ADR number
 (`RECORDS` maps each to the phase it shows), so ADR 0006 draws the rebuilt
-phase 5 from the page while 0005 keeps its own. The root .gitattributes marks the pictures `-text`, so
+phase 5 from the page while 0005 keeps its own. ADR 0006's picture is frozen too: Day 6 relabelled the
+Tracing box it shows as planned. The root .gitattributes marks the pictures `-text`, so
 no checkout converts line endings: the hash and a byte compare see the same
 bytes on every machine. Hashing normalised text instead would accept a copy
 that is no longer byte-identical to what the ADR was accepted with. If the page's layout changes again, or a phase is rebuilt
@@ -46,22 +47,25 @@ FIRST_BUILT = {
     "Investigate": 2, "Deploy tool": 2, "Validate": 2,
     "Recall": 4,
     "Eval gate": 5, "CI gate": 5,
+    "Tracing": 6,
 }
-PHASES = range(1, 6)
+PHASES = range(1, 7)
 
 # ADR number -> the phase its picture shows. Usually the same number. Day 5 was
 # rebuilt after ADR 0005 was accepted, so ADR 0006 records the rebuilt phase 5
 # and ADR 0005 keeps the picture it was accepted with.
-RECORDS: dict[int, int] = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 5}
+RECORDS: dict[int, int] = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 5, 7: 6}
 
 # ADR pictures kept byte for byte, by ADR number (see the docstring). 1 to 4 were
 # drawn from the one-lane page; 5 is the in-app eval gate as first accepted.
+# 6 is frozen since Day 6 relabelled the Tracing box, which 6 shows as planned.
 FROZEN = {
     1: "87c495615b5f14a3bc67bd4e33907c444fa58057731744e89eb3813d680cfcfb",
     2: "244bb1d66ecb89649da913d5178a8554d80b5a0312fcb5112a2dfe24ecdd1f53",
     3: "105d9c2b0a306330e1f832ea1d158b2999f7881ed4b3061f26b215acb9c2c6bb",
     4: "a387d05a9fbd9564d59fd59e0b69c195ecf0aba4fd7cf7fa940b1f94523d2912",
     5: "ca6999cfd79e413a76eb39e5f30a89374aa9c7fe10e2ccd7e0b899f5aee639a2",
+    6: "b9ab084af8717aa7c4e2c4c3e853d5daaea4525aacf476fdc855104b10ef5f42",
 }
 
 # Planned nodes added to the page after a phase closed. They are drawn only from

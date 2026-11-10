@@ -99,6 +99,8 @@ def read_tracing(stack_env: Path | None = None) -> TraceConfig | None:
     copies a secret by hand. Those keys are never sent to another host. No
     keys anywhere means off: tracing is optional. `TRACE_USER` names who ran
     it (every trace's `user.id`), default "local" until Day 7's login.
+    `LANGFUSE_PROJECT_ID` (or, for the local host, the stack's own project)
+    lets the console link each run to its trace; without it there is no link.
     """
     switch = os.environ.get("TRACING", "").strip().lower()
     if switch in _TRACING_OFF:
@@ -109,6 +111,7 @@ def read_tracing(stack_env: Path | None = None) -> TraceConfig | None:
     public, secret = os.environ.get("LANGFUSE_PUBLIC_KEY"), os.environ.get("LANGFUSE_SECRET_KEY")
     if bool(public) != bool(secret):
         raise MissingEnvironment("LANGFUSE_SECRET_KEY" if public else "LANGFUSE_PUBLIC_KEY")
+    project = os.environ.get("LANGFUSE_PROJECT_ID", "").strip() or None
     if not public and host == DEFAULT_TRACE_HOST:
         from dotenv import dotenv_values
 
@@ -118,7 +121,11 @@ def read_tracing(stack_env: Path | None = None) -> TraceConfig | None:
         stack = dotenv_values(path) if path.is_file() else {}
         public = stack.get("LANGFUSE_INIT_PROJECT_PUBLIC_KEY")
         secret = stack.get("LANGFUSE_INIT_PROJECT_SECRET_KEY")
+        # The stack's project only with the stack's keys: keys from the
+        # environment may belong to another project, and a link must not lie.
+        project = project or stack.get("LANGFUSE_INIT_PROJECT_ID")
     if not (public and secret):
         return None
     user = os.environ.get("TRACE_USER", "").strip() or "local"
-    return TraceConfig(host=host, public_key=public, secret_key=secret, service_name=SERVICE_NAME, user_id=user)
+    return TraceConfig(host=host, public_key=public, secret_key=secret, service_name=SERVICE_NAME,
+                       user_id=user, project_id=project)

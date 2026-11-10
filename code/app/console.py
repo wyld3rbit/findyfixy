@@ -110,7 +110,7 @@ from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
 from app.tools import make_deploys_tool
 from app.graph import QUESTIONS, THRESHOLD, Recall, build_graph
 from app.llm import answer_options, ollama_ask
-from app.trace_adapter import EventSpans, tee
+from app.trace_adapter import EventSpans, traced_sink
 from app.tracing import open_tracing
 from app.triage import RECALL_K, Ask, TriageError
 from harness.trace.tracing import Tracing
@@ -472,7 +472,8 @@ class RunHub:
         # Tracing is one more reader of the same events. It never blocks: spans
         # are built in memory and exported on the exporter's own thread.
         # Tracing first: the trace is complete before any viewer hears the run end.
-        sink = watch.sink if self._tracing is None else tee(EventSpans(self._tracing.tracer()), watch.sink)
+        sink = watch.sink if self._tracing is None else traced_sink(
+            EventSpans(self._tracing.tracer()), watch.sink, self._tracing.config.trace_url)
         emit = make_emit(sink, self._clock)
         # Confidence is at most 1.0 and the route keeps a record only when
         # confidence >= threshold. A threshold above 1.0 therefore sends every

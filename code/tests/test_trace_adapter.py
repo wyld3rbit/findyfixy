@@ -31,7 +31,7 @@ from app.console import RunHub, RunRequest
 from app.console_fakes import FAKE_RECALL
 from app.events import Event
 from app.settings import read_tracing
-from app.trace_adapter import EventSpans, tee
+from app.trace_adapter import EventSpans, traced_sink
 from harness.trace.spans import GEN_AI_INPUT_TOKENS, GEN_AI_OUTPUT_TOKENS, GEN_AI_REQUEST_MODEL, LF_TYPE
 from harness.trace.tracing import TraceConfig, Tracing
 
@@ -161,7 +161,7 @@ def test_a_mapping_bug_never_fails_the_run(monkeypatch) -> None:
     tracing = Tracing.start(CONFIG, exporter=exporter)
     spans = EventSpans(tracing.tracer())
     seen: list[Event] = []
-    sink = tee(spans, seen.append)
+    sink = traced_sink(spans, seen.append, lambda trace_id: None)
 
     def broken(event: Event) -> None:
         """A mapping with a bug in it."""

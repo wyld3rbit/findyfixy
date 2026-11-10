@@ -353,11 +353,14 @@ def make_embedder() -> Embedder:
     Imported inside the function so importing this module stays cheap and the
     tests never load torch. Vectors are normalised to unit length: cosine
     similarity then equals the dot product, which is what the index is built for.
-    The first call downloads the pinned revision (about 130 MB).
+    The first call downloads the pinned revision (about 130 MB); later calls
+    load it from the local cache with no network call (app/model_cache.py).
     """
     from sentence_transformers import SentenceTransformer
 
-    model = SentenceTransformer(MODEL_NAME, revision=MODEL_REVISION, device="cpu")
+    from app.model_cache import cache_first
+
+    model = cache_first(lambda **hub: SentenceTransformer(MODEL_NAME, revision=MODEL_REVISION, device="cpu", **hub))
     if model.get_embedding_dimension() != DIMENSIONS:
         raise ValueError("model dimension does not match the table column")
 

@@ -7,13 +7,14 @@ The `code/app/` package. Dependencies point inward: only entry points and `code/
 - `code/app/triage.py`: the triage record and validate-retry for model output.
 - `code/app/investigate.py` and `code/app/tools.py`: the tool-calling loop and the deploy-history tool.
 - `code/app/events.py`: the run events the graph reports.
-- `code/app/trace_adapter.py`: those events as OpenTelemetry spans, through the harness's `SpanTree`. The console turns it on when tracing is configured (`open_tracing` in `code/app/tracing.py`); `RunTracer` does the same for eval cases, which share one emitter across threads.
+- `code/app/trace_adapter.py`: those events as OpenTelemetry spans, through the harness's `SpanTree`. The console turns it on when tracing is configured (`open_tracing` in `code/app/tracing.py`); `RunTracer` does the same for eval cases, which share one emitter across threads. `traced_sink` gives the console's event log a `run_traced` event per run, with the link to its trace.
 - `code/app/llm.py`: the one place that calls the answering model.
 
 **Memory**
 - `code/app/corpus.py` and `code/app/ingest.py`: build and ingest the synthetic incident corpus.
 - `code/app/search.py` and `code/app/retrieve.py`: nearest-chunk search and the three retrievers.
 - `code/app/incidents.py`: the small hand-written incident bank.
+- `code/app/model_cache.py`: loads the pinned embedder and reranker from the local cache, and downloads only when the cache does not hold them.
 
 **Evaluation**
 - `code/app/golden.py`: the golden set, built from the corpus.

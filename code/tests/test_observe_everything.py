@@ -213,3 +213,60 @@ def test_the_event_stream_is_not_traced_as_a_request() -> None:
     from app.console import QUIET_ROUTES, UNTRACED_ROUTES
 
     assert "/events" in UNTRACED_ROUTES and set(QUIET_ROUTES) <= set(UNTRACED_ROUTES)
+
+
+def test_a_traced_console_run_announces_its_trace_link_right_after_it_starts(traced) -> None:
+    """run_traced follows run_started with the run's own trace id and its backend link."""
+    from app.trace_adapter import traced_sink
+
+    tracing, exporter = traced
+    seen: list[Event] = []
+    sink = traced_sink(EventSpans(tracing.tracer()), seen.append, lambda tid: f"http://lf/traces/{tid}")
+    for kind, data in [("run_started", {"question": "a"}), ("run_finished", {"triage": {}})]:
+        sink(Event(kind, 0.0, data))
+    root = next(s for s in spans(tracing, exporter).values() if s.parent is None)
+    trace_id = format(root.context.trace_id, "032x")
+    assert [e.kind for e in seen] == ["run_started", "run_traced", "run_finished"]
+    assert seen[1].data == {"trace_id": trace_id, "url": f"http://lf/traces/{trace_id}"}
+
+
+def test_a_trace_url_needs_the_backend_project() -> None:
+    """No project id, no link: the viewer shows the id alone."""
+    assert CONFIG.trace_url("abc") is None
+    with_project = TraceConfig(host="http://127.0.0.1:3000/", public_key="p", secret_key="s", service_name="t",
+                               project_id="findyfixy")
+    assert with_project.trace_url("abc") == "http://127.0.0.1:3000/project/findyfixy/traces/abc"
+
+
+def test_the_project_comes_from_the_setting_or_the_local_stack(tmp_path, monkeypatch) -> None:
+    """LANGFUSE_PROJECT_ID wins; for the local host, the stack's own project fills in."""
+    from app.settings import read_tracing
+
+    env = tmp_path / ".env"
+    env.write_text("LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-a\nLANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-b\n"
+                   "LANGFUSE_INIT_PROJECT_ID=stackproj\n")
+    for name in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST", "TRACING", "LANGFUSE_PROJECT_ID"):
+        monkeypatch.delenv(name, raising=False)
+    assert read_tracing(stack_env=env).project_id == "stackproj"
+    monkeypatch.setenv("LANGFUSE_PROJECT_ID", "mine")
+    assert read_tracing(stack_env=env).project_id == "mine"
+
+
+def test_keys_from_the_environment_never_take_the_stacks_project(tmp_path, monkeypatch) -> None:
+    """Own keys may be another project's: without LANGFUSE_PROJECT_ID there is no link, never a wrong one."""
+    from app.settings import read_tracing
+
+    env = tmp_path / ".env"
+    env.write_text("LANGFUSE_INIT_PROJECT_ID=stackproj\n")
+    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    monkeypatch.delenv("LANGFUSE_PROJECT_ID", raising=False)
+    monkeypatch.delenv("TRACING", raising=False)
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-own")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-own")
+    assert read_tracing(stack_env=env).project_id is None
+
+
+def test_a_project_id_cannot_reshape_the_link() -> None:
+    """A slash or a query mark in the project id is encoded, not read as a path or a query."""
+    config = TraceConfig(host="http://h", public_key="p", secret_key="s", service_name="t", project_id="a/b?c")
+    assert config.trace_url("abc") == "http://h/project/a%2Fb%3Fc/traces/abc"
