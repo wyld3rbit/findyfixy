@@ -136,6 +136,10 @@
     {
       "date": "2026-11-09",
       "entry": "Lessons became the single source of truth (notes folded in) and all docs moved to code/docs. Day 5 rebuilt harness-first: the eval gate moved into code/harness/eval behind a SystemUnderTest interface with FindyFixy as its first consumer; the saved final run still passes, the no-recall control fails with the same 8 problems, and re-freezing reproduces the baseline byte for byte. The visualizer now has a harness lane and a live Eval run mode, with tests that fail if a box claims code that does not exist; 650 product tests pass. Blog part 03 published, part 04 scheduled for 2026-11-10. Next: Day 5 step 4, the attested CI gate."
+    },
+    {
+      "date": "2026-11-09",
+      "entry": "Day 5 closed in code: the attested CI gate is built and the first live make eval-gate passed (30 of 30 cases, 0 run errors, means equal to the baseline: severity 0.77, faithfulness 0.79, relevancy 0.67, context recall 0.93, action quality 0.92; 846 s), attestation of 38 files committed. Batched judge verdicts were measured and rejected (faithfulness agreement 0.839, kappa 0.52). ADR 0006 written; ADR 0005 keeps its original picture. 697 tests pass. Next: the part 05 article, then the pull request."
     }
   ],
   "decisions": [

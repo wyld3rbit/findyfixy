@@ -16,7 +16,7 @@ import pytest
 import adr_snapshot as snap
 
 PAGE = snap.PAGE.read_text()
-DRAWN = [p for p in snap.PHASES if p not in snap.FROZEN]
+DRAWN = [r for r in snap.RECORDS if r not in snap.FROZEN]
 
 
 def test_the_latest_phase_matches_the_live_page() -> None:
@@ -31,8 +31,9 @@ def test_flipping_a_node_on_the_page_without_a_new_phase_is_caught() -> None:
 
 
 def test_the_frozen_pictures_keep_their_recorded_hashes() -> None:
-    for phase, digest in snap.FROZEN.items():
-        assert hashlib.sha256(snap.image_path(phase).read_bytes()).hexdigest() == digest, phase
+    """Every frozen ADR picture still has the hash it was accepted with."""
+    for record, digest in snap.FROZEN.items():
+        assert hashlib.sha256(snap.image_path(record).read_bytes()).hexdigest() == digest, record
 
 
 def test_a_changed_frozen_picture_is_refused(tmp_path, monkeypatch) -> None:
@@ -42,9 +43,17 @@ def test_a_changed_frozen_picture_is_refused(tmp_path, monkeypatch) -> None:
         snap.check_frozen(1)
 
 
-def test_a_frozen_phase_is_never_drawn_from_the_page() -> None:
-    with pytest.raises(ValueError, match="frozen"):
-        snap.snapshot(min(snap.FROZEN), PAGE)
+def test_a_frozen_record_is_never_drawn_from_the_page() -> None:
+    """render() refuses every frozen ADR, including 0005, whose phase is drawn again for 0006."""
+    for record in snap.FROZEN:
+        with pytest.raises(ValueError, match="frozen"):
+            snap.render(record, PAGE)
+
+
+def test_every_record_maps_to_a_known_phase() -> None:
+    """Each ADR picture shows a phase that exists, and the newest ADR shows the latest phase."""
+    assert set(snap.RECORDS.values()) <= set(snap.PHASES)
+    assert snap.RECORDS[max(snap.RECORDS)] == max(snap.PHASES)
 
 
 def test_phase_five_draws_both_lanes_and_the_loop_between_them() -> None:
@@ -74,11 +83,11 @@ def test_a_node_built_later_is_drawn_planned_with_its_day(monkeypatch) -> None:
 
 
 def test_every_drawn_snapshot_is_well_formed() -> None:
-    for phase in DRAWN:
-        xml.dom.minidom.parseString(snap.snapshot(phase, PAGE))
+    for record in DRAWN:
+        xml.dom.minidom.parseString(snap.render(record, PAGE))
 
 
 def test_the_committed_drawn_images_equal_a_fresh_render() -> None:
-    for phase in DRAWN:
-        path = snap.image_path(phase)
-        assert path.read_text() == snap.snapshot(phase, PAGE), f"{path.name} is stale: run make adr-snapshot"
+    for record in DRAWN:
+        path = snap.image_path(record)
+        assert path.read_text() == snap.render(record, PAGE), f"{path.name} is stale: run make adr-snapshot"

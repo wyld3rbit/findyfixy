@@ -6,7 +6,7 @@ A record has a decision, a diagnosis, guiding policies, coherent actions, a buil
 
 Records are append-only. A later phase adds a record and never edits an earlier one. Records 0001 to 0005 were written on 2026-10-29, after their phases closed, from the day notes, the changelog and the decision log. From Day 6 each record is written in the commit that closes its phase.
 
-The diagrams for phases 1 to 4 are frozen files, drawn from the page's earlier one-lane layout and checked by hash. From phase 5 on, `make adr-snapshot` draws each diagram from the live architecture page. A test fails if a frozen file changes, or if the page and the latest phase disagree.
+Day 5 was rebuilt after ADR 0005 was accepted, so ADR 0006 records the rebuilt phase and 0005 keeps its own text and picture. Diagrams are keyed by ADR number. The diagrams for ADRs 0001 to 0005 are frozen files checked by hash: 0001 to 0004 were drawn from the page's earlier one-lane layout, and 0005 shows the eval gate as first built inside the app. From ADR 0006 on, `make adr-snapshot` draws each diagram from the live architecture page. A test fails if a frozen file changes, or if the page and the latest phase disagree.
 
 | ADR | Phase | Decision | Code at close |
 |---|---|---|---|
@@ -15,3 +15,4 @@ The diagrams for phases 1 to 4 are frozen files, drawn from the page's earlier o
 | [0003](0003-incident-memory-in-postgres.md) | Day 3 | Store incident memory in Postgres with pgvector | `21b4c4a` |
 | [0004](0004-hybrid-retrieval-with-reranker.md) | Day 4 | Retrieve with hybrid search and a reranker | `cd9283d` |
 | [0005](0005-gate-releases-on-measured-answer-quality.md) | Day 5 | Gate releases on measured answer quality | `1e7f27a` |
+| [0006](0006-eval-gate-as-harness-component-attested-in-ci.md) | Day 5, rebuilt | The eval gate is a harness component, attested in CI | the commit that adds it |
