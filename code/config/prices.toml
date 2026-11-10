@@ -1,0 +1,38 @@
+# Reference prices per token for the models FindyFixy runs.
+#
+# Local models cost nothing per token: the machine is already paid for. A
+# reference price makes runs comparable: what the same tokens would cost on a
+# hosted model of the same size class. It is a yardstick, not a bill.
+#
+# Each price is copied from Langfuse's own managed price table (v4.72.0, read
+# 2026-11-10) for the hosted model named in `reference`. Small local models
+# (1.5B to 4B) take gpt-5-nano's price; large local models (7B to 8B) take
+# gpt-5-mini's. Changing a reference is a decision: say why in the CHANGELOG.
+#
+# `make obs-prices` registers this table with the trace backend, which then
+# prices every model call it receives from then on. Traces already stored
+# keep the cost they arrived with (none).
+
+[[model]]
+name = "qwen2.5:1.5b"
+input_per_token = 0.00000005
+output_per_token = 0.0000004
+reference = "gpt-5-nano"
+
+[[model]]
+name = "qwen3:4b-instruct"
+input_per_token = 0.00000005
+output_per_token = 0.0000004
+reference = "gpt-5-nano"
+
+[[model]]
+name = "qwen2.5:7b"
+input_per_token = 0.00000025
+output_per_token = 0.000002
+reference = "gpt-5-mini"
+
+[[model]]
+name = "qwen3:8b"
+input_per_token = 0.00000025
+output_per_token = 0.000002
+reference = "gpt-5-mini"
