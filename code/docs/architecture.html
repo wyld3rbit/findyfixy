@@ -156,6 +156,7 @@
   #log li { border-bottom: 1px solid var(--line); padding: 6px 2px; cursor: pointer; }
   #log .t { color: var(--muted); display: inline-block; width: 56px; }
   #log li:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  #log a { color: var(--accent); }
   #log .k { display: inline-block; min-width: 120px; color: var(--accent); }
   #log .k.bad { color: var(--bad); }
   #log .k.ok { color: var(--ok); }
@@ -249,7 +250,7 @@
   <section class="panel" aria-label="Architecture schematic">
     <div class="schematic">
     <svg viewBox="-60 -128 1000 594" role="img" aria-labelledby="svgtitle">
-      <title id="svgtitle">Two lanes. The top lane is the harness: an eval gate and a CI gate that are built, and tracing, policy, gateway and human review that are planned. The bottom lane is FindyFixy, the app under test. The eval gate sends each golden case into the app as a question. The question goes to a recall step that looks up similar past incidents, then to an investigate step that may look up deploys with a tool, then to the small model, then validation, then a route that either ends or escalates to the large model, and finally a triage record. The triage record goes back to the eval gate, which scores the answer.</title>
+      <title id="svgtitle">Two lanes. The top lane is the harness: an eval gate, a CI gate and tracing that are built, and policy, gateway and human review that are planned. The bottom lane is FindyFixy, the app under test. The eval gate sends each golden case into the app as a question. The question goes to a recall step that looks up similar past incidents, then to an investigate step that may look up deploys with a tool, then to the small model, then validation, then a route that either ends or escalates to the large model, and finally a triage record. The triage record goes back to the eval gate, which scores the answer.</title>
 
       <!-- lanes: the harness on top, the app it tests below -->
       <rect class="lane harness" x="-54" y="-122" width="988" height="114" rx="10"/>
@@ -360,11 +361,11 @@
         <text class="t" x="189" y="-70">CI gate</text>
         <text class="s" x="189" y="-52">local run, attested</text>
       </g>
-      <g class="node" data-status="planned" data-layer="harness" data-code="none">
-        <title>Planned for Day 6. Not built, no behavior yet.</title>
+      <g class="node" data-status="built" data-layer="harness" data-code="harness/trace/spans.py">
+        <title>In: An app's run events (FindyFixy: app/trace_adapter.py), the eval runner's cases and judge calls, and every command.&#10;Out: One OpenTelemetry trace per run, eval case and command, sent to a local Langfuse: a span per step with inputs, outputs and errors, and on model calls the model and its input and output tokens. Eval scores sit on their case's trace. Every trace carries a user, and a hunt's or an eval run's traces share a session.&#10;Logic: Spans follow the OpenTelemetry GenAI conventions, so any OTLP backend reads them. The exporter sends in batches on its own thread: a slow or stopped backend never slows a run, and a full queue drops spans rather than block. Tracing changes no answer and no score: the gate's runs with it on were identical case by case.&#10;Watch it: with Langfuse running (make obs-up), each run in the event log gets a run_traced line with a link to its trace.</title>
         <rect x="292" y="-96" width="130" height="64" rx="8"/>
         <text class="t" x="357" y="-70">Tracing</text>
-        <text class="s" x="357" y="-52">Day 6, Langfuse</text>
+        <text class="s" x="357" y="-52">harness, Langfuse</text>
       </g>
       <g class="node" data-status="planned" data-layer="harness" data-code="none">
         <title>Planned for Day 7. Not built, no behavior yet.</title>
@@ -550,6 +551,7 @@ const DESCRIBE = {
     route: (d) => `confidence ${d.confidence === null ? "none" : d.confidence} vs ${d.threshold} -> ${d.target === "__end__" ? "done" : d.target}${d.threshold > 1 ? " (forced)" : ""}`,
     run_finished: (d) => `final: ${d.model_used} model`,
     run_failed: (d) => `${d.error_type}`,
+    run_traced: (d) => d.url ? `trace ${d.trace_id.slice(0, 8)}, open it in the trace backend` : `trace ${d.trace_id.slice(0, 8)} (no backend project set, so no link)`,
     hunt_started: (d) => `up to ${d.max} runs, ${d.questions} question(s) in rotation`,
     hunt_run: (d) => `run ${d.index} of ${d.max}`,
     hunt_finished: (d) => `${d.reason} after ${d.runs} run(s)`,
@@ -574,6 +576,16 @@ function summarize(ev) {
   return table[ev.kind](ev.data);
 }
 
+// A trace link from the server, used only if it is a plain http(s) URL: the
+// value travels in an event, and a javascript: or data: URL must never become
+// a clickable link.
+function traceHref(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : null;
+  } catch { return null; }
+}
+
 function addLog(ev) {
   $("empty").hidden = true;
   const li = document.createElement("li");
@@ -591,6 +603,15 @@ function addLog(ev) {
   if (ev.kind === "model_reply" && ev.data.mismatch) k.classList.add("bad");
   if (ev.kind === "hunt_finished") k.classList.add(ev.data.reason === "found" ? "bad" : "ok");
   const s = document.createElement("span"); s.textContent = summarize(ev);
+  const href = ev.kind === "run_traced" ? traceHref(ev.data.url) : null;
+  if (href) {
+    const a = document.createElement("a");
+    a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = " (open trace)";
+    // Follow the link, do not toggle the row: by mouse, and by Enter on the focused link.
+    a.addEventListener("click", (e) => e.stopPropagation());
+    a.addEventListener("keydown", (e) => e.stopPropagation());
+    s.append(a);
+  }
   const pre = document.createElement("pre"); pre.textContent = JSON.stringify(ev.data, null, 2);
   li.append(t, k, s, pre);
   const toggle = () => {

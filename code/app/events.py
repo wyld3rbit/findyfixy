@@ -10,8 +10,9 @@ Why code reports through a callback, and not through logging
     The graph and `ask_validated` should not know who is listening. They get
     an `Emit` argument, the same dependency injection as `ask`. A test passes
     a list's `append` and asserts on the events. The console passes a queue.
-    Day 6 can pass an exporter that forwards to Langfuse. No change to the
-    graph.
+    Day 6 adds a tracing sink beside the console's (app/trace_adapter.py),
+    with no change to the graph. `run_traced` is the one kind the graph never
+    emits: the console's tracing sink sends it to link a run to its trace.
 
 Why the clock is injected
     `make_emit` takes a `clock`. Production uses `time.perf_counter`, a
@@ -47,6 +48,7 @@ EventKind = Literal[
     "route",
     "run_finished",
     "run_failed",
+    "run_traced",
     "hunt_started",
     "hunt_run",
     "hunt_finished",

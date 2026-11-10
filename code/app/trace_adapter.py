@@ -91,6 +91,11 @@ class EventSpans:
         self._session: str | None = None  # set during a hunt
         self.errors = 0  # mapping bugs swallowed; tests assert it stays 0
 
+    @property
+    def trace_id(self) -> str | None:
+        """The trace id of the run in progress, or None between runs."""
+        return self._tree.trace_id if self._tree is not None else None
+
     def __call__(self, event: Event) -> None:
         """Map one event. Never raises: see "Failure modes" above."""
         try:
@@ -242,16 +247,23 @@ class RunTracer:
         return traced
 
 
-def tee(*sinks: Callable[[Event], None]) -> Callable[[Event], None]:
-    """One sink that hands each event to every sink in order. For tracing plus the console sink.
+def traced_sink(spans: EventSpans, sink: Callable[[Event], None],
+                link: Callable[[str], str | None]) -> Callable[[Event], None]:
+    """One sink for a traced console run: tracing first, then the viewer, plus each run's trace link.
 
-    Put tracing first: a viewer that sees `run_finished` may read or flush the
-    trace at once, so its spans must already be ended.
+    Tracing sees each event first, so a trace is complete before any viewer
+    hears its run end. After `run_started` opens a trace, the viewer also gets
+    `run_traced` with the trace id and `link(trace_id)`, the backend page that
+    shows it (None when the backend project is not known), so the event log
+    can link each run to its trace. A run whose trace failed to open gets no
+    `run_traced`.
     """
 
-    def each(event: Event) -> None:
-        """Pass `event` to every sink."""
-        for sink in sinks:
-            sink(event)
+    def both(event: Event) -> None:
+        """Pass `event` to tracing and the viewer; announce a newly opened trace."""
+        spans(event)
+        sink(event)
+        if event.kind == "run_started" and (trace_id := spans.trace_id) is not None:
+            sink(Event("run_traced", event.t, {"trace_id": trace_id, "url": link(trace_id)}))
 
-    return each
+    return both
