@@ -9,6 +9,9 @@ dependencies = [
     "langchain-ollama>=1.1.0",
     "langgraph>=1.2.16",
     "mcp>=1.30.0,<2",
+    "opentelemetry-api>=1.45.2",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.2",
+    "opentelemetry-sdk>=1.45.2",
     "pgvector>=0.5.1",
     "psycopg[binary]>=3.3.6",
     "pydantic>=2.14.1",
@@ -19,15 +22,9 @@ dependencies = [
 
 [tool.uv]
 # Release cooldown: ignore anything published after this date, because fresh
-# releases are where hijacks land. The Day 1 lock already holds packages first
-# uploaded on 2026-10-15 and 16, so a strict 7-day window (2026-10-13) cannot be
-# applied retroactively. Move this date forward deliberately, never to today.
-exclude-newer = "2026-10-17T00:00:00Z"
-# Documented exceptions: certifi 2026.10.19 fixes PYSEC-2026-4320. filelock 4.2.1
-# (2026-10-17) fixes six CVEs in 4.2.0, and setuptools 84.1.0 (2026-10-19) fixes
-# GHSA-xmj3-9gf7-h52w. Without these lines the cutoff above would keep the
-# vulnerable versions.
-exclude-newer-package = { certifi = "2026-10-21T00:00:00Z", filelock = "2026-10-18T00:00:00Z", setuptools = "2026-10-20T00:00:00Z" }
+# releases are where hijacks land. Move it forward deliberately, about 7 days
+# before the day it moves, never to today. Moved 2026-11-09 (Day 6, OpenTelemetry).
+exclude-newer = "2026-11-02T00:00:00Z"
 # `mcp` lists these as hard requirements, but only its HTTP serving and OAuth
 # features import them. This project talks to MCP over stdio, so they are not
 # needed. A never-true marker removes them from the install (about 4.4 MB, most

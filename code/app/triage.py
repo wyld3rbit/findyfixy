@@ -86,10 +86,22 @@ class Reply(str):
     """
 
     served_by: str | None
+    input_tokens: int | None
+    output_tokens: int | None
 
-    def __new__(cls, text: str, served_by: str | None = None) -> "Reply":
+    def __new__(
+        cls,
+        text: str,
+        served_by: str | None = None,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+    ) -> "Reply":
         obj = super().__new__(cls, text)
         obj.served_by = served_by
+        # Token counts as the server reported them, for tracing and cost. None
+        # means not reported (a fake, an injected reply), never zero.
+        obj.input_tokens = input_tokens
+        obj.output_tokens = output_tokens
         return obj
 
 
@@ -278,6 +290,8 @@ def ask_validated(
             served_by=served_by,
             # Only a reported, different name is a mismatch. Unknown is not one.
             mismatch=served_by is not None and served_by != model,
+            input_tokens=getattr(reply, "input_tokens", None),
+            output_tokens=getattr(reply, "output_tokens", None),
         )
         try:
             triage = parse_triage(reply)

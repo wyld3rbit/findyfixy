@@ -12,12 +12,16 @@ Rules this module keeps:
   a KeyError from a bug elsewhere keeps its traceback.
 - `load_env` never overrides a variable that is already set, so CI or a
   container can set values without editing `.env`.
-- Nothing here is a secret. Model names only; secrets belong in `.env`, which is
-  git-ignored.
+- Nothing here holds a secret in code. Model names come from `.env`; the
+  tracing key pair comes from the environment or from the local Langfuse
+  stack's own `.env` (both git-ignored), and `TraceConfig` never prints it.
 """
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+from harness.trace.tracing import TraceConfig
 
 # The judge defaults to a different family from the answering model, so it does
 # not favour its own style when it scores.
@@ -70,3 +74,49 @@ def optional_models() -> Models | None:
     if not (small and large):
         return None
     return Models(small, large, os.environ.get("JUDGE_MODEL", DEFAULT_JUDGE_MODEL))
+
+
+# The local Langfuse (code/infra/langfuse/). Only used when a key pair is found.
+DEFAULT_TRACE_HOST = "http://127.0.0.1:3000"
+SERVICE_NAME = "findyfixy"
+
+
+_TRACING_OFF = {"off", "0", "false", "no"}
+_TRACING_ON = {"", "on", "1", "true", "yes"}
+
+
+def read_tracing(stack_env: Path | None = None) -> TraceConfig | None:
+    """Where to send traces, or None when tracing is off.
+
+    In order: `TRACING` set to off, 0, false or no turns it off (any value it
+    does not know raises, so a typo cannot leave prompts flowing). Otherwise
+    `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` from the environment, with
+    `LANGFUSE_HOST` (default the local stack); setting only one of the two
+    raises `MissingEnvironment` naming the other, because half a config is a
+    mistake, not a choice. Otherwise, and only for the local host, the
+    project keys the local stack was started with, from `stack_env` (default
+    `code/infra/langfuse/.env`, written by `make obs-secrets`), so nobody
+    copies a secret by hand. Those keys are never sent to another host. No
+    keys anywhere means off: tracing is optional.
+    """
+    switch = os.environ.get("TRACING", "").strip().lower()
+    if switch in _TRACING_OFF:
+        return None
+    if switch not in _TRACING_ON:
+        raise ValueError(f"TRACING={switch!r}: use on or off")
+    host = os.environ.get("LANGFUSE_HOST", DEFAULT_TRACE_HOST)
+    public, secret = os.environ.get("LANGFUSE_PUBLIC_KEY"), os.environ.get("LANGFUSE_SECRET_KEY")
+    if bool(public) != bool(secret):
+        raise MissingEnvironment("LANGFUSE_SECRET_KEY" if public else "LANGFUSE_PUBLIC_KEY")
+    if not public and host == DEFAULT_TRACE_HOST:
+        from dotenv import dotenv_values
+
+        from app.paths import LANGFUSE_ENV
+
+        path = stack_env or LANGFUSE_ENV
+        stack = dotenv_values(path) if path.is_file() else {}
+        public = stack.get("LANGFUSE_INIT_PROJECT_PUBLIC_KEY")
+        secret = stack.get("LANGFUSE_INIT_PROJECT_SECRET_KEY")
+    if not (public and secret):
+        return None
+    return TraceConfig(host=host, public_key=public, secret_key=secret, service_name=SERVICE_NAME)

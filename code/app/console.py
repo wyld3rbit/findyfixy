@@ -103,14 +103,16 @@ from app.dev_reload import fingerprint, snapshot
 from app.events import Emit, Event, make_emit, make_stamped_emit
 from app.incidents import DEFAULT_PATH, Incident, load_incidents
 from app.paths import DOCS, EVALS, ROOT
-from app.settings import load_env, optional_models
+from app.settings import load_env, optional_models, read_tracing
 from app.wiring import SharedRetrieval
 from app.investigate import build_investigator
 from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
 from app.tools import make_deploys_tool
 from app.graph import QUESTIONS, THRESHOLD, Recall, build_graph
 from app.llm import answer_options, ollama_ask
+from app.trace_adapter import EventSpans, tee
 from app.triage import RECALL_K, Ask, TriageError
+from harness.trace.tracing import Tracing
 
 Mode = Literal["live", "fake"]
 
@@ -240,6 +242,7 @@ class RunHub:
         clock: Callable[[], float] = time.perf_counter,
         live_eval: EvalSuite | None = None,
         baseline_path: Path = BASELINE_PATH,
+        tracing: Tracing | None = None,
     ) -> None:
         """Hold the wiring. Nothing runs until `start` or `start_eval`.
 
@@ -247,7 +250,11 @@ class RunHub:
         `main` when models are configured); None means live eval runs are
         refused as not configured. Fake eval runs are always available and
         need no model.
+
+        `tracing`, when set, turns every run into a trace (app/trace_adapter.py).
+        None leaves the run exactly as it was.
         """
+        self._tracing = tracing
         self._live_models = live_models
         self._live_eval = live_eval
         self._fake_eval = fake_eval(sleep, fake_delay)
@@ -456,7 +463,10 @@ class RunHub:
         viewer has yet to read.
         """
         watch = _Watch(self._publish)
-        emit = make_emit(watch.sink, self._clock)
+        # Tracing is one more reader of the same events. It never blocks: spans
+        # are built in memory and exported on the exporter's own thread.
+        sink = watch.sink if self._tracing is None else tee(watch.sink, EventSpans(self._tracing.tracer()))
+        emit = make_emit(sink, self._clock)
         # Confidence is at most 1.0 and the route keeps a record only when
         # confidence >= threshold. A threshold above 1.0 therefore sends every
         # valid small answer to the large model. Both models still run for real.
@@ -862,7 +872,10 @@ def main(argv: list[str] | None = None) -> None:
             progress=lambda msg: print(msg, file=sys.stderr, flush=True),
             size=len(load_golden(GOLDEN_PATH)),
         )
+    trace_config = read_tracing()
+    tracing = Tracing.start(trace_config) if trace_config else None
     hub = RunHub(
+        tracing=tracing,
         live_models=(models.small, models.large) if models else None,
         incidents=load_incidents(DEFAULT_PATH),
         investigator=investigator,
@@ -875,12 +888,16 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Console: http://127.0.0.1:{port}  (Ctrl-C to stop)", flush=True)
     live = "on" if hub.live_available else "off (set SMALL_MODEL, LARGE_MODEL)"
     print(f"Live mode: {live}", flush=True)
+    traces = f"on, to {trace_config.host}" if trace_config else "off (start Langfuse: make obs-up)"
+    print(f"Tracing: {traces}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         server.server_close()
+        if tracing is not None:
+            tracing.close()  # send what is still queued
 
 
 if __name__ == "__main__":
