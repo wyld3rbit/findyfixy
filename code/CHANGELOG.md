@@ -557,5 +557,6 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 - Part 05 article and post (part of closing the day), then push and open the pull request.
 - Day 6: answer first and judge after, with per-phase timing, before Langfuse.
 - Day 9 (container build): Linux installs pull PyTorch's CUDA libraries, about 3.1 GB (torch 555 MB, cuDNN 553 MB, cuBLAS 423 MB, Triton 248 MB), although nothing uses a GPU; CI's check job still takes about 2 minutes. Fix with the image: CPU-only PyTorch wheels for Linux through a uv source with a platform marker, then `make audit` and a supply-chain check of that index; measure the image before and after.
-- Open: prove CI fails an unattested change (a throwaway draft PR after PR #5 merges), if the learner wants it.
+- Done: CI fails an unattested change. Draft PR #6 changed one comment in `code/app/triage.py`; the `attestation` job failed in 6 s naming the file and `check` was skipped. Closed without merging.
+- Open: `tests/test_scan_private.py` builds throwaway git repos but inherits `GIT_INDEX_FILE` from a `git commit -a` hook run, so 8 of its tests read the real temporary index and fail; `git add` then `git commit` works. Fix: the fixture clears `GIT_*` variables for its subprocesses.
 - Open: batching context-recall verdicts alone (met the 0.9 bar; about 1.5 judge calls saved per case), untried.
