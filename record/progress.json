@@ -296,6 +296,13 @@
       "decision": "Keep the project's own eval gate. From Day 6 on, adopt an established open-source blueprint first and build custom only for the gap. Articles name two harnesses: the build harness around the coding agent and the runtime harness in code/harness.",
       "rejected": "Rebuild the gate on Inspect AI (MIT, UK AISI) or promptfoo (MIT, OpenAI-owned since 2026-03)",
       "why": "The gate is built and proven equivalent to the frozen baseline, and it carries bootstrap intervals, the baseline and the attestation that those tools do not provide as-is. Rebuilding would cost a day for no measured gain."
+    },
+    {
+      "date": "2026-11-09",
+      "day": 5,
+      "decision": "Fix PyTorch's CUDA download on Linux with the Day 9 container build: CPU-only wheels for Linux via a uv source with a platform marker, then make audit and a supply-chain check of the PyTorch index.",
+      "rejected": "Change the lock now; split heavy dependencies into an optional group",
+      "why": "CI cost today is about 2 minutes on a free public-repo runner; the 3.1 GB of unused GPU libraries matters for the container image, so the fix belongs with it."
     }
   ],
   "days": [
