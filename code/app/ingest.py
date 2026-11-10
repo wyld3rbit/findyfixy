@@ -383,15 +383,30 @@ def main() -> None:
 
     The data path is resolved from this file, not the working directory.
     """
+    from app.tracing import command_trace
+
     chunks = read_chunks(SOURCE_PATH)
-    with psycopg.connect(database_url(), autocommit=True) as conn:
+    with command_trace("ingest", input=f"{SOURCE_PATH.name}: {len(chunks)} chunks") as command, \
+            psycopg.connect(database_url(), autocommit=True) as conn:
         ensure_schema(conn)
         # Registering after the extension exists lets psycopg send `Vector` values.
         from pgvector.psycopg import register_vector
 
         register_vector(conn)
-        embed = make_embedder() if _needs_model(conn, chunks) else _never_called
-        print(ingest(conn, chunks, embed))
+        with command.step("plan") as step:
+            needs_model = _needs_model(conn, chunks)
+            step.set(needs_model=needs_model)
+        with command.step("load embedder", {"loaded": needs_model}):
+            embed = make_embedder() if needs_model else _never_called
+
+        def traced_embed(texts: Sequence[str]) -> list[list[float]]:
+            """`embed`, each batch a step with its size."""
+            with command.step("embed", {"texts": len(texts)}):
+                return embed(texts)
+
+        report = ingest(conn, chunks, traced_embed)
+        command.output(str(report))
+    print(report)
 
 
 def _needs_model(conn: Connection, chunks: Sequence[Chunk]) -> bool:

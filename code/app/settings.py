@@ -97,7 +97,8 @@ def read_tracing(stack_env: Path | None = None) -> TraceConfig | None:
     project keys the local stack was started with, from `stack_env` (default
     `code/infra/langfuse/.env`, written by `make obs-secrets`), so nobody
     copies a secret by hand. Those keys are never sent to another host. No
-    keys anywhere means off: tracing is optional.
+    keys anywhere means off: tracing is optional. `TRACE_USER` names who ran
+    it (every trace's `user.id`), default "local" until Day 7's login.
     """
     switch = os.environ.get("TRACING", "").strip().lower()
     if switch in _TRACING_OFF:
@@ -119,4 +120,5 @@ def read_tracing(stack_env: Path | None = None) -> TraceConfig | None:
         secret = stack.get("LANGFUSE_INIT_PROJECT_SECRET_KEY")
     if not (public and secret):
         return None
-    return TraceConfig(host=host, public_key=public, secret_key=secret, service_name=SERVICE_NAME)
+    user = os.environ.get("TRACE_USER", "").strip() or "local"
+    return TraceConfig(host=host, public_key=public, secret_key=secret, service_name=SERVICE_NAME, user_id=user)

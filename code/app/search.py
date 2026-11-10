@@ -142,10 +142,19 @@ def main(argv: list[str] | None = None) -> None:
     words = sys.argv[1:] if argv is None else argv
     query = " ".join(words) or DEFAULT_QUERY
     pairs = load_twin_pairs(DATA / "incidents.jsonl")
+    from app.tracing import command_trace
+
     print(f"query: {query}\n")
-    with psycopg.connect(database_url(), autocommit=True) as conn:
+    with command_trace("search", input=query) as command, \
+            psycopg.connect(database_url(), autocommit=True) as conn:
         register_vector(conn)
-        print(format_hits(search(conn, make_embedder(), query), pairs))
+        with command.step("load embedder"):
+            embedder = make_embedder()
+        with command.step("embed and search"):
+            hits = search(conn, embedder, query)
+        text = format_hits(hits, pairs)
+        command.output(text)
+    print(text)
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # the SDK is imported only when tracing is turned on
     from opentelemetry.sdk.trace import TracerProvider
@@ -67,11 +67,12 @@ class TraceConfig:
     public_key: str
     secret_key: str
     service_name: str
+    user_id: str = "local"
 
     def __repr__(self) -> str:
         """Everything but the secret."""
         return (f"TraceConfig(host={self.host!r}, public_key={self.public_key!r}, "
-                f"secret_key='***', service_name={self.service_name!r})")
+                f"secret_key='***', service_name={self.service_name!r}, user_id={self.user_id!r})")
 
     @property
     def endpoint(self) -> str:
@@ -94,8 +95,13 @@ class Tracing:
         self.config = config  # what scores (scores.py) are sent with: the same backend and keys
 
     @classmethod
-    def start(cls, config: TraceConfig, exporter: SpanExporter | None = None) -> Tracing:
+    def start(cls, config: TraceConfig, exporter: SpanExporter | None = None,
+              export_timeout_s: float = EXPORT_TIMEOUT_S) -> Tracing:
         """Build the provider and its export thread. `exporter` replaces OTLP in tests.
+
+        `export_timeout_s` bounds each export and so the wait in `close`. A
+        short-lived process that must exit fast (an MCP server started per
+        tool call) passes a short one.
 
         The provider is local to this object, not installed as the global one,
         so two of them (a test and the code under test) cannot interfere.
@@ -110,14 +116,15 @@ class Tracing:
             shutdown_on_exit=False,  # `close` flushes; an atexit hook would hide a missing call
         )
         sender = exporter or OTLPSpanExporter(
-            endpoint=config.endpoint, headers=config.headers, timeout=EXPORT_TIMEOUT_S
+            endpoint=config.endpoint, headers=config.headers, timeout=export_timeout_s
         )
+        provider.add_span_processor(_trace_user(config.user_id))
         provider.add_span_processor(BatchSpanProcessor(
             sender,
             max_queue_size=MAX_QUEUE,
             schedule_delay_millis=SCHEDULE_DELAY_MS,
             max_export_batch_size=MAX_BATCH,
-            export_timeout_millis=EXPORT_TIMEOUT_S * 1000,
+            export_timeout_millis=export_timeout_s * 1000,
         ))
         return cls(provider, config)
 
@@ -137,3 +144,24 @@ class Tracing:
         price of not losing the last runs' spans on a normal exit.
         """
         self._provider.shutdown()
+
+
+def _trace_user(user_id: str) -> Any:
+    """A span processor that puts `user.id` on every trace's top span.
+
+    In the provider, not at each call site, so no command can forget it.
+    Langfuse reads `user.id` from the top span and groups traces by it
+    (its Users view). The value comes from settings (`TRACE_USER`, default
+    "local") until Day 7 knows the authenticated engineer.
+    """
+    from opentelemetry.sdk.trace import SpanProcessor
+
+    class TraceUser(SpanProcessor):
+        """Sets `user.id` on spans that start a trace."""
+
+        def on_start(self, span: Any, parent_context: Any = None) -> None:
+            """Only top spans: a child already belongs to a trace that has the user."""
+            if span.parent is None:
+                span.set_attribute("user.id", user_id)
+
+    return TraceUser()

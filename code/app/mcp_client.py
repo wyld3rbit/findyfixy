@@ -27,6 +27,7 @@ Environment
     and nothing depends on the caller's working directory.
 """
 
+import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -41,13 +42,22 @@ PROJECT_ROOT = ROOT
 SERVER_NAME = "deploys"
 
 
+# The settings that decide whether and where the server traces its tool calls.
+# The MCP library starts the server with a minimal environment (HOME, PATH and
+# a few more), not the client's, so without these the server would decide on
+# its own from `.env`: a client with TRACING=off (the test session) still got
+# a traced server. Passed only when set, so nothing else leaks through.
+TRACING_SETTINGS = ("TRACING", "LANGFUSE_HOST", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "TRACE_USER")
+
+
 def server_connection() -> dict:
-    """The stdio connection config for the deploy server."""
+    """The stdio connection config for the deploy server, with the client's tracing settings."""
     return {
         "transport": "stdio",
         "command": sys.executable,
         "args": ["-m", "app.mcp_server"],
         "cwd": str(PROJECT_ROOT),
+        "env": {name: os.environ[name] for name in TRACING_SETTINGS if name in os.environ},
     }
 
 

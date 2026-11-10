@@ -18,7 +18,9 @@ What it does
         run_finished/failed      the triage (or the error) as the trace output; ends the trace
 
     A hunt (many runs on one emitter) sends `run_started` once per run, so each
-    run gets its own trace. The `hunt_*` events have no span.
+    run gets its own trace, and all of them share one `session.id` (from
+    `hunt_started` to `hunt_finished`), which Langfuse shows as one session.
+    The `hunt_*` events have no span of their own.
 
     An eval case has no `run_started` event: the graph alone runs, inside the
     harness's case span. `RunTracer` covers that: the code that runs a case
@@ -51,6 +53,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
+import uuid
 
 from app.events import Emit, Event
 from harness.trace.spans import (
@@ -85,6 +88,7 @@ class EventSpans:
         # pending call is the one a result answers.
         self._pending_tools: list[str] = []
         self._tool_seq = 0
+        self._session: str | None = None  # set during a hunt
         self.errors = 0  # mapping bugs swallowed; tests assert it stays 0
         self.trace_ids: list[str] = []  # one per run, in order
 
@@ -104,6 +108,12 @@ class EventSpans:
     def _handle(self, event: Event) -> None:
         """The mapping table in the module docstring, one branch per event kind."""
         d: dict[str, Any] = event.data
+        if event.kind == "hunt_started":
+            self._session = f"hunt {uuid.uuid4().hex[:12]}"
+            return
+        if event.kind == "hunt_finished":
+            self._session = None
+            return
         if event.kind == "run_started":
             self.start_run(d.get("question"), {
                 "findyfixy.run": d.get("run"),
@@ -167,6 +177,8 @@ class EventSpans:
 
     def start_run(self, question: Any, attributes: Mapping[str, Any] | None = None) -> None:
         """Open a run's top span: what `run_started` does, for callers that emit no such event."""
+        if self._session is not None:
+            attributes = {**(attributes or {}), "session.id": self._session}
         self._tree = SpanTree(self._tracer, TRACE_NAME, input=question, attributes=attributes)
         self.trace_ids.append(self._tree.trace_id)
         self._pending_tools = []

@@ -41,6 +41,7 @@ import os
 import sys
 import time
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage
 from langgraph.graph.state import CompiledStateGraph
@@ -50,12 +51,16 @@ from app.direct_run import (
     HEADER,
     TASK,
     RunStats,
+    record_run,
     format_row,
     stats_from,
     summarise,
 )
 from app.investigate import build_investigator
 from app.mcp_client import per_call_tools, persistent_tools
+
+if TYPE_CHECKING:
+    from harness.trace.command import CommandTrace
 
 MODES = ("session", "per-call")
 
@@ -83,8 +88,11 @@ async def arun_once(
     return stats_from(final["messages"], clock() - start)
 
 
-async def run_mode(mode: str, runs: int, model_name: str) -> None:
-    """Warm up, then run `runs` measured runs over the chosen MCP transport."""
+async def run_mode(mode: str, runs: int, model_name: str, command: "CommandTrace | None" = None) -> None:
+    """Warm up, then run `runs` measured runs over the chosen MCP transport.
+
+    `command` (a `CommandTrace`) makes each run a step of one trace; None runs untraced.
+    """
     from langchain_ollama import ChatOllama
 
     t0 = time.perf_counter()
@@ -97,10 +105,10 @@ async def run_mode(mode: str, runs: int, model_name: str) -> None:
         print(f"task: {TASK}")
         print(f"server startup (spawn, initialize, list tools): {startup:.2f}s, once")
         print(HEADER)
-        print(format_row("warm-up", await arun_once(investigator)), " (excluded)")
+        print(format_row("warm-up", await _step(command, "warm-up", investigator)), " (excluded)")
         stats = []
         for i in range(1, runs + 1):
-            row = await arun_once(investigator)
+            row = await _step(command, f"run {i}", investigator)
             stats.append(row)
             print(format_row(str(i), row))
     s = summarise(stats)
@@ -113,6 +121,16 @@ async def run_mode(mode: str, runs: int, model_name: str) -> None:
     )
 
 
+async def _step(command: "CommandTrace | None", name: str, investigator: CompiledStateGraph) -> RunStats:
+    """One run, as a step of the command's trace when there is one."""
+    if command is None:
+        return await arun_once(investigator)
+    with command.step(name) as step:
+        stats = await arun_once(investigator)
+        record_run(step, stats)
+    return stats
+
+
 def main(argv: list[str] | None = None) -> None:
     """Parse `mode [runs]`, read `.env`, run. The only place that reads `.env`."""
     from dotenv import load_dotenv
@@ -122,7 +140,13 @@ def main(argv: list[str] | None = None) -> None:
     if not args or args[0] not in MODES:
         sys.exit(f"usage: python -m app.mcp_run {{{'|'.join(MODES)}}} [runs]")
     runs = int(args[1]) if len(args) > 1 else DEFAULT_RUNS
-    asyncio.run(run_mode(args[0], runs, os.environ["SMALL_MODEL"]))
+    from app.tracing import command_trace
+
+    model = os.environ["SMALL_MODEL"]
+    # asyncio.run copies the current context into its task, so the command's
+    # span is current inside the async runs too.
+    with command_trace(f"tool path mcp {args[0]}", input=TASK, attributes={"findyfixy.model": model}) as command:
+        asyncio.run(run_mode(args[0], runs, model, command))
 
 
 if __name__ == "__main__":

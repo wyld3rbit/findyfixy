@@ -280,6 +280,11 @@ class RunHub:
         self._stoppable = False
 
     @property
+    def tracing(self) -> Tracing | None:
+        """The tracer provider runs and requests are traced with, or None."""
+        return self._tracing
+
+    @property
     def tools_available(self) -> bool:
         """True when a real tool step was configured (live mode only)."""
         return self._investigator is not None
@@ -616,6 +621,16 @@ def wire(event: StreamEvent) -> dict[str, object]:
     return {"source": source, **asdict(event)}
 
 
+# Routes that add only noise: the dev page polls /version every second, and
+# browsers ask for /favicon.ico on every load. Neither is logged or traced.
+QUIET_ROUTES = ("/version", "/favicon.ico")
+# The event stream is not traced as a request either: its span would last as
+# long as a viewer stays connected (minutes during a hunt) and skew request
+# latency, and a viewer closing its tab would show up as a failed request.
+# The runs it streams are traced on their own ("findyfixy run").
+UNTRACED_ROUTES = (*QUIET_ROUTES, "/events")
+
+
 def make_handler(
     hub: RunHub, page: Path, dev_root: Path | None = None
 ) -> type[BaseHTTPRequestHandler]:
@@ -641,9 +656,34 @@ def make_handler(
             matter (`POST /run`, `GET /events`). Only those routes are quiet;
             everything else logs as before.
             """
-            if self.path.split("?")[0] in ("/version", "/favicon.ico"):
+            if urlparse(self.path).path in QUIET_ROUTES:
                 return
             super().log_message(format, *args)
+
+        # -- tracing ------------------------------------------------------
+        # Every request is a trace of its own ("GET /config", "POST /run"),
+        # with its method, path and status, so the console's own traffic is
+        # observable too, except `UNTRACED_ROUTES`. A run started by POST /run
+        # executes on its own thread and is its own "findyfixy run" trace; the
+        # request trace records only the call.
+        def send_response(self, code: int, message: str | None = None) -> None:
+            """Remember the status for the request's span, then send it."""
+            self._status = int(code)
+            super().send_response(code, message)
+
+        def _traced(self, method: str, route: Callable[[], None]) -> None:
+            """Run one route inside a request span when the console traces."""
+            path = urlparse(self.path).path
+            if hub.tracing is None or path in UNTRACED_ROUTES:
+                return route()
+            from harness.trace.command import CommandTrace
+
+            self._status = 0
+            attrs = {"http.request.method": method, "url.path": path}
+            with CommandTrace(hub.tracing, f"{method} {path}", attributes=attrs) as request:
+                route()
+                # An attribute, not only text, so the backend can filter by status.
+                request.set(**{"http.response.status_code": self._status})
 
         # -- helpers ------------------------------------------------------
         def _send(self, status: HTTPStatus, body: bytes, ctype: str) -> None:
@@ -674,6 +714,12 @@ def make_handler(
 
         # -- routes -------------------------------------------------------
         def do_GET(self) -> None:  # noqa: N802 - stdlib naming
+            self._traced("GET", self._get)
+
+        def do_POST(self) -> None:  # noqa: N802 - stdlib naming
+            self._traced("POST", self._post)
+
+        def _get(self) -> None:
             if not self._host_ok():
                 return self._json(HTTPStatus.FORBIDDEN, {"error": "bad host"})
             url = urlparse(self.path)
@@ -722,7 +768,7 @@ def make_handler(
                 return self._events(parse_qs(url.query))
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
-        def do_POST(self) -> None:  # noqa: N802 - stdlib naming
+        def _post(self) -> None:
             # Early rejects leave the body unread. Close the connection, or the
             # leftover bytes are parsed as the next request on a keep-alive socket.
             self.close_connection = True
