@@ -2,8 +2,9 @@
 
 What lives here: atomic report and baseline files, the rules for when a baseline may
 be written, `gate` (every reason a run must not ship), `format_table`, and the
-viewer that prints one case end to end (`show_case`, `format_case`) or freezes a
-saved report as the baseline (`freeze_baseline`).
+viewer that prints one case end to end (`show_case`, `format_case`), compares two
+saved reports case by case (`compare_reports`) or freezes a saved report as the
+baseline (`freeze_baseline`).
 
 Why separate from the runner: this is policy and presentation, not execution. It
 reads and writes files but never calls a model. The CLI depends on it, not the
@@ -281,6 +282,12 @@ def load_report(path: Path) -> dict[str, Any]:
         raise ReportInvalid(f"cannot read {path.name}: {err}") from err
     if not isinstance(data, dict) or not {"provenance", "aggregates", "cases"} <= data.keys():
         raise ReportInvalid(f"{path.name} is missing provenance, aggregates or cases")
+    cases = data["cases"]
+    if not isinstance(cases, list) or not all(isinstance(c, dict) and isinstance(c.get("id"), str) for c in cases):
+        raise ReportInvalid(f"{path.name} has a case that is not a record with an id")
+    ids = [c["id"] for c in cases]
+    if len(set(ids)) != len(ids):
+        raise ReportInvalid(f"{path.name} has duplicate case ids")
     return data
 
 
@@ -396,6 +403,71 @@ def show_case(case_id: str, report_path: Path | None, reports_dir: Path) -> int:
         print("warning: this report predates self-contained records; "
               "the alert and reference were not saved in it", file=sys.stderr)
     print(format_case(record))
+    return 0
+
+
+def case_differences(old: Mapping[str, Any], new: Mapping[str, Any]) -> list[str]:
+    """Every per-case difference between two reports that a refactor must not cause. Pure.
+
+    Compared per case id: which cases ran and in what order, the question and
+    reference, the run error, the answer text, the contexts the judge saw,
+    each label with its match and expected value, and each metric's score and
+    failed flag. Both reports must have unique case ids (`load_report`). Not compared: latency and timing (they always move), the
+    provenance (a new run has a new timestamp and commit), and the judge's
+    reasons (free text; the score is what the gate reads). Empty means the
+    runs agree on everything the gate and a reader of a case can see.
+    """
+    old_cases = {r["id"]: r for r in old["cases"]}
+    new_cases = {r["id"]: r for r in new["cases"]}
+    problems = [f"{cid}: only in the first report" for cid in old_cases if cid not in new_cases]
+    problems += [f"{cid}: only in the second report" for cid in new_cases if cid not in old_cases]
+    shared = [cid for cid in old_cases if cid in new_cases]
+    if shared != [cid for cid in new_cases if cid in old_cases]:
+        problems.append("the cases ran in a different order")
+    for cid in shared:
+        a, b = old_cases[cid], new_cases[cid]
+        # The inputs too: a changed question or reference that happens to land
+        # on the same scores is still not the same run.
+        fields = ["question", "reference", "run_error", "answer", "contexts"]
+        for label in sorted(set(record_labels(a)) | set(record_labels(b))):
+            fields += [label, match_name(label), f"expected_{label}"]
+        for field in fields:
+            if a.get(field) != b.get(field):
+                problems.append(f"{cid}: {field} differs")
+        for metric in sorted(set(a.get("metrics", {})) | set(b.get("metrics", {}))):
+            ma, mb = a.get("metrics", {}).get(metric, {}), b.get("metrics", {}).get(metric, {})
+            for key in ("score", "failed"):
+                if ma.get(key) != mb.get(key):
+                    problems.append(f"{cid}: {metric} {key} {ma.get(key)!r} -> {mb.get(key)!r}")
+    return problems
+
+
+def compare_reports(first: Path, second: Path) -> int:
+    """Print whether two saved reports agree case by case. Returns the exit code.
+
+    0 when they agree on every case (see `case_differences`), 1 with one line
+    per difference, 2 when a file is not a report or both paths are the same
+    file: a report always matches itself, so that "identical" would prove
+    nothing. This is how a change that must not move a score (a faster
+    runner, tracing) proves it did not.
+    """
+    if first.resolve() == second.resolve():
+        print(f"error: both reports are {first.name}; name the other run with --report",
+              file=sys.stderr)
+        return 2
+    try:
+        a, b = load_report(first), load_report(second)
+    except ReportInvalid as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 2
+    problems = case_differences(a, b)
+    for problem in problems:
+        print(f"DIFFERS: {problem}")
+    if problems:
+        print(f"compare: {len(problems)} difference(s) between {first.name} and {second.name}")
+        return 1
+    print(f"compare: identical, {len(a['cases'])} cases ({first.name} and {second.name}): "
+          "answers, contexts, labels and every metric score")
     return 0
 
 

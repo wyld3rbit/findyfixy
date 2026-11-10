@@ -13,9 +13,11 @@ Why a vocabulary of its own, and not the app's run events
     FindyFixy console, tags each event with where it came from.
 
 Who emits what
-    `run_eval` (runner.py) emits `eval_started`, then for each case
-    `case_started`, `case_answered`, one `metric_scored` per metric as each
-    finishes, and `case_scored`. It never emits the last two kinds:
+    `run_eval` (runner.py) emits `eval_started`, then in the answer pass
+    `case_started` and `case_answered` for every case, then in the judge pass
+    one `metric_scored` per metric as each finishes and `case_scored`, case
+    by case. A case with a run error has nothing to judge: its `case_scored`
+    follows its `case_answered` at once, in the answer pass. It never emits the last two kinds:
     `eval_finished` and `eval_failed` belong to whoever drives the run and
     decides the gate. The runner never sees a baseline, so it cannot say
     whether the run passed.
@@ -37,8 +39,9 @@ Payloads
                        asked the runner to stop, else "error")
 
 Ordering and threads
-    With `workers` 1, events arrive in run order. With more, each case's own
-    events keep their order but cases interleave, and the callback is called
+    With `workers` 1, events arrive in run order: every case is answered
+    before any is judged. With more, each case's own events keep their order
+    and the passes still do not overlap, but cases interleave within a pass, and the callback is called
     from several threads: it must be thread-safe. A slow callback slows the
     run, because it is a plain call. A callback that raises stops the run like
     any other bug, so keep it to an append.

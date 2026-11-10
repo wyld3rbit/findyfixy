@@ -11,9 +11,9 @@ The `code/harness/` package is the evaluation harness: it scores an LLM system's
 - `code/harness/eval/judge.py` and `code/harness/eval/metrics.py`: the judge over a local model, and the four metrics (faithfulness, response relevancy, context recall, action quality).
 - `code/harness/eval/stats.py`: bootstrap intervals and aggregation. Each expected label `L` is scored as `L_match`.
 - `code/harness/eval/provenance.py`: the stamp on every report. The app's `describe()` keys are merged in flat.
-- `code/harness/eval/report.py`: report and baseline files, the gate, the table and the case viewer.
+- `code/harness/eval/report.py`: report and baseline files, the gate, the table, the case viewer, and the case-by-case comparison of two saved reports (`--compare`).
 - `code/harness/eval/events.py`: the harness's own event vocabulary, which the runner reports to an optional viewer while a run is in flight.
-- `code/harness/eval/runner.py`: runs every case through a system under test and builds the report.
+- `code/harness/eval/runner.py`: runs every case through a system under test and builds the report, in two passes: every case is answered, then every answer is judged, so a machine that holds one model at a time loads each model about once. The report's `timing` has each pass (`answer_s`, `judge_s`) and the wall time.
 - `code/harness/eval/cli.py`: the command line an app's entry point calls with its own wiring. With an `AttestationSpec`, a passing `--gate` run also writes the attestation.
 - `code/harness/eval/attest.py`: the CI gate. It fingerprints every answer-affecting file, writes the attestation after a passing full run on a clean tree, and verifies it in CI. It also holds the traceability rules the baseline shares. It is the harness's leaf: standard library only and no harness imports, so CI runs it alone with plain `python3` and no install.
 

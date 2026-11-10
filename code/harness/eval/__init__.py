@@ -13,7 +13,7 @@ Modules, from the bottom of the dependency graph up:
     report.py      report and baseline files, the gate, the table, the case viewer.
                    Uses attest.py's writer and traceability rules.
     events.py      the live events a run reports to a viewer (default: none)
-    runner.py      run_case and run_eval over a SystemUnderTest
+    runner.py      run_eval over a SystemUnderTest: answer pass, then judge pass
     cli.py         the command line an app's entry point hands its wiring to
 
 Nothing is imported here, so importing the package costs nothing.

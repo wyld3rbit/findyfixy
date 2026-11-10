@@ -1,13 +1,30 @@
 """Run every golden case through a system under test, score it, and build the report.
 
 What it does
-    1. Asks the `SystemUnderTest` for an `Answer` to each `Case`.
-    2. Scores each answer: every expected label by exact match, then four
-       model-graded metrics (harness/eval/metrics.py): faithfulness, response
-       relevancy, context recall and action quality.
+    1. Answer pass: asks the `SystemUnderTest` for an `Answer` to every `Case`
+       and scores every expected label by exact match.
+    2. Judge pass: scores every answer with four model-graded metrics
+       (harness/eval/metrics.py): faithfulness, response relevancy, context
+       recall and action quality.
     3. Aggregates overall and per group with seeded bootstrap 95% confidence
        intervals, merges the app's own aggregates from `summarise`, and returns
        the report dict. Writing it and gating it are report.py's job.
+
+Why answer everything first, then judge everything
+    A local model server on a small machine keeps one model in memory at a
+    time. Measured on the 16 GB machine (2026-11-09): loading the judge
+    (qwen2.5:7b, 4.6 GB) unloads the answering model (qwen3:4b-instruct,
+    2.9 GB) and the reverse, at 2 to 3 s per load. Answering and judging case
+    by case swapped models twice per case, about 60 loads on 30 cases. Two
+    passes load each model about once. The cost: no case is scored until every
+    case is answered, so a viewer sees the first score half way through a run,
+    and a run stopped in the judge pass has spent its answering time for
+    nothing. A judge served from its own machine removes the swap and with it
+    the reason for the two passes.
+
+    What the judge sees does not change: the same answers, the same contexts,
+    the same prompts, in the same case and metric order. Only when it sees them
+    does. `timing` records each pass (`answer_s`, `judge_s`) next to `wall_s`.
 
 The record schema (one dict per case, kept stable because saved reports and
 the baseline depend on it)
@@ -41,17 +58,20 @@ Failure model
 
 Live events
     `run_eval` takes an `on_event` callback (harness/eval/events.py) and
-    reports each case as it starts, is answered and is scored, and each metric
-    as soon as it is computed. The default reports nothing, so the command line
+    reports each case as it starts and is answered in the answer pass, then
+    each metric as soon as it is computed and each case as it is scored in the
+    judge pass. A case with a run error is scored (with no metric) as soon as
+    it is answered, because there is nothing to judge. The default reports nothing, so the command line
     and every saved report are unchanged. The callback only observes: nothing
     it does can change a score or a record.
 
 Stopping
-    `should_stop` is asked before each case starts. When it says yes, the run
-    raises `EvalStopped` and returns no report: a run cut short is not a
-    smaller report, because its cases were chosen by when someone pressed
-    stop, not by design. The case in flight finishes first; a judge call is
-    never cut off halfway.
+    `should_stop` is asked before each case in each pass: before it is
+    answered and before it is judged. When it says yes, the run raises
+    `EvalStopped` and returns no report: a run cut short is not a smaller
+    report, because its cases were chosen by when someone pressed stop, not by
+    design. The case in flight finishes first; a judge call is never cut off
+    halfway.
 
 What changes at scale
     One local model server on one GPU caps parallelism at a few workers
@@ -64,9 +84,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 import threading
 import time
-from typing import Any
+from typing import Any, TypeVar
 
 from harness.eval.case import Case
 from harness.eval.events import EvalEmit, no_eval_emit
@@ -96,6 +117,9 @@ from harness.eval.sut import Answer, SystemUnderTest
 # model server's memory (its KV cache), and every extra request queues on the
 # same GPU. Past a few workers the machine swaps and the run gets slower.
 MAX_WORKERS = 4
+
+_In = TypeVar("_In")
+_Out = TypeVar("_Out")
 
 
 class EvalStopped(Exception):
@@ -179,19 +203,41 @@ def _unscored(record: dict[str, Any], case: Case, on_event: EvalEmit) -> dict[st
     return record
 
 
-def run_case(
+@dataclass(frozen=True)
+class _Answered:
+    """One case after the answer pass: its record, and the answer to judge.
+
+    `answer` is None when the case ended with a run error. Its record is then
+    final, and the judge pass skips it.
+    """
+
+    case: Case
+    record: dict[str, Any]
+    answer: Answer | None
+
+
+@dataclass(frozen=True)
+class _ToJudge:
+    """A case the judge pass scores. `answer` is never None, so no check is needed."""
+
+    case: Case
+    record: dict[str, Any]
+    answer: Answer
+
+
+def answer_case(
     case: Case,
     *,
     sut: SystemUnderTest,
-    judge: Judge,
-    embed: Embed,
     timer: Callable[[], float],
     on_event: EvalEmit = no_eval_emit,
-) -> dict[str, Any]:
-    """Run and score one case. Returns the per-case record.
+) -> _Answered:
+    """Answer one case and score its labels. No judge call.
 
-    Every path ends with `case_answered` then `case_scored` on `on_event`, so a
-    viewer always sees a case close, even one that failed.
+    Emits `case_answered`. A case that ends in a run error also emits
+    `case_scored` here, so every case still closes on the stream.
+    `latency_s` is the answer alone, as it was when answering and judging
+    were one step, so latencies stay comparable with older reports.
     """
     record = new_record(case)
     start = timer()
@@ -200,7 +246,7 @@ def run_case(
     except Exception as err:  # the system's fault, not ours: record it, keep going
         record["latency_s"] = timer() - start
         record["run_error"] = f"{type(err).__name__}: {err}"
-        return _unscored(record, case, on_event)
+        return _Answered(case, _unscored(record, case, on_event), None)
     record["latency_s"] = timer() - start
     try:
         _merge(record, answer.meta, f"answer meta for case {case.id}")
@@ -208,16 +254,35 @@ def run_case(
         # Known only once the system has answered, so it cannot be checked up
         # front. A run error keeps the other cases, and the gate fails on it.
         record["run_error"] = f"{type(err).__name__}: {err}"
-        return _unscored(record, case, on_event)
+        return _Answered(case, _unscored(record, case, on_event), None)
     if answer.error is not None:
         record["run_error"] = answer.error
-        return _unscored(record, case, on_event)
+        return _Answered(case, _unscored(record, case, on_event), None)
 
     for label, expected in case.expected.items():
         got = answer.labels.get(label)
         record[label] = got
         record[match_name(label)] = got == expected
     _answered(record, case, on_event)
+    return _Answered(case, record, answer)
+
+
+def score_case(
+    case: Case,
+    record: dict[str, Any],
+    answer: Answer,
+    *,
+    judge: Judge,
+    embed: Embed,
+    on_event: EvalEmit = no_eval_emit,
+) -> None:
+    """Judge one answered case with the four metrics. Fills `record` in place.
+
+    Emits one `metric_scored` per metric, then `case_scored`. Takes an
+    `Answer`, not an optional one, so a case with a run error cannot reach it.
+    Returns nothing on purpose: the record is the one the answer pass made,
+    and the report reads it from there, so there is one copy to keep right.
+    """
     text, contexts = answer.text, list(answer.contexts)
     # In the fixed metric order, one at a time, so the judge sees the same call
     # sequence as before events existed and a viewer sees each score as it lands.
@@ -255,7 +320,6 @@ def run_case(
         for n, r in results.items()
     }
     on_event("case_scored", id=case.id)
-    return record
 
 
 def _status(record: Mapping[str, Any], case: Case) -> str:
@@ -343,45 +407,71 @@ def run_eval(
     `eval_started` goes out only after validation, so a run refused up front
     reports nothing.
 
-    `should_stop` is asked before each case. Yes raises `EvalStopped` once the
-    cases already started have finished (see "Stopping" above).
+    `should_stop` is asked before each case in each pass. Yes raises
+    `EvalStopped` once the cases already started have finished (see
+    "Stopping" above).
     """
     if not 1 <= workers <= MAX_WORKERS:
         raise ValueError(f"workers must be between 1 and {MAX_WORKERS}, got {workers}")
     validate(cases, sut)
     labels = sorted({label for case in cases for label in case.expected})
     progress_lock = threading.Lock()
-    finished = 0
-    on_event("eval_started", n=len(cases), cases=[c.id for c in cases], system=dict(sut.describe()))
+    n = len(cases)
+    answered_count = 0
+    judged_count = 0
+    on_event("eval_started", n=n, cases=[c.id for c in cases], system=dict(sut.describe()))
 
-    def work(index: int, case: Case) -> dict[str, Any]:
-        """Run one case and report progress. The counter is shared, so it is locked."""
-        nonlocal finished
+    def answer_one(index: int, case: Case) -> _Answered:
+        """Answer one case and report progress. The counter is shared, so it is locked."""
+        nonlocal answered_count
         if should_stop():
             with progress_lock:
-                done = finished
-            raise EvalStopped(f"stopped after {done} of {len(cases)} cases")
-        on_event("case_started", id=case.id, group=case.group, index=index + 1, n=len(cases))
-        record = run_case(case, sut=sut, judge=judge, embed=embed, timer=timer, on_event=on_event)
+                done = answered_count
+            raise EvalStopped(f"stopped after {done} of {n} cases")
+        on_event("case_started", id=case.id, group=case.group, index=index + 1, n=n)
+        result = answer_case(case, sut=sut, timer=timer, on_event=on_event)
         with progress_lock:
-            finished += 1
+            answered_count += 1
             progress(
-                f"[{finished}/{len(cases)}] {case.id} {_status(record, case)} "
-                f"({record['latency_s']:.1f}s)"
+                f"[{answered_count}/{n}] {case.id} {_status(result.record, case)} "
+                f"({result.record['latency_s']:.1f}s)"
             )
-        return record
+        return result
+
+    def judge_one(item: _ToJudge) -> None:
+        """Judge one answered case and report progress."""
+        nonlocal judged_count
+        if should_stop():
+            with progress_lock:
+                done = judged_count
+            raise EvalStopped(f"stopped after judging {done} of {len(to_judge)} answered cases")
+        score_case(item.case, item.record, item.answer, judge=judge, embed=embed, on_event=on_event)
+        with progress_lock:
+            judged_count += 1
+            progress(f"[judged {judged_count}/{len(to_judge)}] {item.case.id}")
+
+    def each(fn: Callable[[_In], _Out], items: Sequence[_In]) -> list[_Out]:
+        """Map `fn` over `items`, serially or in the pool. Results keep input order."""
+        if workers == 1:
+            return [fn(item) for item in items]
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            return list(pool.map(fn, items))
 
     start = timer()
-    if workers == 1:
-        records = [work(i, case) for i, case in enumerate(cases)]
-    else:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            records = list(pool.map(work, range(len(cases)), cases))
-    wall_s = timer() - start
+    answered = each(lambda pair: answer_one(*pair), list(enumerate(cases)))
+    answered_at = timer()
+    to_judge = [_ToJudge(a.case, a.record, a.answer) for a in answered if a.answer is not None]
+    each(judge_one, to_judge)  # score_case fills each record in place
+    finished_at = timer()
+    # `answered` keeps the order of `cases`, and holds the records the judge pass filled.
+    records = [item.record for item in answered]
+    wall_s = finished_at - start
     timing = {
         "workers": workers,
         "wall_s": round(wall_s, 1),
-        "cases_per_min": round(60 * len(cases) / wall_s, 2) if wall_s > 0 else None,
+        "answer_s": round(answered_at - start, 1),
+        "judge_s": round(finished_at - answered_at, 1),
+        "cases_per_min": round(60 * n / wall_s, 2) if wall_s > 0 else None,
     }
     return {
         "provenance": dict(provenance),

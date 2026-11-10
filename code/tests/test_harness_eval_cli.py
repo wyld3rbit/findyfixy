@@ -139,6 +139,19 @@ def test_show_case_and_baseline_from_run_nothing(tmp_path: Path, capsys) -> None
     assert "ALERT      question g1" in capsys.readouterr().out
     assert cli(["--baseline-from", str(saved)], tmp_path, never) == 0
     assert load_baseline(tmp_path / "evals" / "baseline.json")["scores"]["kind_match"]["mean"] == 1.0
+    newer = tmp_path / "r" / "eval-20261026T130000Z.json"
+    newer.write_text(saved.read_text())
+    capsys.readouterr()
+    assert cli(["--compare", str(saved)], tmp_path, never) == 0  # against the newest
+    assert "compare: identical" in capsys.readouterr().out
+    assert cli(["--compare", str(newer)], tmp_path, never) == 2  # the newest against itself proves nothing
+
+
+def test_a_run_prints_the_time_of_each_pass(tmp_path: Path, capsys) -> None:
+    """The timing line names wall time and both passes, so a slow pass is visible at a glance."""
+    assert cli([], tmp_path) == 0
+    line = next(x for x in capsys.readouterr().out.splitlines() if x.startswith("timing:"))
+    assert "s answering" in line and "s judging" in line
 
 
 # ---- live_runner ------------------------------------------------------------

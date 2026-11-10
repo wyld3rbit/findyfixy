@@ -6,7 +6,7 @@
 # its own, so the real commands stay readable in one place each.
 
 .DEFAULT_GOAL := help
-.PHONY: help adr-snapshot setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-negative case golden ingest audit verify-attestation tracker ui check
+.PHONY: help adr-snapshot setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative case golden ingest audit verify-attestation tracker ui check
 
 help:
 	@echo "First time:       make setup"
@@ -17,6 +17,7 @@ help:
 	@echo "CI gate:          make verify-attestation   (the attestation eval-gate writes on a pass)"
 	@echo "See test cases:   make golden   make case ID=g07"
 	@echo "Freeze baseline:  make eval-freeze REPORT=reports/eval-<timestamp>.json"
+	@echo "Compare runs:     make eval-compare REPORT=reports/eval-<timestamp>.json"
 	@echo "Tracker page:     make tracker"
 	@echo "Landing page:     make ui   (tracker with the visualization embedded)"
 	@echo "Decision records:  make adr-snapshot   (redraw the diagram in each ADR)"
@@ -33,6 +34,9 @@ case:
 
 eval-freeze:
 	$(MAKE) -C code eval-freeze REPORT=$(REPORT)
+
+eval-compare:
+	$(MAKE) -C code eval-compare REPORT=$(REPORT) OTHER=$(OTHER)
 
 # One architecture picture per phase for the ADRs in code/docs/adr/, drawn from the live page.
 adr-snapshot:

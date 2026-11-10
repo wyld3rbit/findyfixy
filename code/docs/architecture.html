@@ -695,7 +695,7 @@ async function animateHarness(ev) {
   switch (ev.kind) {
     case "eval_started":
       resetVisuals();
-      view.evalRun = { n: d.n, index: 0, id: "", fake: d.system.data === "FAKE", latest: {} };
+      view.evalRun = { n: d.n, index: 0, id: "", cases: d.cases, fake: d.system.data === "FAKE", latest: {} };
       view.live = !view.evalRun.fake;
       if (!view.replaying) pace = view.live ? PACE_REALTIME : PACE_NORMAL;
       mark("eval", "active");
@@ -722,18 +722,25 @@ async function animateHarness(ev) {
       mark("rec", d.run_error ? "bad" : (miss ? "warn" : "ok"));
       setBadge("rec", d.run_error ? "run error" : labelsText(d));
       await travel("e_rec_eval");
+      // Answer pass: every case is answered before any is judged (runner.py),
+      // so this case's scores arrive later, in the judge pass.
       mark("eval", "calling");
-      setBadge("eval", `scoring ${d.id}`);
+      setBadge("eval", `${d.id} answered`);
       break;
     }
     case "metric_scored":
+      // Judge pass: scores arrive after every case was answered, so the case
+      // they belong to is taken from the event, not from the last case_started.
+      if (d.id !== view.evalRun.id) {
+        Object.assign(view.evalRun, { id: d.id, index: view.evalRun.cases.indexOf(d.id) + 1, latest: {} });
+      }
       view.evalRun.latest[d.name] = d.score;
       setBadge("evalscore", `${metricName(d.name)} ${scoreText(d.score)}`);
       showEvalProgress();
       break;
     case "case_scored":
       mark("eval", "active");
-      setBadge("eval", `case ${view.evalRun.index} of ${view.evalRun.n} scored`);
+      setBadge("eval", `${d.id} scored`);
       break;
     case "eval_finished":
       finishEval(d);

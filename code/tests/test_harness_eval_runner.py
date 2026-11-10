@@ -311,18 +311,25 @@ def test_each_case_keeps_its_own_context_under_parallel_load() -> None:
         assert record["contexts"] == [f"context for {record['id']}"]
 
 
-def test_progress_counts_each_case_once_even_in_parallel() -> None:
-    """The shared counter is locked: every number from 1 to n appears once."""
+def test_progress_counts_each_case_once_per_pass_even_in_parallel() -> None:
+    """The shared counters are locked: every number from 1 to n appears once in each pass."""
     lines: list[str] = []
     run(many_cases(10), workers=4, progress=lines.append)
-    assert sorted(int(line.split("/")[0][1:]) for line in lines) == list(range(1, 11))
+    answered = [line for line in lines if not line.startswith("[judged")]
+    judged = [line for line in lines if line.startswith("[judged")]
+    assert sorted(int(line.split("/")[0][1:]) for line in answered) == list(range(1, 11))
+    assert sorted(int(line.split("/")[0].split()[1]) for line in judged) == list(range(1, 11))
 
 
 def test_progress_names_the_label_match_or_the_run_error() -> None:
-    """One line per case, in the same shape the FindyFixy runs printed."""
+    """One line per answered case, in the shape the FindyFixy runs printed, then one per judged case."""
     lines: list[str] = []
     run([case("g1"), case("g2")], sut=FakeSUT(fail_on=["g2"]), progress=lines.append, timer=lambda: 0.0)
-    assert lines == ["[1/2] g1 kind_match=True (0.0s)", "[2/2] g2 TriageError: no valid record (0.0s)"]
+    assert lines == [
+        "[1/2] g1 kind_match=True (0.0s)",
+        "[2/2] g2 TriageError: no valid record (0.0s)",
+        "[judged 1/1] g1",  # g2 has a run error: nothing to judge
+    ]
 
 
 @pytest.mark.parametrize("bad", [0, -1, 5, 100])
@@ -332,11 +339,142 @@ def test_workers_outside_the_cap_are_refused(bad: int) -> None:
         run(many_cases(1), workers=bad)
 
 
-def test_the_report_records_workers_and_throughput() -> None:
-    """Wall time, workers and cases per minute go into `timing`."""
-    ticks = iter([0.0, 12.0])
-    report = run(many_cases(6), workers=2, timer=lambda: next(ticks, 12.0))
-    assert report["timing"] == {"workers": 2, "wall_s": 12.0, "cases_per_min": 30.0}
+class SteppingClock:
+    """A clock that moves forward by `answer_step` per answer and `judge_step` per judge call.
+
+    Lets a test set how long each pass takes without sleeping. The runner reads
+    the clock; the fakes move it.
+    """
+
+    def __init__(self) -> None:
+        """Start at zero."""
+        self.now = 0.0
+        self.lock = threading.Lock()
+
+    def __call__(self) -> float:
+        """The current time."""
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        """Move the clock forward. Locked, because workers advance it from threads."""
+        with self.lock:
+            self.now += seconds
+
+
+class TimedSUT(FakeSUT):
+    """A fake whose answer moves the clock, so the answer pass has a known length."""
+
+    def __init__(self, clock: SteppingClock, step: float) -> None:
+        """Keep the clock and the step."""
+        super().__init__()
+        self.clock, self.step = clock, step
+
+    def answer(self, c: Case) -> Answer:
+        """Advance the clock by one step, then answer like the plain fake."""
+        self.clock.advance(self.step)
+        return super().answer(c)
+
+
+class TimedJudge(FakeJudge):
+    """A fake judge whose every call moves the clock."""
+
+    def __init__(self, clock: SteppingClock, step: float) -> None:
+        """Keep the clock and the step."""
+        super().__init__()
+        self.clock, self.step = clock, step
+
+    def ask(self, prompt: str, schema: Any) -> Any:
+        """Advance the clock by one step, then answer like the plain fake."""
+        self.clock.advance(self.step)
+        return super().ask(prompt, schema)
+
+
+def test_the_report_records_each_pass_workers_and_throughput() -> None:
+    """Wall time, each pass, workers and cases per minute go into `timing`."""
+    clock = SteppingClock()
+    # 6 answers at 1 s each, and 1 s per judge call. The number of judge calls
+    # per case is the metrics' business, so it is counted, not assumed.
+    judge = TimedJudge(clock, 1.0)
+    report = run(many_cases(6), sut=TimedSUT(clock, 1.0), judge=judge, timer=clock)
+    calls = len(judge.prompts)
+    assert report["timing"] == {
+        "workers": 1,
+        "wall_s": round(6.0 + calls, 1),
+        "answer_s": 6.0,
+        "judge_s": float(calls),
+        "cases_per_min": round(60 * 6 / (6.0 + calls), 2),
+    }
+
+
+def test_every_answer_comes_before_the_first_judge_call() -> None:
+    """The point of the two passes: the answering model is never interrupted by the judge."""
+    calls: list[str] = []
+
+    class LoggingSUT(FakeSUT):
+        """Logs each answer."""
+
+        def answer(self, c: Case) -> Answer:
+            """Log, then answer."""
+            calls.append(f"answer {c.id}")
+            return super().answer(c)
+
+    class LoggingJudge(FakeJudge):
+        """Logs each judge call."""
+
+        def ask(self, prompt: str, schema: Any) -> Any:
+            """Log, then judge."""
+            calls.append("judge")
+            return super().ask(prompt, schema)
+
+    run(many_cases(4), sut=LoggingSUT(), judge=LoggingJudge())
+    first_judge = calls.index("judge")
+    assert calls[:first_judge] == [f"answer g{i}" for i in range(4)]
+    assert all(c == "judge" for c in calls[first_judge:])
+
+
+def test_the_judge_sees_the_same_prompts_in_the_same_order_as_case_by_case() -> None:
+    """Moving the judge to its own pass changes when it is asked, never what or in which order.
+
+    The reference order is built by running each case on its own, which is
+    exactly the old case-by-case sequence of judge calls.
+    """
+    cases = many_cases(5)
+    together = FakeJudge()
+    run(cases, judge=together)
+    one_by_one: list[str] = []
+    for c in cases:
+        alone = FakeJudge()
+        run([c], judge=alone)
+        one_by_one += alone.prompts
+    assert together.prompts == one_by_one
+
+
+def test_parallel_judging_keeps_the_answer_pass_first() -> None:
+    """With workers the passes still do not overlap: no judge call before the last answer."""
+    clock = SteppingClock()
+    order: list[str] = []
+    lock = threading.Lock()
+
+    class LoggingSUT(FakeSUT):
+        """Logs each answer from any thread."""
+
+        def answer(self, c: Case) -> Answer:
+            """Log, then answer."""
+            with lock:
+                order.append("answer")
+            return super().answer(c)
+
+    class LoggingJudge(FakeJudge):
+        """Logs each judge call from any thread."""
+
+        def ask(self, prompt: str, schema: Any) -> Any:
+            """Log, then judge."""
+            with lock:
+                order.append("judge")
+            return super().ask(prompt, schema)
+
+    run(many_cases(8), sut=LoggingSUT(), judge=LoggingJudge(), workers=4, timer=clock)
+    assert order.index("judge") == order.count("answer") == 8
 
 
 def test_an_empty_run_does_not_crash() -> None:
@@ -355,17 +493,20 @@ def recorder() -> tuple[list[tuple[str, dict[str, Any]]], Any]:
     return seen, lambda kind, **data: seen.append((kind, data))
 
 
-def test_events_follow_each_case_from_start_to_score_in_order() -> None:
-    """Started, then per case: started, answered, one event per metric in order, scored."""
+def test_events_answer_every_case_then_score_every_case_in_order() -> None:
+    """Started; per case started and answered; then per case one event per metric in order, scored."""
     seen, on_event = recorder()
     run([case("g1"), case("g2", group="b", kind="y")], on_event=on_event)
     kinds = [k for k, _ in seen]
-    per_case = ["case_started", "case_answered", *["metric_scored"] * 4, "case_scored"]
-    assert kinds == ["eval_started", *per_case, *per_case]
+    answer_pass = ["case_started", "case_answered"]
+    judge_pass = [*["metric_scored"] * 4, "case_scored"]
+    assert kinds == ["eval_started", *answer_pass, *answer_pass, *judge_pass, *judge_pass]
     assert seen[0][1] == {"n": 2, "cases": ["g1", "g2"], "system": {"fake_model": "m1", "fake_threshold": 0.5}}
     assert seen[1][1] == {"id": "g1", "group": "a", "index": 1, "n": 2}
-    assert seen[9][1] == {"id": "g2", "labels": {"kind": "x"}, "expected": {"kind": "y"}, "run_error": None}
-    metrics = [d for k, d in seen[:7] if k == "metric_scored"]
+    assert seen[4][1] == {"id": "g2", "labels": {"kind": "x"}, "expected": {"kind": "y"}, "run_error": None}
+    assert [d["id"] for k, d in seen if k == "case_scored"] == ["g1", "g2"]
+    metrics = [d for k, d in seen[5:10] if k == "metric_scored"]
+    assert {d["id"] for d in metrics} == {"g1"}
     assert [d["name"] for d in metrics] == ["faithfulness", "response_relevancy", "context_recall", "action_quality"]
     assert all(d["score"] == 1.0 and d["failed"] is False for d in metrics)
 
@@ -431,3 +572,29 @@ def test_a_stop_ends_the_run_before_the_next_case_with_no_report() -> None:
             should_stop=lambda: sut.answered >= 1)
     assert sut.answered == 1
     assert [d["id"] for k, d in seen if k == "case_started"] == ["g1"]
+
+
+def test_a_stop_in_the_judge_pass_ends_the_run_with_no_report() -> None:
+    """`should_stop` is asked before each judged case too: every case answered, one judged, then stop."""
+    from harness.eval.runner import EvalStopped
+
+    seen, on_event = recorder()
+    sut = CountingSUT()
+    with pytest.raises(EvalStopped, match="stopped after judging 1 of 3 answered cases"):
+        run([case("g1"), case("g2"), case("g3")], sut=sut, on_event=on_event,
+            should_stop=lambda: sum(k == "case_scored" for k, _ in seen) >= 1)
+    assert sut.answered == 3
+    assert [d["id"] for k, d in seen if k == "case_scored"] == ["g1"]
+
+
+def test_a_run_error_case_is_scored_in_the_answer_pass_and_never_judged() -> None:
+    """A failed case closes at once, before the judge pass, and costs no judge call."""
+    seen, on_event = recorder()
+    judge = FakeJudge()
+    run([case("g1"), case("g2")], sut=FakeSUT(raise_on=["g1"]), judge=judge, on_event=on_event)
+    kinds = [(k, d.get("id")) for k, d in seen]
+    assert kinds[:5] == [("eval_started", None), ("case_started", "g1"), ("case_answered", "g1"),
+                         ("case_scored", "g1"), ("case_started", "g2")]
+    alone = FakeJudge()
+    run([case("g2")], judge=alone)
+    assert judge.prompts == alone.prompts

@@ -7,7 +7,7 @@
 #      how a hijacked package can persist. Only the known shims are allowed.
 # On any finding, stop and read it. Do not upgrade or remove to make it pass.
 
-.PHONY: audit hooks scan up down setup ingest console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-negative case golden verify-attestation
+.PHONY: audit hooks scan up down setup ingest console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative case golden verify-attestation
 
 # Memory for the Colima VM, in GB. 6 on most days, 8 on Langfuse days:
 #   make up COLIMA_MEMORY=8
@@ -134,6 +134,15 @@ golden:
 case:
 	@test -n "$(ID)" || { echo "usage: make case ID=g07 [REPORT=reports/eval-<timestamp>.json]"; exit 2; }
 	uv run python -m app.eval_answers --show-case $(ID) $(if $(REPORT),--report $(REPORT))
+
+# eval-compare: compare a SAVED report with the newest one (or OTHER), case by
+# case: answers, contexts, labels, every metric score. Exit 1 on any difference.
+# The proof that a change which must not move a score did not. No run.
+#   make eval-compare REPORT=reports/eval-<timestamp>.json
+#   make eval-compare REPORT=reports/eval-<a>.json OTHER=reports/eval-<b>.json
+eval-compare:
+	@test -n "$(REPORT)" || { echo "usage: make eval-compare REPORT=reports/eval-<timestamp>.json [OTHER=reports/eval-<timestamp>.json]"; exit 2; }
+	uv run python -m app.eval_answers --compare $(REPORT) $(if $(OTHER),--report $(OTHER))
 
 # eval-freeze: freeze a SAVED report as the baseline (no run). The baseline is then
 # exactly the numbers you reviewed. Refuses a dirty-tree run, run errors, a high

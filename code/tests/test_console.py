@@ -968,7 +968,11 @@ def test_config_reports_each_eval_sets_size(server):
 
 
 def test_stop_ends_a_fake_eval_after_the_case_in_flight():
-    """POST /stop during case 1 of a full run: case 1 finishes, case 2 never starts."""
+    """POST /stop during case 1 of a full run: case 1 is answered, case 2 never starts.
+
+    The judge pass never starts either (runner.py answers every case first),
+    so case 1 is answered but never scored.
+    """
     holder = {}
 
     def press_stop(seconds):
@@ -985,7 +989,8 @@ def test_stop_ends_a_fake_eval_after_the_case_in_flight():
         srv.server_close()
     assert holder["stopping"] == (200, b'{"stopping": true}')
     kinds = [e["kind"] for e in events]
-    assert kinds.count("case_started") == 1 and kinds.count("case_scored") == 1
+    assert kinds.count("case_started") == 1 and kinds.count("case_answered") == 1
+    assert kinds.count("metric_scored") == 0 and kinds.count("case_scored") == 0
     last = events[-1]
     assert last["kind"] == "eval_failed" and last["data"]["reason"] == "stopped"
     assert last["data"]["error"] == f"stopped after 1 of {FAKE_SIZE} cases"
