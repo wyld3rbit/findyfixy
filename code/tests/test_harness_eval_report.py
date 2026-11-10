@@ -28,6 +28,8 @@ from harness.eval.report import (
     freeze_baseline,
     gate,
     load_baseline,
+    case_differences,
+    compare_reports,
     show_case,
     write_baseline,
     write_report,
@@ -364,3 +366,93 @@ def test_freezing_a_saved_report_then_gating_it_passes(tmp_path: Path, capsys) -
     assert freeze_baseline(path, baseline) == 0
     assert "baseline written: baseline.json (from eval-20261026T120000Z.json)" in capsys.readouterr().out
     assert gate(json.loads(path.read_text()), load_baseline(baseline)) == []
+
+
+# ---- comparing two saved reports ----------------------------------------------
+
+
+def test_two_runs_of_the_same_fakes_are_identical_case_by_case(tmp_path: Path, capsys) -> None:
+    """Latency, timing and provenance may differ; nothing a reader of a case sees does."""
+    first = saved_report(tmp_path, "eval-20261026T110000Z.json")
+    second = saved_report(tmp_path, "eval-20261026T120000Z.json")
+    report = json.loads(second.read_text())
+    report["cases"][0]["latency_s"] = 99.0
+    report["timing"]["wall_s"] = 99.0
+    report["provenance"]["timestamp_utc"] = "later"
+    second.write_text(json.dumps(report))
+    assert compare_reports(first, second) == 0
+    assert "compare: identical, 2 cases" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("change", "expected"),
+    [
+        (lambda c: c.update(answer="other"), "g1: answer differs"),
+        (lambda c: c.update(contexts=["other"]), "g1: contexts differs"),
+        (lambda c: c.update(kind="y", kind_match=False), "g1: kind differs"),
+        (lambda c: c.update(run_error="boom"), "g1: run_error differs"),
+        (lambda c: c["metrics"]["faithfulness"].update(score=0.5), "g1: faithfulness score 1.0 -> 0.5"),
+        (lambda c: c["metrics"]["context_recall"].update(failed=True), "g1: context_recall failed False -> True"),
+        (lambda c: c.update(question="other"), "g1: question differs"),
+        (lambda c: c.update(reference="other"), "g1: reference differs"),
+        (lambda c: c.update(expected_kind="other"), "g1: expected_kind differs"),
+    ],
+)
+def test_each_visible_change_to_a_case_is_named(tmp_path: Path, change: Any, expected: str) -> None:
+    """Every field the gate or a case reader sees is compared, and the difference says which."""
+    base = run([case("g1"), case("g2")])
+    other = json.loads(json.dumps(base))
+    change(other["cases"][0])
+    assert expected in case_differences(base, other)
+
+
+def test_a_missing_case_is_a_difference_both_ways() -> None:
+    """A case that ran in only one of the two runs is never silently ignored."""
+    two, one = run([case("g1"), case("g2")]), run([case("g1")])
+    assert case_differences(two, one) == ["g2: only in the first report"]
+    assert case_differences(one, two) == ["g2: only in the second report"]
+
+
+def test_a_difference_exits_1_and_a_bad_file_exits_2(tmp_path: Path, capsys) -> None:
+    """Exit codes match the rest of the command line: 1 for a finding, 2 for bad input."""
+    first = saved_report(tmp_path, "eval-20261026T110000Z.json")
+    second = saved_report(tmp_path, "eval-20261026T120000Z.json")
+    report = json.loads(second.read_text())
+    report["cases"][1]["answer"] = "changed"
+    second.write_text(json.dumps(report))
+    assert compare_reports(first, second) == 1
+    assert "DIFFERS: g2: answer differs" in capsys.readouterr().out
+    bad = tmp_path / "bad.json"
+    bad.write_text("{}")
+    assert compare_reports(first, bad) == 2
+
+
+def test_a_different_case_order_is_a_difference() -> None:
+    """Same cases, other order: the runs were not made the same way."""
+    a = run([case("g1"), case("g2")])
+    b = json.loads(json.dumps(a))
+    b["cases"].reverse()
+    assert case_differences(a, b) == ["the cases ran in a different order"]
+
+
+def test_a_report_compared_with_itself_is_refused(tmp_path: Path, capsys) -> None:
+    """A report always matches itself, so "identical" would prove nothing: exit 2."""
+    path = saved_report(tmp_path)
+    assert compare_reports(path, path) == 2
+    assert "both reports are" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("cases", "reason"),
+    [
+        ([{"id": "g1"}, {"id": "g1"}], "duplicate case ids"),
+        ([{"answer": "no id"}], "not a record with an id"),
+        ({"g1": {}}, "not a record with an id"),
+    ],
+)
+def test_a_report_with_bad_case_ids_is_not_a_report(tmp_path: Path, cases: Any, reason: str) -> None:
+    """Checked when the file is read, so every viewer refuses it the same way, with exit 2."""
+    path = tmp_path / "eval-x.json"
+    path.write_text(json.dumps({"provenance": {}, "aggregates": {}, "cases": cases}))
+    with pytest.raises(er.ReportInvalid, match=reason):
+        er.load_report(path)

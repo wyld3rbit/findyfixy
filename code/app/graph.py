@@ -48,7 +48,7 @@ Test it:  uv run pytest
 
 import time
 from collections.abc import Callable, Sequence
-from typing import Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -56,6 +56,11 @@ from langgraph.graph.state import CompiledStateGraph
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
 from app.events import Emit, no_emit
+
+if TYPE_CHECKING:
+    from contextlib import AbstractContextManager
+
+    from app.trace_adapter import EventSpans
 from app.investigate import analyse, content_text, format_evidence, investigation_prompt
 from app.llm import ollama_ask
 from app.settings import MissingEnvironment, load_env, read_models
@@ -354,20 +359,37 @@ def main() -> None:
     Configuration comes from `app.settings`. A missing model name stops the run
     loudly with the variable's name, not with a silent default.
     """
+    from contextlib import nullcontext
+
+    from app.trace_adapter import RunTracer
+    from app.tracing import command_trace
+
     load_env()
     try:
         models = read_models()
     except MissingEnvironment as err:
         raise SystemExit(f"error: set the environment variable {err}") from None
-    graph = build_graph(
-        ollama_ask,
-        small_model=models.small,
-        large_model=models.large,
-    )
-    for q in QUESTIONS:
+    with command_trace("triage cli", input=list(QUESTIONS)) as command:
+        # Each question is one FindyFixy run inside the command's trace.
+        runs = RunTracer(command.tracer) if command.tracer is not None else None
+        graph = build_graph(
+            ollama_ask,
+            small_model=models.small,
+            large_model=models.large,
+            emit=runs.wrap(no_emit) if runs is not None else no_emit,
+        )
+        for q in QUESTIONS:
+            _triage_one(graph, q, runs.run(q) if runs is not None else nullcontext())
+
+
+def _triage_one(graph: CompiledStateGraph, q: str, run: "AbstractContextManager[EventSpans | None]") -> None:
+    """Run one question, end its run trace (when tracing), print the triage and latency."""
+    with run as spans:
         start = time.perf_counter()
         result = graph.invoke({"question": q})
         latency = time.perf_counter() - start
+        if spans is not None:
+            spans.finish_run(output=result["triage"].model_dump(), model_used=result["model_used"])
         print(f"Q: {q}")
         t = result["triage"]
         print(f"A: {t.severity} | {t.component} | {t.next_action}")

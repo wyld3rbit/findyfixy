@@ -20,3 +20,4 @@ DATA = ROOT / "data"  # committed inputs: the corpus, the golden set, the demo b
 DOCS = ROOT / "docs"  # the architecture page the console serves
 EVALS = ROOT / "evals"  # committed evaluation baseline
 REPORTS = ROOT / "reports"  # generated evaluation reports (git-ignored)
+LANGFUSE_ENV = ROOT / "infra" / "langfuse" / ".env"  # the local trace backend's secrets (git-ignored)

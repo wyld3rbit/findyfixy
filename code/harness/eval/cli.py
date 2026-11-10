@@ -8,6 +8,8 @@ What it does
     a control flag      the negative control: a run the app builds to fail. Its
                         name is the app's (FindyFixy: `--no-recall`).
     --show-case ID      print one case of a saved report (`--report` picks the file)
+    --compare REPORT    compare REPORT with a second saved report (`--report`,
+                        default the newest), case by case; exit 1 on any difference
     --baseline-from F   freeze a saved report as the baseline, without running
 
 The attestation (harness/eval/attest.py)
@@ -66,9 +68,12 @@ from harness.eval.provenance import build_provenance, git_info, ollama_digest
 from harness.eval.report import (
     BaselineMissing,
     BaselineRefused,
+    ReportInvalid,
+    compare_reports,
     format_table,
     freeze_baseline,
     gate,
+    latest_report,
     load_baseline,
     show_case,
     write_baseline,
@@ -77,6 +82,8 @@ from harness.eval.report import (
 from harness.eval.runner import MAX_WORKERS, run_eval
 from harness.eval.stats import Report
 from harness.eval.sut import SystemUnderTest
+from harness.trace.scores import ScoreSink
+from harness.trace.tracing import Tracing
 
 
 class ConfigError(Exception):
@@ -93,12 +100,20 @@ class Session:
 
     `judge_model` is a name, not a judge: the harness builds the judge and
     fingerprints the same model, so the stamp and the scorer cannot disagree.
+
+    `tracing`, when the app has tracing configured, is the provider the app's
+    own spans go to; the harness puts its case and judge spans there too, so
+    both land in one trace. `scores` is where the harness sends each case's
+    scores. The app builds both in its composition root, which picks the
+    backend, and closes them when the session ends.
     """
 
     sut: SystemUnderTest
     cases: Sequence[Case]
     judge_model: str
     embed: Embed
+    tracing: Tracing | None = None
+    scores: ScoreSink | None = None
 
 
 @dataclass(frozen=True)
@@ -151,7 +166,7 @@ def live_runner(
     *,
     golden_path: Path,
     repo_dir: Path,
-    make_judge: Callable[[str], Judge] = make_ollama_judge,
+    make_judge: Callable[..., Judge] = make_ollama_judge,
     digest: Callable[[str], str] = ollama_digest,
     git: Callable[[Path], tuple[str, bool | None]] = git_info,
     now: Callable[[], datetime] = utc_now,
@@ -184,13 +199,17 @@ def live_runner(
             return run_eval(
                 session.cases,
                 sut=session.sut,
-                judge=make_judge(session.judge_model),
+                # With tracing, every judge call is a generation in its case's trace.
+                judge=(make_judge(session.judge_model, tracer=session.tracing.tracer())
+                       if session.tracing is not None else make_judge(session.judge_model)),
                 embed=session.embed,
                 provenance=provenance,
                 progress=progress,
                 workers=workers,
                 on_event=on_event,
                 should_stop=should_stop,
+                tracing=session.tracing,
+                scores=session.scores,
             )
 
     return run
@@ -211,7 +230,13 @@ def _parser(prog: str, control_flag: str, control_help: str) -> argparse.Argumen
     )
     parser.add_argument(control_flag, dest="negative_control", action="store_true", help=control_help)
     parser.add_argument("--show-case", metavar="ID", help="print one case from a saved report, with every judge decision")
-    parser.add_argument("--report", type=Path, help="the saved report for --show-case (default: the newest)")
+    parser.add_argument(
+        "--compare",
+        metavar="REPORT",
+        type=Path,
+        help="compare REPORT with --report (default: the newest) case by case, without running",
+    )
+    parser.add_argument("--report", type=Path, help="the saved report for --show-case or --compare (default: the newest)")
     parser.add_argument(
         "--baseline-from",
         metavar="REPORT",
@@ -248,6 +273,13 @@ def main(
 
     if args.show_case:
         return show_case(args.show_case, args.report, reports_dir)
+    if args.compare:
+        try:
+            second = args.report or latest_report(reports_dir)
+        except ReportInvalid as err:
+            print(f"error: {err}", file=sys.stderr)
+            return 2
+        return compare_reports(args.compare, second)
     if args.baseline_from:
         return freeze_baseline(args.baseline_from, baseline_path, legacy_control)
 
@@ -289,7 +321,8 @@ def main(
     timing = report.get("timing")
     if timing:
         print(
-            f"timing: {timing['wall_s']} s wall, {timing['workers']} worker(s), "
+            f"timing: {timing['wall_s']} s wall ({timing['answer_s']} s answering, "
+            f"{timing['judge_s']} s judging), {timing['workers']} worker(s), "
             f"{timing['cases_per_min']} cases/min"
         )
 

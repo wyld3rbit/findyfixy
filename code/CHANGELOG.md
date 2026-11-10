@@ -1,23 +1,15 @@
 # Changelog
 
-Newest entry first. Written so another agent can resume the work.
+Oldest entry first, apart from the early sections below. Written so another agent can resume the work.
 
 ## Conventions (read first)
 
 - Run everything from `code/`. Use `uv run`. Add packages with `uv add`. Never `pip install`.
 - No absolute local paths, usernames or emails in any file or commit. This repo is public.
 - Synthetic data only. Open-source licenses only. Pin versions and image tags.
-- Models: Qwen2.5 1.5B (small) and 7B (large) on Ollama. Names come from `.env`.
+- Models run on Ollama. Names come from `.env`; `record/models.md` lists the pulled IDs.
 - Plan before code: show the plan for each step and wait for approval.
 - Document all generated code for a learner at staff+ depth: a module docstring (what and why), docstrings on every function and class, and comments that explain trade-offs, failure modes and what changes at scale. Short sentences. No local paths or personal data in docs either.
-
-## Tracker log lines (for the learner to paste into tracker.html)
-
-Agents do not edit `tracker.html`. These lines are ready to add to its `log` array.
-
-- "Day 1 complete except the drill. Python pinned to 3.13. Router refactored with an injected model function, 9 routing tests that need no Ollama."
-- "Real-model rerun after the refactor: 0 of 5 escalated again. Confidence came back on mixed scales (0.95, 9.0, 100.0), so self-reported confidence is a weak signal."
-- "Personal data scrubbed from the course files. The Start in Claude Code button now works out its folder from the page address."
 
 ## Scrub of personal data (course folder)
 
@@ -30,9 +22,7 @@ Agents do not edit `tracker.html`. These lines are ready to add to its `log` arr
 - One git repo, rooted at the training folder (the one that holds `CLAUDE.md`). The code is in `code/`. There is no inner repo.
 - The four earlier commits were merged in under `code/`, so `git log` keeps the history.
 - One `.gitignore`, at the training root. Its patterns have no leading slash, so they match at any depth and cover `code/` too. The separate `code/.gitignore` was removed. Keep it to one file.
-- Daily notes live in `notes/` at the training root, not in `code/`. Moved with `git mv`, so history follows.
-- Root `README.md` tells a new reader how to start. No license file yet: the owner chooses one.
-- Not done: pushing to GitHub, and choosing a license.
+- Root `README.md` tells a new reader how to start. The license is in `LICENSE` and `NOTICE`.
 
 ## Day 3: memory I, ingestion (complete, 4 of 4)
 
@@ -552,11 +542,90 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 - The stale "Where we stopped" section from 2026-10-21 was removed; its still-current environment notes and the 2026-10-29 lessons entry are kept above.
 - Results are in `lessons/d05.md`.
 
-### Next
+### Day 6, step 0: test isolation for the privacy-scanner tests (2026-11-09)
 
-- Part 05 article and post (part of closing the day), then push and open the pull request.
-- Day 6: answer first and judge after, with per-phase timing, before Langfuse.
+- `tests/test_scan_private.py`: the `git()` helper now runs git with every `GIT_*` variable removed (`isolated_env()`). Before, a hook run under `git commit -a` set `GIT_INDEX_FILE` to the real repo's temporary index, the scratch repos staged into it, and 8 tests failed. `git commit -a` is safe again.
+- New test: `GIT_INDEX_FILE` set to a foreign path; a staged local path must still be blocked and the foreign index must not be created. Mutation: keeping the `GIT_*` variables fails it (1 failed, 55 passed); restored, 56 passed. The whole file also passes with `GIT_INDEX_FILE` exported to a foreign path. `make test`: 698 passed.
+
+### Day 6, step 1: answer first, judge after, with per-phase timing (2026-11-09)
+
+- Measured first: on the 16 GB machine Ollama 0.40.6 keeps one model loaded. Loading `qwen2.5:7b` (judge, 4.6 GB) unloaded `qwen3:4b-instruct` (answering, 2.9 GB) and the reverse, 1.9 to 3.2 s per load. Case by case that was 2 loads per case.
+- `harness/eval/runner.py`: two passes. The answer pass answers every case and scores its labels (`answer_case`); the judge pass runs the four metrics on every answered case (`score_case`). Workers and the stop check apply within each pass. A run-error case closes in the answer pass with no judge call. `latency_s` is still the answer alone. `timing` gains `answer_s` and `judge_s`. The judge sees the same prompts in the same order; a test proves it against the case-by-case sequence.
+- Events: every `case_answered` now comes before any `metric_scored`. `harness/eval/events.py` documents the order; the visualizer's badge says "answered" in the answer pass and `case_scored` names its own case. A stop during the answer pass now leaves the case answered but unscored (`tests/test_console.py`).
+- `--compare REPORT` (`make eval-compare REPORT=... [OTHER=...]`): two saved reports case by case (answers, contexts, labels, each metric's score and failed flag); exit 1 on any difference. Run on the 2026-10-26 and 2026-11-10 reports: identical, 30 cases.
+- Mutations, each caught: judging right after each answer (7 failed), no stop check in the judge pass (1), `judge_s` measured from the start (1), compare ignoring contexts (1), compare missing a case only in the second report (1). - Fixes from the independent review: the live panel took scores' case from the last `case_started`, so in the judge pass every score showed under case 30 (now from the event's id, with a replay test); `--compare` refuses the same file twice, which would always say identical; the comparison also checks question, reference, expected labels and case order; `load_report` refuses duplicate or missing case ids; the judge pass works on a non-optional answer type, a typed map helper, and one copy of each record. Not changed: the judge-pass stop message names its pass and counts answered cases, which is the accurate denominator. Each new check was broken once and caught. `make test`: 722 passed.
+- Live run `eval-20261110T064445Z`: gate pass, attestation written (38 files), identical case by case to `eval-20261110T025827Z`. Wall 846.4 s to 663.4 s (answer 84.3 s, judge 579.1 s). Median answer latency 5.50 s to 2.78 s: model loads had counted as answer time. One run each side.
+
+### Day 6, step 2: the Langfuse v4 stack (2026-11-09)
+
+- `code/infra/langfuse/docker-compose.yml`: the official file of Langfuse v4.72.0 (2026-10-29, the newest release before the 7-day cooldown; MIT outside `ee/`, unused). Changes: images pinned by digest; `redis:7` (Redis 7.4 is RSALv2/SSPL only, not OSI) replaced by Valkey 8.1.11 (BSD-3-Clause); every published port on 127.0.0.1 (upstream published 3000 and 9090 on all interfaces); Postgres, ClickHouse, Valkey and the worker publish nothing (Langfuse's Postgres would also clash with FindyFixy's 5432); telemetry off; no default secrets (`${NAME:?}`), the Valkey password out of the healthcheck command.
+- `code/infra/langfuse/new_env.py` (`make obs-secrets`): random secrets and a headless first start (org and project `findyfixy`, API keys, login `admin@example.com`), mode 0600, never overwritten. 5 tests in `tests/test_langfuse_env.py`, including that every `${NAME:?}` in the compose file is generated; mutations caught: a default secret put back, a secret dropped from the generator.
+- `make obs-up` / `make obs-down`. Colima restarted at 8 GB. Measured: health `{"status":"OK","version":"4.72.0"}`, the project API keys list project `findyfixy`, a wrong key gets 401, Valkey answers NOAUTH without its password. Memory: web 1.13 GiB, worker 657 MiB, ClickHouse 339 MiB, MinIO 141 MiB, Postgres 50 MiB, Valkey 10 MiB.
+- Images and Grype v0.121.0 scans (as a container against the registry, linux/arm64; critical/high):
+  - `langfuse:4.72.0@sha256:c311fd9d...` and `langfuse-worker:4.72.0@sha256:aa1724b9...`, RHEL 9.8 base: 0/3 each (libuuid CVE-2026-53613 and -53615, no fix; deepmerge-ts 7.1.5 GHSA-ggr8-5vv4-36mx, fixed in 8.0.0).
+  - `clickhouse-server:25.12.11.4@sha256:8a790dd3...`, Ubuntu 22.04: 0/3 (apt CVE-2026-109518; libssl3 CVE-2026-45447, -84782; Ubuntu fixes exist).
+  - `chainguard/minio@sha256:0a011000...` (Chainguard publishes only `latest`; this is its build of 2026-11-01, found by the build dates of its signed digests): 0/3 (mc CVE-2026-116591, glibc CVE-2026-84243, klauspost/compress GO-2026-6865).
+  - `valkey:8.1.11-alpine@sha256:2602ace2...`: 1/0 (zlib CVE-2026-4738, fixed in 1.4-r0). The Debian build had 0/20.
+  - `postgres:17.11-alpine@sha256:3540c036...`: 1/0 (the same zlib CVE). 17.10 had 9/75 (Debian) and 3/36 (Alpine), including 17 PostgreSQL server CVEs fixed in 17.11.
+  - **Decision (learner, 2026-11-09): Postgres 17.11 now, a named exception to the cooldown** (published 2026-11-06), for the 17 server CVEs. Alpine builds for Postgres and Valkey. Remaining findings accepted: local only, synthetic data, nothing reachable but 127.0.0.1:3000 and :9090. Rescan when a digest moves.
+- Seen in the web log: the image loads `dd-trace` (Datadog) and prints a diagnostic. No Datadog agent or key is configured, so it sends nothing anywhere reachable.
+
+### Day 6, step 3: tracing as a harness component (2026-11-09)
+
+- Packages: `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp-proto-http` 1.45.2 (Apache-2.0), pulling `protobuf` 7.36.2 (BSD-3-Clause), `googleapis-common-protos` 1.76.0 and the OpenTelemetry proto, common, http-transport and semantic-convention packages (Apache-2.0). No existing package moved. Release cooldown moved from 2026-10-17 to 2026-11-02; the three per-package exceptions it made redundant were removed. `make audit`: no known vulnerabilities, no unexpected `.pth` files.
+- `harness/trace/tracing.py`: `TraceConfig` (its `repr` hides the secret) and `Tracing`: a local (not global) `TracerProvider`, `BatchSpanProcessor` (1 s batches, 2,048-span queue that drops when full, 5 s export timeout), OTLP/HTTP to Langfuse's `/api/public/otel/v1/traces` with Basic auth.
+- `harness/trace/spans.py`: `SpanTree`. Parent is the innermost open span; closing a span ends spans opened inside it; `finish(error=...)` marks every open span and the root; None attributes are dropped (unknown is not 0); values cut at 20,000 characters. GenAI attribute names and the few `langfuse.*` names are defined once.
+- `app/trace_adapter.py`: `EventSpans` maps the run events onto spans (root per run, a span per node with recall as a retriever, a generation per model call, a tool span per tool call, validation/retry/route as events, the triage as the trace output). It never raises into a run: a mapping bug is counted in `errors`.
+- `app/llm.py` (`reply_from`, shared with `app/stress.py`) and `app/triage.py`: triage model replies now carry `input_tokens` and `output_tokens` from Ollama's usage, and `model_reply` reports them. Answers are unchanged; these are answer-path files, so the next gate run re-attests.
+- `app/settings.py` `read_tracing`: `TRACING=off`, else `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` (and `LANGFUSE_HOST`), else the keys in `code/infra/langfuse/.env`. No keys: off. The console prints `Tracing: on, to ...` or off, and flushes at exit.
+- Live check: one console run in live mode reached Langfuse as a trace; its `qwen3:4b-instruct` generation showed 71 input and 62 output tokens and 3.67 s latency. Langfuse v4 removed the v1 read API: `/api/public/traces` and `/api/public/observations` are 404, `/api/public/v2/observations` works (fields are opt-in with `fields=`).
+- Tests: `tests/test_harness_trace.py` (9: tree, close rules, errors, None, cut, secret, a hung exporter and a refusing port do not slow span creation) and `tests/test_trace_adapter.py` (14: all six fake scenarios through a traced console with 0 mapping errors, tree shape, tools, failure, tokens, mapping bug swallowed, `read_tracing`). Mutations, each caught: every span a child of the root (3 failed), `model_reply` unmapped (2), errors not marked (2).
+- Fixes from the independent review: two tool calls from one reply nested inside each other and swapped results (now siblings via `open(..., under="node")`, results matched in call order, and `close` ends only descendants); a tool call cut off by the turn cap looked like a lookup (now an error, "not run"); the local key pair could go to a remote `LANGFUSE_HOST` (the fallback is local-host only); half a key pair was silently ignored (`MissingEnvironment`); `TRACING=false` did not turn tracing off (off/0/false/no, anything unknown raises); a mapping bug left an orphan trace (it now ends as an error); scripted calls were named "model None"; per-span imports resolved once per run; one event branch instead of two, values cut. Accepted: Ctrl-C waits up to the 5 s export timeout when Langfuse is down, documented on `Tracing.close`. Mutations on three fixes, each caught. `make test`: 762 passed.
+
+### Day 6, step 4: eval cases as traces, with their scores (2026-11-09)
+
+- Score API checked first: Langfuse v4 accepts `POST /api/public/scores` (200); its score read routes are disabled in v4's events-only mode. The probe score was deleted.
+- `harness/eval/runner.py`: optional `tracing` and `scores`. Each case is one trace: "eval case <id>" is the current span while the system answers (the app's spans nest under it through OpenTelemetry's context) and ends with the labels and answer; in the judge pass a "judge" span joins the same trace (`SpanTree.follow`) with one child per metric. Label matches go as BOOLEAN scores, metric scores as NUMERIC; a failed metric is an error on its span and never a score. Records gain `trace_id`.
+- `harness/trace/scores.py`: `ScoreSink` and `LangfuseScores` (one background thread, bounded queue, deterministic score id per trace and name so a resend replaces, drops counted never raised). `harness/trace/spans.py`: `parent`, `follow`, `activate`; only a tree with no parent names the trace.
+- `harness/eval/cli.py`: `Session.tracing`; `live_runner` builds the score sink from it, closes it, and warns when scores were dropped.
+- `app/trace_adapter.py`: `EventSpans.start_run`/`finish_run`, and `RunTracer`: a thread-local open run that a wrapped shared emitter feeds, so parallel eval workers never share a trace. `app/eval_adapter.py`: `FindyFixy(run_tracer=...)` wraps each case's graph run. `app/eval_answers.py`: `open_live_session(tracing=...)` uses the caller's provider or starts one from `read_tracing` and closes it. The console shares its provider with its live eval runs.
+- Tests: `tests/test_harness_eval_tracing.py` (8: one trace per case with the app and judge spans inside, scores per trace, failed metric not scored, run error, tracing changes no number in the report, parallel workers, the sender's body and auth against a local HTTP server, a down backend drops without raising), 2 `RunTracer` tests and 1 adapter test. Mutations, each caught: case span not current while answering (3 failed), a failed metric sent as a score (1), the wrapped emitter not tracing (1), a nested run renaming the trace (1).
+- Fixes from the independent review: the score thread dies on a non-OSError response (now any failure is a counted drop); scores left when `close` times out are counted as dropped; the session's own tracer started before the `try` (now inside it); case traces carry the run's `session.id` and `eval.negative_control`, so control and real runs, and two runs, never mix; the score sink is built in the app's composition root and passed on `Session` (the harness no longer names Langfuse); `RunTracer` uses a ContextVar, which follows a copied context to another thread; `trace_id` goes through the record clash check; case and judge spans end even when a viewer raises; one finish path in `RunTracer.run`. `make test`: 779 passed.
+- Seen in Langfuse (learner, 2026-11-09): a console run with tools took 20.1 s: recall 3.8 s (first use), investigate 11.5 s (two model calls, 5.0 s and 6.5 s; the tool 0.015 s), small 4.8 s. Recorded as the Day 8 latency baseline; the levers (a one-call tool step, a warm reranker, a capped investigate reply) all move answers, so each needs a gate run.
+- Live run `eval-20261110T080005Z`: gate pass, attestation over 43 files (the tracing modules joined the eval path), identical case by case to `eval-20261110T064445Z`; 30 case traces in Langfuse in one session (`eval 2026-11-10T07:44:31+00:00`), no score dropped. Judge pass 848.0 s against 579.1 s the run before, answer pass unchanged (85.5 s against 84.3 s). Not yet explained; untested guess is memory pressure from the Langfuse stack next to the judge model. One run each side.
+
+### Day 6, step 5, part 1: judge calls and recall stages are spans (2026-11-10)
+
+- `harness/trace/spans.py`: `open(..., current=True)` makes a strictly nested span (a graph node, a metric) the current context until it closes, so code that makes its own spans nests them under it; a close from a context copy that no longer exists (LangGraph runs nodes in copies; a raising node is closed from outside) skips the reset quietly instead of logging a traceback. `generation(...)`: a span for one model call outside an event stream.
+- `harness/eval/judge.py`: `ChatText` (reply text with tokens and serving model), `traced_chat`; `make_ollama_judge(tracer=...)` makes every judge attempt a generation under its metric span. `live_runner` passes the session's tracer.
+- `app/retrieve.py`: an injected `Stage` hook around keyword search, vector search, merge and rerank (no tracing import there); `app/wiring.py` `stage_spans(tracing)` makes them spans; the console and the eval session pass it.
+- Fixed while testing: the console handed each event to the viewer before tracing, so a viewer could see a run end before its spans ended (a test that flushed on `run_failed` found an empty trace). Tracing now sees each event first.
+- Tests: current-span parenting and context restore, the quiet cross-context close, `generation`, a retried judge question as two generations under its metric with tokens, the four retrieval stages in order. Mutations caught: `current` ignored (2 failed), the rerank stage missing (1), judge calls untraced (1). `make test`: 784 passed.
+
+### Day 6, step 5, part 2: every command is a trace; users and sessions (2026-11-10)
+
+- `harness/trace/command.py` `CommandTrace` (one command, one trace, `step`s inside, a no-op without tracing); `app/tracing.py` `command_trace` builds the provider from settings and closes it (in its own module: inside `app/wiring.py` it made an import cycle with `app/graph.py`, which the architecture test caught).
+- Traced commands: `make triage` (each question a FindyFixy run inside the command), `make eval-retrieval` (each search a step with the recall stages inside), `make ingest` (plan, each embed batch), search, the direct and MCP tool paths (each run a step with tokens, turns, tool calls, correctness), and the MCP server (each tool call its own trace: a separate process with no trace context over stdio). The console's HTTP requests are traces with method, path and status, except `/version` (the dev poll) and `/favicon.ico`. `ingest`, `search` and `mcp_server` joined the architecture test's entry points.
+- `user.id` on every trace's top span through a span processor in the provider (`TRACE_USER`, default `local`). A hunt's runs share one `session.id`.
+- Live check: `make eval-retrieval` gave the Day 4 numbers exactly (recall@5 0.93, 0.97, 1.00; same MRR), median latency 15, 17 and 363 ms against 14, 15 and 341 then; Langfuse shows one "retrieval eval" trace (45.6 s, user `local`) with 81 searches per retriever and their stages.
+- Tests: `tests/test_observe_everything.py` (9). Mutations, each caught: `user.id` on every span (1 failed), a hunt session never cleared (1), `/favicon.ico` traced (1), the command span not current (1).
+- Found by the learner in Langfuse: 48 "mcp tool" traces from one `make test`. The MCP tests start the real server, which read the stack's keys and traced to the live backend; the MCP library starts the server with a minimal environment, so a client-side switch never reached it. Fixed twice over: `tests/conftest.py` sets `TRACING=off` for the session, and `app/mcp_client.py` passes the client's tracing settings (`TRACING_SETTINGS`) to the server. Proven by counting: 57 traces before a full `make test`, 57 after.
+- Fixes from the independent review: `command_trace` loads `code/.env` first (ingest, search and the retrieval eval ignored `TRACING=off` set there); the MCP server exports with a 1 s timeout (per-call mode starts and stops it on every call); the model loads are their own steps ("load embedder", "load retriever"); console `/events` is not traced as a request (an idle stream would skew request latency), the status code is an attribute, and one list of quiet routes with one path parser; `record_run` shared by the direct and MCP paths; precise types for the command and run parameters; a stale docstring pointer. `make test`: 797 passed.
+- Live run `eval-20261110T085644Z`: gate pass, attestation over 45 files, identical case by case to `eval-20261110T080005Z`; Langfuse shows judge-call generations inside each metric and recall's four stages inside the recall node. Judge pass 584.7 s with Langfuse running, in line with 579.1 s in the step 1 run, before Langfuse existed: Langfuse alone does not explain the 848 s judge pass (cause unknown).
+
+### Day 6: audit before the push of steps 0 to 5 (2026-11-10)
+
+Three independent read-only reviews (part 05 article, dead code and artifacts, docs and records), each finding checked before it was fixed.
+
+- Bug: an app meta key named `trace_id` became a run error only after `case_answered` had gone out with labels and no error, and `case_scored` never followed. The runner now adds its trace id before the system answers, and `RUNNER_KEYS` refuses the name in an app's answer meta whether tracing is on or off (before, an untraced run let the app's value through, so turning tracing on could change the gate) and in a golden case's meta (a loud error, like any case meta clash). The tests check the labels, both events and the untraced path; each failed on the code before the fix.
+- The independent review of this diff found that a golden case's `trace_id` meta now stopped the run, that tracing on and off disagreed, that a failed close in the eval session skipped closing the tracer (now in a `finally`), and that `_restore` must keep its path for a runtime context chosen with `OTEL_PYTHON_CONTEXT`; all fixed, plus two stale doc lines. `make test`: 799 passed.
+- Live run `eval-20261110T184932Z` on `0b725ef`: gate pass, attestation over 45 files, identical case by case to `eval-20261110T085644Z`; wall 678.0 s (answer 88.7 s, judge 589.3 s).
+- One home each: `app/tracing.py` `open_tracing` starts and closes the provider for every entry point (it was written four times: commands, the eval session, the console, the MCP server); `harness/trace/spans.py` `mark_failed` and `attribute_value` replace three and two copies, and the last hard-coded `langfuse.*` names now use the constants.
+- Removed: `command_trace(tracing=)` (no caller), the `None` command in `app/mcp_run.py`, the unused `attributes=` of `SpanTree.follow` and `generation`, the test-only `EventSpans.trace_ids` and `SpanTree.open_keys`.
+- `tests/test_mcp.py` counted MCP servers across the machine, so a second test run at the same moment failed it; it now counts its own children.
+- Docs: the claim that Langfuse was running during the 663.4 s comparison run was wrong (that run ended before the stack existed), corrected in the lesson and here; the Redis licence wording (Redis 7.4 is RSALv2/SSPL only; Redis 8 added AGPLv3); stale sections of this file; the READMEs (tracing in the root README, `make help` location, the import rule, the harness's two halves, download size about 8.5 GB); the tracing settings in `.env.example`; the Langfuse targets in `make help`.
+
+### Open items
+
 - Day 9 (container build): Linux installs pull PyTorch's CUDA libraries, about 3.1 GB (torch 555 MB, cuDNN 553 MB, cuBLAS 423 MB, Triton 248 MB), although nothing uses a GPU; CI's check job still takes about 2 minutes. Fix with the image: CPU-only PyTorch wheels for Linux through a uv source with a platform marker, then `make audit` and a supply-chain check of that index; measure the image before and after.
-- Done: CI fails an unattested change. Draft PR #6 changed one comment in `code/app/triage.py`; the `attestation` job failed in 6 s naming the file and `check` was skipped. Closed without merging.
-- Open: `tests/test_scan_private.py` builds throwaway git repos but inherits `GIT_INDEX_FILE` from a `git commit -a` hook run, so 8 of its tests read the real temporary index and fail; `git add` then `git commit` works. Fix: the fixture clears `GIT_*` variables for its subprocesses.
-- Open: batching context-recall verdicts alone (met the 0.9 bar; about 1.5 judge calls saved per case), untried.
+- Batching context-recall verdicts alone (met the 0.9 bar; about 1.5 judge calls saved per case), untried.

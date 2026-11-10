@@ -7,7 +7,7 @@
 #      how a hijacked package can persist. Only the known shims are allowed.
 # On any finding, stop and read it. Do not upgrade or remove to make it pass.
 
-.PHONY: audit hooks scan up down setup ingest console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-negative case golden verify-attestation
+.PHONY: audit hooks scan up down setup ingest console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative case golden verify-attestation obs-secrets obs-up obs-down
 
 # Memory for the Colima VM, in GB. 6 on most days, 8 on Langfuse days:
 #   make up COLIMA_MEMORY=8
@@ -135,6 +135,15 @@ case:
 	@test -n "$(ID)" || { echo "usage: make case ID=g07 [REPORT=reports/eval-<timestamp>.json]"; exit 2; }
 	uv run python -m app.eval_answers --show-case $(ID) $(if $(REPORT),--report $(REPORT))
 
+# eval-compare: compare a SAVED report with the newest one (or OTHER), case by
+# case: answers, contexts, labels, every metric score. Exit 1 on any difference.
+# The proof that a change which must not move a score did not. No run.
+#   make eval-compare REPORT=reports/eval-<timestamp>.json
+#   make eval-compare REPORT=reports/eval-<a>.json OTHER=reports/eval-<b>.json
+eval-compare:
+	@test -n "$(REPORT)" || { echo "usage: make eval-compare REPORT=reports/eval-<timestamp>.json [OTHER=reports/eval-<timestamp>.json]"; exit 2; }
+	uv run python -m app.eval_answers --compare $(REPORT) $(if $(OTHER),--report $(OTHER))
+
 # eval-freeze: freeze a SAVED report as the baseline (no run). The baseline is then
 # exactly the numbers you reviewed. Refuses a dirty-tree run, run errors, a high
 # judge failure rate and a no-recall run.
@@ -142,3 +151,22 @@ case:
 eval-freeze:
 	@test -n "$(REPORT)" || { echo "usage: make eval-freeze REPORT=reports/eval-<timestamp>.json"; exit 2; }
 	uv run python -m app.eval_answers --baseline-from $(REPORT)
+
+# obs-*: the local Langfuse v4 stack that receives traces (infra/langfuse/).
+# It needs Colima at 8 GB: COLIMA_MEMORY=8 make up, or restart Colima with
+# --memory 8. obs-secrets writes infra/langfuse/.env once (random secrets,
+# mode 0600, never overwritten: the volumes keep the first passwords).
+# obs-up refuses to start without it. obs-down stops the stack and keeps
+# its data; `docker compose -f $(LANGFUSE) down -v` deletes the data too.
+LANGFUSE := infra/langfuse/docker-compose.yml
+
+obs-secrets:
+	uv run python infra/langfuse/new_env.py
+
+obs-up:
+	@test -f infra/langfuse/.env || { echo "no infra/langfuse/.env: run make obs-secrets first"; exit 2; }
+	docker compose -f $(LANGFUSE) --env-file infra/langfuse/.env up -d --wait
+	@echo "Langfuse: http://127.0.0.1:3000  (login and password: infra/langfuse/.env)"
+
+obs-down:
+	docker compose -f $(LANGFUSE) --env-file infra/langfuse/.env down

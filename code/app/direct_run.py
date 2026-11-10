@@ -43,12 +43,16 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 
 from app.investigate import analyse, build_investigator, format_args
 from app.tools import make_deploys_tool
+
+if TYPE_CHECKING:
+    from harness.trace.command import CommandTrace, Step
 
 # Fixed so runs are comparable across the direct and MCP paths. The data
 # (data/deploys.json) holds two auth deploys near the boundary: 2.14.1 at 3h
@@ -164,6 +168,21 @@ HEADER = (
 )
 
 
+def record_run(step: "Step", stats: RunStats) -> None:
+    """What one run cost and did, on its step. Shared by the direct and MCP paths so they stay comparable."""
+    step.set(seconds=round(stats.seconds, 3), input_tokens=stats.input_tokens,
+             output_tokens=stats.output_tokens, turns=stats.turns, tool_calls=stats.tool_calls,
+             tool_errors=stats.tool_errors, hit_turn_cap=stats.hit_turn_cap, correct=stats.correct)
+
+
+def traced_run(command: "CommandTrace", name: str, once: Callable[[], RunStats]) -> RunStats:
+    """One run as a step of the command's trace, with what it cost and did."""
+    with command.step(name) as step:
+        stats = once()
+        record_run(step, stats)
+    return stats
+
+
 def main(argv: list[str] | None = None) -> None:
     """Run one warm-up and N measured runs against the small model, then print.
 
@@ -182,14 +201,17 @@ def main(argv: list[str] | None = None) -> None:
         ChatOllama(model=model_name).bind_tools([tool]), tool
     )
 
+    from app.tracing import command_trace
+
     print(f"model: {model_name}   task: {TASK}")
     print(HEADER)
-    print(format_row("warm-up", run_once(investigator)), " (excluded)")
-    runs = []
-    for i in range(1, n + 1):
-        stats = run_once(investigator)
-        runs.append(stats)
-        print(format_row(str(i), stats))
+    with command_trace("tool path direct", input=TASK, attributes={"findyfixy.model": model_name}) as command:
+        print(format_row("warm-up", traced_run(command, "warm-up", lambda: run_once(investigator))), " (excluded)")
+        runs = []
+        for i in range(1, n + 1):
+            stats = traced_run(command, f"run {i}", lambda: run_once(investigator))
+            runs.append(stats)
+            print(format_row(str(i), stats))
     s = summarise(runs)
     print(
         f"\ncalled the tool: {s['called_tool']}/{s['runs']}   "

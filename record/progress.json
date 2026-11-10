@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-09",
+  "updated": "2026-11-10",
   "plannedStart": "2026-10-17",
   "plannedEnd": "2026-11-17",
   "countdownStart": "2026-10-17T18:51:00",
@@ -140,6 +140,18 @@
     {
       "date": "2026-11-09",
       "entry": "Day 5 closed in code: the attested CI gate is built and the first live make eval-gate passed (30 of 30 cases, 0 run errors, means equal to the baseline: severity 0.77, faithfulness 0.79, relevancy 0.67, context recall 0.93, action quality 0.92; 846 s), attestation of 38 files committed. Batched judge verdicts were measured and rejected for faithfulness (agreement 0.839, kappa 0.52; context recall met the bar and stays untried alone). The run reproduced all 30 answers and scores of 2026-10-26 exactly. ADR 0006 written; ADR 0005 keeps its original picture. 697 tests pass. Next: the part 05 article, then the pull request."
+    },
+    {
+      "date": "2026-11-09",
+      "entry": "Day 6 steps 0 to 2. Scanner tests isolated from hook GIT_* variables (698 tests). Eval runs in two passes; live gate passed, identical case by case to the attested run, 663 s instead of 846 s (answer 84 s, judge 579 s), new attestation. Langfuse v4.72.0 stack up on 127.0.0.1:3000 with Valkey and Postgres 17.11, every image scanned with Grype."
+    },
+    {
+      "date": "2026-11-10",
+      "entry": "Day 6 steps 3 to 5: every console run, eval case and command is a Langfuse trace (judge calls as generations, recall stages, user.id, sessions for eval runs and hunts); scores on case traces. Two live gate runs, each identical case by case to the run before; the last one 670 s (answer 86 s, judge 585 s), attestation over 45 files. 797 tests pass."
+    },
+    {
+      "date": "2026-11-10",
+      "entry": "Audit before pushing Day 6 steps 0 to 5: part 05 article corrected (commit links, an interval claim), a trace_id run-error bug fixed, tracing setup in one place, dead code removed, stale docs fixed. Live gate run identical case by case to the previous run; attestation over 45 files; 799 tests pass."
     }
   ],
   "decisions": [
@@ -303,6 +315,34 @@
       "decision": "Fix PyTorch's CUDA download on Linux with the Day 9 container build: CPU-only wheels for Linux via a uv source with a platform marker, then make audit and a supply-chain check of the PyTorch index.",
       "rejected": "Change the lock now; split heavy dependencies into an optional group",
       "why": "CI cost today is about 2 minutes on a free public-repo runner; the 3.1 GB of unused GPU libraries matters for the container image, so the fix belongs with it."
+    },
+    {
+      "date": "2026-11-09",
+      "day": 6,
+      "decision": "Run the eval in two passes: answer every case, then judge every answer.",
+      "rejected": "Keep answering and judging case by case; serve the judge from a second machine",
+      "why": "Measured: the 16 GB machine holds one Ollama model at a time and each load takes 2 to 3 s, so case by case cost 2 loads per case. Two passes cut the run from 846 s to 663 s with identical scores."
+    },
+    {
+      "date": "2026-11-09",
+      "day": 6,
+      "decision": "Take Postgres 17.11 for Langfuse now, a named exception to the 7-day cooldown; Alpine builds for Postgres and Valkey.",
+      "rejected": "Postgres 17.10 until 17.11 clears the cooldown on 2026-11-13",
+      "why": "17.10 carries 17 PostgreSQL server CVEs fixed in 17.11; the 17.11 Alpine scan shows 1 critical (zlib) and 0 high."
+    },
+    {
+      "date": "2026-11-09",
+      "day": 6,
+      "decision": "Replace Langfuse's redis:7 with Valkey 8.1.11.",
+      "rejected": "Redis as pinned upstream (redis:7)",
+      "why": "Redis 7.4 is RSALv2/SSPL only, not an OSI license; Redis 8 added AGPLv3 but is a major version the upstream file does not use. Valkey is BSD-3-Clause and protocol compatible."
+    },
+    {
+      "date": "2026-11-09",
+      "day": 6,
+      "decision": "Everything the project does is observable: every entry point that touches a model, the database, a tool or the network makes a trace; judge calls and recall stages are their own spans; sessions for eval runs and hunts; user.id from a setting.",
+      "rejected": "Trace only console and eval runs, as the lesson first planned",
+      "why": "The learner's rule (2026-11-09): a harness that cannot see its own commands cannot explain them. Pure generators stay untraced: nothing happens at runtime."
     }
   ],
   "days": [
@@ -406,11 +446,14 @@
       "date": "2026-11-11",
       "title": "Observability",
       "file": "lessons/d06.md",
-      "outcome": "Langfuse traces with cost, latency, scores",
+      "outcome": "Tracing as a harness component (OpenTelemetry SDK, Langfuse v4 backend), scores on traces, faster eval with identical scores",
       "checks": [
-        "Full trace tree visible",
-        "Scores on traces",
-        "Three dashboard questions answered",
+        "Langfuse shows the full run tree with tokens and latency per model call",
+        "Eval scores visible on their traces",
+        "A run with the tracing backend down is not slowed",
+        "Full eval run identical case by case, report shows answer and judge time",
+        "Every command that touches a model, the database, a tool or the network is a trace",
+        "Three dashboard questions answered with numbers",
         "Drill under 90s"
       ],
       "done": []

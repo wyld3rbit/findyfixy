@@ -133,24 +133,36 @@ def main() -> None:
     Loads the embedding model and the reranker (about 1.3 GB of weights on the
     first run), and needs the database from `make up` with Day 3 ingested.
     """
-    from app.wiring import build_retriever, connect
+    from app.tracing import command_trace
+    from app.wiring import build_retriever, connect, stage_spans
 
     queries = load_queries()
-    with connect() as conn:
-        retriever = build_retriever(conn)
+    with command_trace("retrieval eval", input=f"{len(queries)} labelled queries") as command, connect() as conn:
+        with command.step("load retriever"):  # the embedder and the reranker: about 1.3 GB
+            retriever = build_retriever(conn, stage=stage_spans(command.tracing))
 
-        def ids(method: Callable[..., list]) -> Search:
-            return lambda query, k: [f.incident_id for f in method(query, k)]
+        def ids(method: Callable[..., list], label: str) -> Search:
+            """One retriever as a `Search`, each call a step with the retriever's stages inside."""
+
+            def search(query: str, k: int) -> list[str]:
+                with command.step(f"{label} search", {"query": query, "k": k}) as step:
+                    found = [f.incident_id for f in method(query, k)]
+                    step.set(found=", ".join(found))
+                return found
+
+            return search
 
         results = evaluate_all(
             {
-                "vector": ids(retriever.vector),
-                "hybrid": ids(retriever.hybrid),
-                "hybrid_rerank": ids(retriever.hybrid_rerank),
+                "vector": ids(retriever.vector, "vector"),
+                "hybrid": ids(retriever.hybrid, "hybrid"),
+                "hybrid_rerank": ids(retriever.hybrid_rerank, "hybrid_rerank"),
             },
             queries,
         )
-    print(format_table(results))
+        table = format_table(results)
+        command.output(table)
+    print(table)
 
 
 if __name__ == "__main__":

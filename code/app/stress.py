@@ -51,7 +51,7 @@ from typing import Any, Literal, get_args
 
 from langchain_ollama import ChatOllama
 
-from app.llm import answer_options
+from app.llm import answer_options, reply_from
 from app.triage import (
     CONFIDENCE_RULE,
     EVIDENCE_MARKER,
@@ -126,9 +126,6 @@ def make_ollama_ask(
             prompt = vague(prompt)
         elif stress == "percent_log":
             prompt = with_percent_note(prompt)
-        message = chat(model=model, **kwargs).invoke(prompt)
-        return Reply(
-            message.content, served_by=message.response_metadata.get("model")
-        )
+        return reply_from(chat(model=model, **kwargs).invoke(prompt))
 
     return ask

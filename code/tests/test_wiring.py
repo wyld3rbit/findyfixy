@@ -48,7 +48,7 @@ def install(monkeypatch, builds: list[int], fail_first: bool = False, delay: flo
     def fake_connect():
         return FakeConnection()
 
-    def fake_build(conn, embedder=None):
+    def fake_build(conn, embedder=None, stage=None):
         builds.append(1)
         time.sleep(delay)
         if fail_first and len(builds) == 1:

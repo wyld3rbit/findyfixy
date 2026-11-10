@@ -25,7 +25,10 @@ if TYPE_CHECKING:
 
     from app.graph import Recall
     from app.ingest import Embedder
-    from app.retrieve import Retriever
+    from contextlib import AbstractContextManager
+
+    from app.retrieve import Retriever, Stage
+    from harness.trace.tracing import Tracing
 
 
 def connect() -> "Connection":
@@ -44,17 +47,41 @@ def connect() -> "Connection":
     return conn
 
 
-def build_retriever(conn: "Connection", embedder: "Embedder | None" = None) -> "Retriever":
+def build_retriever(
+    conn: "Connection", embedder: "Embedder | None" = None, stage: "Stage | None" = None
+) -> "Retriever":
     """Hybrid retriever over every passage in the database.
 
     Loads the embedding model and the reranker (about 1.3 GB of weights). Pass an
-    `embedder` you already have to share one loaded model.
+    `embedder` you already have to share one loaded model. `stage` wraps each
+    retrieval stage (`stage_spans` makes them tracing spans).
     """
     from app.ingest import make_embedder
-    from app.retrieve import Retriever, load_passages, make_reranker, postgres_vector_search
+    from app.retrieve import Retriever, load_passages, make_reranker, no_stages, postgres_vector_search
 
     embedder = embedder or make_embedder()
-    return Retriever(load_passages(conn), postgres_vector_search(conn, embedder), make_reranker())
+    return Retriever(load_passages(conn), postgres_vector_search(conn, embedder), make_reranker(),
+                     stage=stage or no_stages)
+
+
+def stage_spans(tracing: "Tracing | None") -> "Stage | None":
+    """A retriever `Stage` that makes each stage a span under the current one, or None without tracing.
+
+    The recall node's span is current while recall runs (app/trace_adapter.py),
+    so the stages appear inside it. Outside any span they would each start a
+    trace of their own, which is why this is only built when tracing is on.
+    """
+    if tracing is None:
+        return None
+    from harness.trace.spans import LF_TYPE
+
+    tracer = tracing.tracer()
+
+    def stage(name: str) -> "AbstractContextManager[object]":
+        """One span named for the stage, current while it runs."""
+        return tracer.start_as_current_span(f"recall {name}", attributes={LF_TYPE: "span"})
+
+    return stage
 
 
 class SharedRetrieval:
@@ -78,9 +105,12 @@ class SharedRetrieval:
     and embedding (well under a second), never across a model call.
     """
 
-    def __init__(self, *, make_embedder: "Callable[[], Embedder] | None" = None) -> None:
-        """Hold nothing yet. `make_embedder` is for tests; the default loads the real model."""
+    def __init__(
+        self, *, make_embedder: "Callable[[], Embedder] | None" = None, stage: "Stage | None" = None
+    ) -> None:
+        """Hold nothing yet. `make_embedder` is for tests; `stage` traces the retrieval stages."""
         self._make_embedder = make_embedder
+        self._stage = stage
         self._lock = threading.Lock()
         self._embedder: "Embedder | None" = None
         self._conn: "Connection | None" = None
@@ -105,7 +135,7 @@ class SharedRetrieval:
             embedder = self._load_embedder()
             conn = connect()
             try:
-                self._retriever = build_retriever(conn, embedder)
+                self._retriever = build_retriever(conn, embedder, self._stage)
             except BaseException:
                 conn.close()
                 raise

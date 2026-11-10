@@ -132,7 +132,10 @@ def test_the_harness_does_not_work_out_paths_from_its_own_location() -> None:
 
 # Entry points build the real thing. Domain code takes its dependencies as
 # arguments and must not reach for the composition root or for configuration.
-ENTRY_POINTS = {"console", "eval_answers", "eval_retrieval", "graph", "direct_run", "mcp_run"}
+# Every module with a command `main`. `ingest`, `search` and `mcp_server` joined
+# on Day 6: each traces its command, so each reads tracing settings.
+ENTRY_POINTS = {"console", "eval_answers", "eval_retrieval", "graph", "direct_run", "mcp_run",
+                "ingest", "search", "mcp_server"}
 
 
 def _importers(target: str) -> set[str]:
@@ -151,8 +154,8 @@ def test_only_entry_points_import_the_composition_root_and_settings() -> None:
     If a deep module imported wiring, it could quietly open a database or load a
     model, and its tests would need one too.
     """
-    for target in ("wiring", "settings"):
-        extra = _importers(target) - ENTRY_POINTS - {"wiring", "settings"}
+    for target in ("wiring", "settings", "tracing"):
+        extra = _importers(target) - ENTRY_POINTS - {"wiring", "settings", "tracing"}
         assert extra == set(), f"{sorted(extra)} import app.{target} but are not entry points"
 
 

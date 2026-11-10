@@ -104,13 +104,16 @@ from app.events import Emit, Event, make_emit, make_stamped_emit
 from app.incidents import DEFAULT_PATH, Incident, load_incidents
 from app.paths import DOCS, EVALS, ROOT
 from app.settings import load_env, optional_models
-from app.wiring import SharedRetrieval
+from app.wiring import SharedRetrieval, stage_spans
 from app.investigate import build_investigator
 from app.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
 from app.tools import make_deploys_tool
 from app.graph import QUESTIONS, THRESHOLD, Recall, build_graph
 from app.llm import answer_options, ollama_ask
+from app.trace_adapter import EventSpans, tee
+from app.tracing import open_tracing
 from app.triage import RECALL_K, Ask, TriageError
+from harness.trace.tracing import Tracing
 
 Mode = Literal["live", "fake"]
 
@@ -240,6 +243,7 @@ class RunHub:
         clock: Callable[[], float] = time.perf_counter,
         live_eval: EvalSuite | None = None,
         baseline_path: Path = BASELINE_PATH,
+        tracing: Tracing | None = None,
     ) -> None:
         """Hold the wiring. Nothing runs until `start` or `start_eval`.
 
@@ -247,7 +251,11 @@ class RunHub:
         `main` when models are configured); None means live eval runs are
         refused as not configured. Fake eval runs are always available and
         need no model.
+
+        `tracing`, when set, turns every run into a trace (app/trace_adapter.py).
+        None leaves the run exactly as it was.
         """
+        self._tracing = tracing
         self._live_models = live_models
         self._live_eval = live_eval
         self._fake_eval = fake_eval(sleep, fake_delay)
@@ -271,6 +279,11 @@ class RunHub:
         self._finished = False
         # True while a run that honours /stop (a hunt, an eval) is in flight.
         self._stoppable = False
+
+    @property
+    def tracing(self) -> Tracing | None:
+        """The tracer provider runs and requests are traced with, or None."""
+        return self._tracing
 
     @property
     def tools_available(self) -> bool:
@@ -456,7 +469,11 @@ class RunHub:
         viewer has yet to read.
         """
         watch = _Watch(self._publish)
-        emit = make_emit(watch.sink, self._clock)
+        # Tracing is one more reader of the same events. It never blocks: spans
+        # are built in memory and exported on the exporter's own thread.
+        # Tracing first: the trace is complete before any viewer hears the run end.
+        sink = watch.sink if self._tracing is None else tee(EventSpans(self._tracing.tracer()), watch.sink)
+        emit = make_emit(sink, self._clock)
         # Confidence is at most 1.0 and the route keeps a record only when
         # confidence >= threshold. A threshold above 1.0 therefore sends every
         # valid small answer to the large model. Both models still run for real.
@@ -605,6 +622,16 @@ def wire(event: StreamEvent) -> dict[str, object]:
     return {"source": source, **asdict(event)}
 
 
+# Routes that add only noise: the dev page polls /version every second, and
+# browsers ask for /favicon.ico on every load. Neither is logged or traced.
+QUIET_ROUTES = ("/version", "/favicon.ico")
+# The event stream is not traced as a request either: its span would last as
+# long as a viewer stays connected (minutes during a hunt) and skew request
+# latency, and a viewer closing its tab would show up as a failed request.
+# The runs it streams are traced on their own ("findyfixy run").
+UNTRACED_ROUTES = (*QUIET_ROUTES, "/events")
+
+
 def make_handler(
     hub: RunHub, page: Path, dev_root: Path | None = None
 ) -> type[BaseHTTPRequestHandler]:
@@ -630,9 +657,34 @@ def make_handler(
             matter (`POST /run`, `GET /events`). Only those routes are quiet;
             everything else logs as before.
             """
-            if self.path.split("?")[0] in ("/version", "/favicon.ico"):
+            if urlparse(self.path).path in QUIET_ROUTES:
                 return
             super().log_message(format, *args)
+
+        # -- tracing ------------------------------------------------------
+        # Every request is a trace of its own ("GET /config", "POST /run"),
+        # with its method, path and status, so the console's own traffic is
+        # observable too, except `UNTRACED_ROUTES`. A run started by POST /run
+        # executes on its own thread and is its own "findyfixy run" trace; the
+        # request trace records only the call.
+        def send_response(self, code: int, message: str | None = None) -> None:
+            """Remember the status for the request's span, then send it."""
+            self._status = int(code)
+            super().send_response(code, message)
+
+        def _traced(self, method: str, route: Callable[[], None]) -> None:
+            """Run one route inside a request span when the console traces."""
+            path = urlparse(self.path).path
+            if hub.tracing is None or path in UNTRACED_ROUTES:
+                return route()
+            from harness.trace.command import CommandTrace
+
+            self._status = 0
+            attrs = {"http.request.method": method, "url.path": path}
+            with CommandTrace(hub.tracing, f"{method} {path}", attributes=attrs) as request:
+                route()
+                # An attribute, not only text, so the backend can filter by status.
+                request.set(**{"http.response.status_code": self._status})
 
         # -- helpers ------------------------------------------------------
         def _send(self, status: HTTPStatus, body: bytes, ctype: str) -> None:
@@ -663,6 +715,12 @@ def make_handler(
 
         # -- routes -------------------------------------------------------
         def do_GET(self) -> None:  # noqa: N802 - stdlib naming
+            self._traced("GET", self._get)
+
+        def do_POST(self) -> None:  # noqa: N802 - stdlib naming
+            self._traced("POST", self._post)
+
+        def _get(self) -> None:
             if not self._host_ok():
                 return self._json(HTTPStatus.FORBIDDEN, {"error": "bad host"})
             url = urlparse(self.path)
@@ -711,7 +769,7 @@ def make_handler(
                 return self._events(parse_qs(url.query))
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
-        def do_POST(self) -> None:  # noqa: N802 - stdlib naming
+        def _post(self) -> None:
             # Early rejects leave the body unread. Close the connection, or the
             # leftover bytes are parsed as the next request on a keep-alive socket.
             self.close_connection = True
@@ -825,7 +883,8 @@ def main(argv: list[str] | None = None) -> None:
     code changes (app/dev_reload.py). The child is started without the flag and
     with `FINDYFIXY_DEV` set, which turns on the page's auto-reload.
 
-    Like `app.graph.main`, this is the only place that reads `.env`. Missing
+    Like `app.graph.main`, it reads `.env` at the edge (`load_env`, and again in
+    `open_tracing`; loading never overrides a variable already set). Missing
     model names do not stop the server: fake mode needs none. Live mode then
     reports "not configured" instead of failing at startup.
     """
@@ -849,38 +908,44 @@ def main(argv: list[str] | None = None) -> None:
         )
     # One database connection, embedder and reranker for the whole process:
     # triage recall and the eval session share it, so a live eval loads no copy.
-    retrieval = SharedRetrieval() if models else None
-    live_eval_suite = None
-    if retrieval is not None:
-        from app.eval_answers import GOLDEN_PATH, open_live_session
-        from app.golden import load_golden
+    # One tracer provider for the process: triage runs and live eval runs share it.
+    # Closed last, which sends what is still queued.
+    with open_tracing() as tracing:
+        retrieval = SharedRetrieval(stage=stage_spans(tracing)) if models else None
+        live_eval_suite = None
+        if retrieval is not None:
+            from app.eval_answers import GOLDEN_PATH, open_live_session
+            from app.golden import load_golden
 
-        live_eval_suite = live_eval(
-            partial(open_live_session, retrieval=retrieval),
-            golden_path=GOLDEN_PATH,
-            repo_dir=ROOT,
-            progress=lambda msg: print(msg, file=sys.stderr, flush=True),
-            size=len(load_golden(GOLDEN_PATH)),
+            live_eval_suite = live_eval(
+                partial(open_live_session, retrieval=retrieval, tracing=tracing),
+                golden_path=GOLDEN_PATH,
+                repo_dir=ROOT,
+                progress=lambda msg: print(msg, file=sys.stderr, flush=True),
+                size=len(load_golden(GOLDEN_PATH)),
+            )
+        hub = RunHub(
+            tracing=tracing,
+            live_models=(models.small, models.large) if models else None,
+            incidents=load_incidents(DEFAULT_PATH),
+            investigator=investigator,
+            recall=retrieval.recall(RECALL_K) if retrieval else None,
+            live_eval=live_eval_suite,
         )
-    hub = RunHub(
-        live_models=(models.small, models.large) if models else None,
-        incidents=load_incidents(DEFAULT_PATH),
-        investigator=investigator,
-        recall=retrieval.recall(RECALL_K) if retrieval else None,
-        live_eval=live_eval_suite,
-    )
-    dev = ROOT if os.environ.get("FINDYFIXY_DEV") else None
-    server = serve(hub, port=port, dev_root=dev)
-    port = server.server_address[1]
-    print(f"Console: http://127.0.0.1:{port}  (Ctrl-C to stop)", flush=True)
-    live = "on" if hub.live_available else "off (set SMALL_MODEL, LARGE_MODEL)"
-    print(f"Live mode: {live}", flush=True)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
+        dev = ROOT if os.environ.get("FINDYFIXY_DEV") else None
+        server = serve(hub, port=port, dev_root=dev)
+        port = server.server_address[1]
+        print(f"Console: http://127.0.0.1:{port}  (Ctrl-C to stop)", flush=True)
+        live = "on" if hub.live_available else "off (set SMALL_MODEL, LARGE_MODEL)"
+        print(f"Live mode: {live}", flush=True)
+        traces = f"on, to {tracing.config.host}" if tracing else "off (start Langfuse: make obs-up)"
+        print(f"Tracing: {traces}", flush=True)
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.server_close()
 
 
 if __name__ == "__main__":

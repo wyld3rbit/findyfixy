@@ -34,13 +34,16 @@ Thread safety
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from app.golden import GoldenCase
 from app.graph import THRESHOLD, Recall
 from app.triage import RECALL_K, Prior, Triage, format_prior
 from harness.eval.case import Case
 from harness.eval.sut import Answer
+
+if TYPE_CHECKING:
+    from app.trace_adapter import EventSpans, RunTracer
 
 # (question, n) -> up to n prior incidents, best first. The live one wraps
 # `Retriever.hybrid_rerank` and `Retriever.brief`.
@@ -158,8 +161,16 @@ class FindyFixy:
         large_model: str,
         k: int = RECALL_K,
         threshold: float = THRESHOLD,
+        run_tracer: RunTracer | None = None,
     ) -> None:
-        """Hold the wiring. Nothing runs until `answer`."""
+        """Hold the wiring. Nothing runs until `answer`.
+
+        `run_tracer`, when tracing is on, opens a FindyFixy run trace around
+        each case's graph run; it nests under the harness's case span. The
+        graph's events must reach it through the emitter `make_graph` binds
+        (`RunTracer.wrap`).
+        """
+        self._run_tracer = run_tracer
         self._make_graph = make_graph
         self._candidates = candidates
         self._small_model = small_model
@@ -184,6 +195,13 @@ class FindyFixy:
         purpose: whatever the graph raised, the record must show the context
         the model had when it failed.
         """
+        if self._run_tracer is None:
+            return self._answer(case, None)
+        with self._run_tracer.run(case.question, {"findyfixy.case": case.id}) as spans:
+            return self._answer(case, spans)
+
+    def _answer(self, case: Case, spans: EventSpans | None) -> Answer:
+        """`answer`, ending the run trace (when there is one) with the triage or the error."""
         seen: list[Prior] = []
         twin_id = case.meta["twin_id"]
         recall = make_holdout_recall(self._candidates, case.meta["source_id"], self._k, seen)
@@ -194,7 +212,11 @@ class FindyFixy:
                 raise ValueError("graph returned no triage")
         except Exception as err:
             meta = {"recalled_ids": [p.incident_id for p in seen], "twin_recalled": False, "model_used": None}
+            if spans is not None:
+                spans.finish_run(error=f"{type(err).__name__}: {err}")
             return Answer.failed(f"{type(err).__name__}: {err}", meta)
+        if spans is not None:
+            spans.finish_run(output=triage.model_dump(), model_used=state.get("model_used"))
         recalled = [p.incident_id for p in seen]
         return Answer(
             text=render_answer(triage),

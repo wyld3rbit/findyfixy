@@ -219,8 +219,24 @@ def test_a_stopped_eval_stream_says_stopped_and_gives_no_verdict(tmp_path: Path)
     assert shown["text"]["b_eval"] == "stopped"
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs Node")
+def test_scores_in_the_judge_pass_show_under_their_own_case(tmp_path: Path) -> None:
+    """Scores arrive after every case is answered; the panel must name the case they belong to.
+
+    The stream is cut right after the first judged case's last score, so the
+    panel still shows progress, not the verdict.
+    """
+    events = fake_eval_stream(2)
+    first = next(e for e in events if e["kind"] == "case_scored")
+    cut = events[: events.index(first)]
+    shown = replay(tmp_path, cut, "result")
+    result = shown["text"]["result"]
+    assert result[result.index("Case") + 1] == f"1 of 2: {first['data']['id']}"
+
+
 def test_a_fake_eval_stream_has_the_shape_the_page_expects() -> None:
-    """Started, then per case started, answered, four metrics, scored, then finished."""
+    """Started; per case started and answered; then per case four metrics and scored; finished."""
     harness = [e["kind"] for e in fake_eval_stream(2) if e["source"] == "harness"]
-    per_case = ["case_started", "case_answered", *["metric_scored"] * 4, "case_scored"]
-    assert harness == ["eval_started", *per_case, *per_case, "eval_finished"]
+    answer_pass = ["case_started", "case_answered"]
+    judge_pass = [*["metric_scored"] * 4, "case_scored"]
+    assert harness == ["eval_started", *answer_pass, *answer_pass, *judge_pass, *judge_pass, "eval_finished"]

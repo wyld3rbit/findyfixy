@@ -22,6 +22,7 @@ What a staff+ reader should notice
 """
 
 import importlib.util
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -169,8 +170,23 @@ def test_push_ranges_for_a_new_branch_an_update_and_a_delete():
 pytestmark_git = pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
 
 
-def git(cwd, *args, env=None):
-    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, env=env)
+def isolated_env():
+    """Return a copy of the environment with every GIT_* variable removed.
+
+    Git sets variables such as GIT_INDEX_FILE and GIT_DIR while it runs a hook.
+    Under `git commit -a` the index variable points at a temporary index of the
+    REAL repo. A child `git` inherits it and silently stages into that index,
+    not the scratch repo's own. Stripping the whole GIT_* family, not just the
+    one name seen failing, also covers GIT_DIR, GIT_WORK_TREE and
+    GIT_OBJECT_DIRECTORY, which redirect a child git the same way.
+    """
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
+def git(cwd, *args):
+    """Run git in a scratch repo, isolated from any git process that started pytest."""
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
+                          env=isolated_env())
 
 
 @pytest.fixture
@@ -184,7 +200,7 @@ def repo(tmp_path):
 
 
 def scan(root, *args, home=None):
-    env = {"PATH": __import__("os").environ["PATH"], "HOME": str(home or root.parent / "h"),
+    env = {"PATH": os.environ["PATH"], "HOME": str(home or root.parent / "h"),
            "USER": "qq", "LOGNAME": "qq"}
     return subprocess.run(["python3", str(TOOL), *args], cwd=root, capture_output=True,
                           text=True, env=env)
@@ -255,6 +271,17 @@ def test_history_finds_a_bad_commit_and_a_bad_author(repo):
     assert out.returncode == 1
     assert "a.txt:1: local_path" in out.stderr and "metadata author" in out.stderr
     assert SOMEONE not in out.stdout + out.stderr
+
+
+def test_an_inherited_git_index_does_not_leak_into_the_scratch_repo(repo, tmp_path, monkeypatch):
+    # Simulates pytest started from a hook under `git commit -a`: git has set
+    # GIT_INDEX_FILE to an index that belongs to another repo. If a helper
+    # inherited it, the file would be staged there, the scratch repo's own
+    # index would stay empty, and the scan would pass a file it must block.
+    monkeypatch.setenv("GIT_INDEX_FILE", str(tmp_path / "foreign-index"))
+    stage(repo, "a.txt", f"{PATH}\n")
+    assert scan(repo, "--staged").returncode == 1
+    assert not (tmp_path / "foreign-index").exists()
 
 
 def test_a_clean_history_passes(repo):

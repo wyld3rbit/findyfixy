@@ -68,8 +68,22 @@ def ollama_ask(model: str, prompt: str) -> str:
     pulled (404), or the server stalls past the timeout. Nothing here retries.
     """
     llm = ChatOllama(model=model, format=Triage.model_json_schema(), **answer_options())
-    message = llm.invoke(prompt)
-    # Ollama names the model that served the request in its response. Keep it
-    # next to the text, so a log can show what ACTUALLY answered, not only what
-    # we asked for. Absent metadata gives None (unknown), never a guess.
-    return Reply(message.content, served_by=message.response_metadata.get("model"))
+    return reply_from(llm.invoke(prompt))
+
+
+def reply_from(message: Any) -> Reply:
+    """The `Reply` for one chat message: its text, the model that served it, and its tokens.
+
+    Ollama names the model that served the request in its response. Keep it
+    next to the text, so a log can show what ACTUALLY answered, not only what
+    we asked for. The token counts come from the same response
+    (`prompt_eval_count` and `eval_count`, which langchain reports as
+    `usage_metadata`). Absent metadata gives None (unknown), never a guess.
+    """
+    usage = message.usage_metadata or {}
+    return Reply(
+        message.content,
+        served_by=message.response_metadata.get("model"),
+        input_tokens=usage.get("input_tokens"),
+        output_tokens=usage.get("output_tokens"),
+    )

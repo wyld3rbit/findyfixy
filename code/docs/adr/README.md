@@ -1,6 +1,6 @@
 # Architecture decision records
 
-This project is a prototype that tests whether all 3 levels of AI-assisted engineering are reachable today with an open-source harness. It keeps changing. Each record here covers one phase of the build and shows the system as it stood when the phase closed.
+This project is a prototype harness for an LLM app, built with open-source tools. It keeps changing. Each record here covers one phase of the build and shows the system as it stood when the phase closed.
 
 A record has a decision, a diagnosis, guiding policies, coherent actions, a build-buy-adopt call, a staffing rule, what would change the decision, evidence and limits. The structure follows a standard engineering strategy shape.
 
@@ -15,4 +15,4 @@ Day 5 was rebuilt after ADR 0005 was accepted, so ADR 0006 records the rebuilt p
 | [0003](0003-incident-memory-in-postgres.md) | Day 3 | Store incident memory in Postgres with pgvector | `21b4c4a` |
 | [0004](0004-hybrid-retrieval-with-reranker.md) | Day 4 | Retrieve with hybrid search and a reranker | `cd9283d` |
 | [0005](0005-gate-releases-on-measured-answer-quality.md) | Day 5 | Gate releases on measured answer quality | `1e7f27a` |
-| [0006](0006-eval-gate-as-harness-component-attested-in-ci.md) | Day 5, rebuilt | The eval gate is a harness component, attested in CI | the commit that adds it |
+| [0006](0006-eval-gate-as-harness-component-attested-in-ci.md) | Day 5, rebuilt | The eval gate is a harness component, attested in CI | `6f9e3ee` |

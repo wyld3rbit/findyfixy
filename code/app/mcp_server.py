@@ -31,10 +31,13 @@ What changes at scale
 """
 
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
+
+if TYPE_CHECKING:
+    from harness.trace.tracing import Tracing
 
 from app.tools import (
     DEFAULT_DEPLOYS_PATH,
@@ -45,12 +48,18 @@ from app.tools import (
 )
 
 TOOL_NAME = "get_recent_deploys"
+SERVER_EXPORT_TIMEOUT_S = 1.0
 # Same text the direct tool shows the model (see make_deploys_tool in tools.py).
 TOOL_DESCRIPTION = "List recent deploys of one service, newest first."
 
 
-def build_server(path: Path = DEFAULT_DEPLOYS_PATH) -> FastMCP:
+def build_server(path: Path = DEFAULT_DEPLOYS_PATH, tracing: "Tracing | None" = None) -> FastMCP:
     """Build the server. Nothing runs until `.run()`. `path` is injected for tests.
+
+    With `tracing`, every tool call is a trace of its own ("mcp tool ..."):
+    the server is a separate process, and MCP over stdio carries no trace
+    context from the client, so its spans cannot join the client's trace.
+    The call's arguments and result are on it.
 
     FastMCP derives the tool's argument schema from the function signature, so
     the annotations below must carry the same constraints as `DeploysArgs`.
@@ -68,14 +77,26 @@ def build_server(path: Path = DEFAULT_DEPLOYS_PATH) -> FastMCP:
         ],
     ) -> str:
         """Run the shared function. Returns JSON text, like the direct tool."""
-        return get_recent_deploys(service, hours, path=path)
+        from harness.trace.command import CommandTrace
+
+        with CommandTrace(tracing, f"mcp tool {TOOL_NAME}", input={"service": service, "hours": hours}) as command:
+            result = get_recent_deploys(service, hours, path=path)
+            command.output(result)
+        return result
 
     return server
 
 
 def main() -> None:
-    """Serve over stdio until the client closes the connection."""
-    build_server().run(transport="stdio")
+    """Serve over stdio until the client closes the connection, tracing each tool call when configured."""
+    from app.tracing import open_tracing
+
+    # A short export timeout: in per-call mode every tool call starts and stops
+    # this process, and the client stops waiting for it after a grace period.
+    # With the backend down, a 5 s flush on exit would slow every call and the
+    # client could kill the process before the span is sent.
+    with open_tracing(export_timeout_s=SERVER_EXPORT_TIMEOUT_S) as tracing:
+        build_server(tracing=tracing).run(transport="stdio")
 
 
 if __name__ == "__main__":
