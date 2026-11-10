@@ -1,0 +1,69 @@
+{
+  "created_utc": "2026-11-10T02:58:27+00:00",
+  "files": {
+    "app/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "app/corpus.py": "9ca21e617d785967727cc5b5ff00b021dede5208158c121cdde6d36c3a2beb3d",
+    "app/eval_adapter.py": "9ef21e1084d7b869e5e979eb36aace2bfd340fe672be438101111a6c29c2f19d",
+    "app/eval_answers.py": "30d2269dee4f30f3d3036c3b66fa59acba9ea26063a4042422d6679a5dde2c8b",
+    "app/events.py": "d73de4d4a47f27376177699898e77a310177c73a45929b1007e8a2bf42c45eee",
+    "app/golden.py": "b699fa7a4494ffb20430fea0e76c26319f096ec68363803d89db62ee92660c72",
+    "app/graph.py": "dc6906d2f608b2d3b4d424e4b76e7cd66bb5f0e9b38830680c470eacbf2fab97",
+    "app/ingest.py": "552cbfe09373167eb997ae93404e2d38ab8919806381196ea4a05484f49710ba",
+    "app/investigate.py": "05a658c146bb60a2c23aa2e2b589c0ca86daf2151ac05fcfcd24b69cf62435ce",
+    "app/llm.py": "4eca682383523e50e506cb5dba9802140ec29b0154bb64c86506c6126193868c",
+    "app/paths.py": "833bf263f1511fb282c54055664a443555abbe5ec47fc855edc689f0205e8f9e",
+    "app/retrieve.py": "52540567a234c42d578c9996f40f75d0ab694d2ca10ef1715f06d2a1d72efd89",
+    "app/search.py": "2b1def3b3cc24ff05332c07c20bbcf5c2fcb0ceefa4a94d1c75c7bd4c2e7f695",
+    "app/settings.py": "c09bf2151c142d0144125aae4a06742620e53a05bb60d25ac4a9a1295a96bdc3",
+    "app/tools.py": "aa70f11b1b3a2dc262692a4a723fc7fb3a6e8daa3a7b8684e51c66719fc0d018",
+    "app/triage.py": "ad808aade76063d98dbd25be4be51b288148ec826fd363c5579ba9c5c48622c0",
+    "app/wiring.py": "efd57793c3875b481002c52d0ca267879a24d9e8ed1231aeebabe0e2cbee59fa",
+    "data/deploys.json": "c1c9fa59e3c07706a618dc5d65a461b34a08c71b50491cfb537713e135e9b2f8",
+    "data/golden.jsonl": "2d005967149bbc1fc3e9572ba042a5edbac13e471f3b4ffc9cbbb4a7d1d22a1f",
+    "data/incidents.json": "9aa661d01b6fe69778911f8383132df2cf187299f078ebe893ea27a6080bacc8",
+    "data/incidents.jsonl": "8234025bde5ffdf187c83acb35840706fa769fd966fb6c56094a42c3ef0a233f",
+    "data/retrieval_eval.jsonl": "8d8d39d44b26fc2650e0803cf7125f736401507423427159208459caea192291",
+    "docker-compose.yml": "509a688649b37b63f52b63fd158f473f7cae0f4dbaad1f0c9f60fb981d78f386",
+    "evals/baseline.json": "4d75a109152f51d6be6fb856f8c87073a0bf659a07075ae16dbd8024612c07eb",
+    "harness/__init__.py": "2009c270a5d93b102fe338306a824b6e8e61702833f4cd1754eff2a000ac2d72",
+    "harness/eval/__init__.py": "b96ae8ce8c2d4b74b1181def7796eda466a34d7daf14f84b1db68164192eb2ae",
+    "harness/eval/attest.py": "c3c1d8a53e198845a7887ff0811b71c7cda245b296190255cd9f0bc6a66c74f4",
+    "harness/eval/case.py": "bc88eff221e5e4f37f4821139fa6911f2a10ea5e1010f5ce2f7a910d675db4ef",
+    "harness/eval/cli.py": "0a60f92a22e2eed38a38814b15404e83b4ebccade9e59f9f6fbd2eced48c303e",
+    "harness/eval/events.py": "0fdd90f3f20631de77aa4869ee3bea713e0c8cd9ce4e4ab2353875d1634006ab",
+    "harness/eval/judge.py": "a053fdb96473ffd2c3eea1b071e23c6dd62a8cb68ddad570a696e222ffe2ff3b",
+    "harness/eval/metrics.py": "cf37f46e1922e4b7901d0e77e0f368aed7a52667b97f7b200002757da2e67865",
+    "harness/eval/provenance.py": "8febd4d4d9967a05bd9e212f6bcffcbb8ecdd5aa5f8504609184195ec08256cb",
+    "harness/eval/report.py": "f9cc2a6c88ebb8e60fe0818c6dd2613d3b3dbcc638e50cf1ff33a7c1990f5950",
+    "harness/eval/runner.py": "af2fd062ac9edda6ef5d704cdca70835120bc308eb4b59ab3bd8daced9b93a2b",
+    "harness/eval/stats.py": "91a283da97de3ef1777c428d8fe3407e1a87dea5e2e1827ee51dcedffdecacff",
+    "harness/eval/sut.py": "94281a8bb57696ac321da883fab938f1f22ccabe2386a11ea3c0deebbd36feee",
+    "uv.lock": "2cc50ccf950b9ad5a2b2cc2bcc85e747f68f951175a1e97d18f44e9d2c4ebfa5"
+  },
+  "fingerprint": "cf46d03f0229f9ff58f3ea3d3cb9cf0dcf966bf0623a2c527f97adb7cdba09a8",
+  "inputs": {
+    "entry_modules": [
+      "app.eval_answers"
+    ],
+    "extra_files": [
+      "data/",
+      "evals/baseline.json",
+      "uv.lock",
+      "docker-compose.yml"
+    ]
+  },
+  "report": {
+    "name": "eval-20261110T025827Z.json",
+    "sha256": "1875a42efb4e6065555d857ae49caaaceeafd819336ce78b9cd95bfc15dc11a4"
+  },
+  "run": {
+    "git_sha": "b1fe199",
+    "judge_digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+    "judge_model": "qwen2.5:7b",
+    "large_model": "qwen3:4b-instruct",
+    "small_model": "qwen3:4b-instruct",
+    "timestamp_utc": "2026-11-10T02:44:21+00:00"
+  },
+  "verdict": "pass",
+  "version": 1
+}
