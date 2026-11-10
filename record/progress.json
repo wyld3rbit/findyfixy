@@ -132,6 +132,10 @@
     {
       "date": "2026-11-08",
       "entry": "Day 4 close-out: the RRF explanation, the drill answer and the evidence line were written by Claude at the learner's request and marked as such in notes/day4.md and notes/evidence.md, so self-check item 2 stays unticked. The pattern size was corrected in notes/day3.md, notes/day4.md and ADR 0004 (9 originals per pattern plus any seeded twins). The retrieval eval re-run today matched every quality number (recall@5 0.93, 0.97, 1.00). Blog parts 03 and 04 were rewritten and peer reviewed; part 03 is scheduled for 2026-11-10."
+    },
+    {
+      "date": "2026-11-09",
+      "entry": "Lessons became the single source of truth (notes folded in) and all docs moved to code/docs. Day 5 rebuilt harness-first: the eval gate moved into code/harness/eval behind a SystemUnderTest interface with FindyFixy as its first consumer; the saved final run still passes, the no-recall control fails with the same 8 problems, and re-freezing reproduces the baseline byte for byte. The visualizer now has a harness lane and a live Eval run mode, with tests that fail if a box claims code that does not exist; 650 product tests pass. Blog part 03 published, part 04 scheduled for 2026-11-10. Next: Day 5 step 4, the attested CI gate."
     }
   ],
   "decisions": [

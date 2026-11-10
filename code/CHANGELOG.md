@@ -578,6 +578,10 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 - A fresh-agent review found 10 issues; all are fixed. An eval run can be stopped between cases (it ends with `eval_failed`, reason "stopped"), and POST /stop now says `false` when nothing can stop. The page test replays the unmodified fake stream, sped up through the page's own reduced-motion setting. The case limit comes from the golden set's size. `SharedRetrieval` in `app/wiring.py` gives the console one embedder, reranker and connection for both triage and eval runs, instead of a second copy of about 1.3 GB. One stamped emitter (`app/events.py`) serves app and harness events. A root `.gitattributes` keeps the frozen ADR pictures byte-exact on any clone.
 - Tests: `make test` 650 passed, 14 deselected. `make check` OK. The equivalence proof still passes.
 
+### README gif: a live eval run (2026-11-09)
+
+- `code/docs/demo.gif` now shows a live Eval run of 2 golden cases (g01, g02) in the two-lane visualizer: Qwen3 4B-instruct answering, Qwen2.5 7B judging, 0 run errors, ending with "subset, gate not applied". Recorded from headless Chrome through its DevTools protocol (no extension), 64 s of run time, unchanged frames dropped and waits shortened to 28.8 s, 679 KB. The README caption, intro and "Try it" now describe the harness and the Eval run mode.
+
 ### Next
 
 - Day 5 step 4: the attested CI gate (`lessons/d05.md`).

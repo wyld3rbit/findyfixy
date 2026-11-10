@@ -1,10 +1,12 @@
 # FindyFixy
 
-![The visualizer on a live run: recall, the deploy-lookup tool, the small model, then the large model](code/docs/demo.gif)
+![The visualizer on a live eval run: two golden cases move through FindyFixy while the harness scores them](code/docs/demo.gif)
 
-*A live run in the visualizer (`make console`, real models through Ollama, escalation forced). The waiting stretches are sped up; the console was warmed first.*
+*A live eval run of 2 golden cases in the visualizer (`make console`, Qwen3 4B-instruct through Ollama, Qwen2.5 7B as the judge). Top lane: the harness. Bottom lane: FindyFixy. Two cases are a subset, so the gate is not applied. The waiting stretches are sped up.*
 
 FindyFixy is a prototype incident-triage assistant. You paste in an incident report and it returns a severity, the likely component and a first action, along with the most similar past incidents and what fixed them. It runs on one machine with open-source models and synthetic data.
+
+FindyFixy is also the test subject for a harness: the controls that wrap a model so its output can be trusted. The first control is an eval gate in `code/harness/`. It scores any app that plugs into its interface and blocks a release that makes answers worse. It never imports FindyFixy.
 
 ## Run it
 
@@ -22,11 +24,11 @@ make down                         # when you are done
 
 ## Try it
 
-In the page, pick Live mode, choose an incident or paste your own report, and press Run. Fake mode needs no model and no database.
+In the page, pick Triage run to answer one incident, or Eval run to score FindyFixy on golden cases with known answers. Pick Live mode and press Run. Fake mode needs no model and no database.
 
 ```bash
 make triage           # triage five fixed questions in the terminal
-make eval             # score the assistant on 30 test cases (live models, minutes)
+make eval             # score FindyFixy on 30 golden cases through the harness (live models, minutes)
 make case ID=g07      # one case end to end: the alert, the answer, every judge decision
 make test             # the product tests
 make help             # everything else
