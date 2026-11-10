@@ -17,6 +17,7 @@ What a staff+ reader should notice
 from __future__ import annotations
 
 from pathlib import Path
+import threading
 import time
 from typing import Any
 
@@ -309,3 +310,83 @@ def test_the_local_keys_are_never_sent_to_another_host(tmp_path: Path, monkeypat
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("LANGFUSE_HOST", "https://tracing.example.com")
     assert read_tracing(stack_env=env) is None
+
+
+# ---- RunTracer: eval cases, one shared emitter ------------------------------------
+
+
+def test_events_reach_only_the_run_open_on_the_emitting_thread() -> None:
+    """Two threads share one wrapped emitter; each run's trace holds only its own thread's events."""
+    from app.trace_adapter import RunTracer
+
+    exporter = InMemorySpanExporter()
+    tracing = Tracing.start(CONFIG, exporter=exporter)
+    runs = RunTracer(tracing.tracer())
+    seen: list[str] = []
+    emit = runs.wrap(lambda kind, **data: seen.append(kind))
+    barrier = threading.Barrier(2, timeout=5)
+
+    def case(node: str) -> None:
+        """One run on this thread: enter and leave one node, interleaved with the other thread."""
+        with runs.run(f"question {node}") as spans:
+            barrier.wait()
+            emit("node_entered", node=node, model=None)
+            barrier.wait()
+            emit("node_exited", node=node, model=None)
+            spans.finish_run(output={"node": node})
+
+    threads = [threading.Thread(target=case, args=(n,)) for n in ("small", "large")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    emit("route", target="x")  # no run open on this thread: emitted, not traced
+    tracing.flush()
+    spans = list(exporter.get_finished_spans())
+    for node in ("small", "large"):
+        node_span = next(s for s in spans if s.name == f"node {node}")
+        root = next(s for s in spans if s.context.span_id == node_span.parent.span_id)
+        assert root.attributes["langfuse.observation.input"] == f"question {node}"
+    assert seen.count("node_entered") == 2 and "route" in seen
+    tracing.close()
+
+
+def test_a_case_run_nests_under_the_span_current_on_its_thread() -> None:
+    """Inside the harness's case span, the app's run is a child in the same trace and does not rename it."""
+    from app.trace_adapter import RunTracer
+    from harness.trace.spans import LF_TRACE_NAME, SpanTree
+
+    exporter = InMemorySpanExporter()
+    tracing = Tracing.start(CONFIG, exporter=exporter)
+    case_tree = SpanTree(tracing.tracer(), "eval case g1")
+    with case_tree.activate(), RunTracer(tracing.tracer()).run("q") as spans:
+        spans.finish_run(output={})
+    case_tree.finish()
+    tracing.flush()
+    by = {s.name: s for s in exporter.get_finished_spans()}
+    assert by["findyfixy run"].parent.span_id == by["eval case g1"].context.span_id
+    assert by["findyfixy run"].context.trace_id == by["eval case g1"].context.trace_id
+    assert LF_TRACE_NAME not in by["findyfixy run"].attributes
+    tracing.close()
+
+
+def test_the_open_run_follows_a_copied_context_to_another_thread() -> None:
+    """A node run on an executor with the context copied (as LangGraph does) still lands in the run."""
+    import contextvars
+
+    from app.trace_adapter import RunTracer
+
+    exporter = InMemorySpanExporter()
+    tracing = Tracing.start(CONFIG, exporter=exporter)
+    runs = RunTracer(tracing.tracer())
+    emit = runs.wrap(lambda kind, **data: None)
+    with runs.run("q") as spans:
+        ctx = contextvars.copy_context()
+        worker = threading.Thread(target=ctx.run, args=(emit, "node_entered"), kwargs={"node": "small", "model": None})
+        worker.start()
+        worker.join()
+        emit("node_exited", node="small", model=None)
+        spans.finish_run(output={})
+    tracing.flush()
+    assert "node small" in {s.name for s in exporter.get_finished_spans()}
+    tracing.close()

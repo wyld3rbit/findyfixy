@@ -82,6 +82,8 @@ from harness.eval.report import (
 from harness.eval.runner import MAX_WORKERS, run_eval
 from harness.eval.stats import Report
 from harness.eval.sut import SystemUnderTest
+from harness.trace.scores import ScoreSink
+from harness.trace.tracing import Tracing
 
 
 class ConfigError(Exception):
@@ -98,12 +100,20 @@ class Session:
 
     `judge_model` is a name, not a judge: the harness builds the judge and
     fingerprints the same model, so the stamp and the scorer cannot disagree.
+
+    `tracing`, when the app has tracing configured, is the provider the app's
+    own spans go to; the harness puts its case and judge spans there too, so
+    both land in one trace. `scores` is where the harness sends each case's
+    scores. The app builds both in its composition root, which picks the
+    backend, and closes them when the session ends.
     """
 
     sut: SystemUnderTest
     cases: Sequence[Case]
     judge_model: str
     embed: Embed
+    tracing: Tracing | None = None
+    scores: ScoreSink | None = None
 
 
 @dataclass(frozen=True)
@@ -196,6 +206,8 @@ def live_runner(
                 workers=workers,
                 on_event=on_event,
                 should_stop=should_stop,
+                tracing=session.tracing,
+                scores=session.scores,
             )
 
     return run

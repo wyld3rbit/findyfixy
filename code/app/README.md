@@ -7,7 +7,7 @@ The `code/app/` package. Dependencies point inward: only entry points import the
 - `code/app/triage.py`: the triage record and validate-retry for model output.
 - `code/app/investigate.py` and `code/app/tools.py`: the tool-calling loop and the deploy-history tool.
 - `code/app/events.py`: the run events the graph reports.
-- `code/app/trace_adapter.py`: those events as OpenTelemetry spans, through the harness's `SpanTree`. The console turns it on when tracing is configured (`read_tracing` in `code/app/settings.py`).
+- `code/app/trace_adapter.py`: those events as OpenTelemetry spans, through the harness's `SpanTree`. The console turns it on when tracing is configured (`read_tracing` in `code/app/settings.py`); `RunTracer` does the same for eval cases, which share one emitter across threads.
 - `code/app/llm.py`: the one place that calls the answering model.
 
 **Memory**

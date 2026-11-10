@@ -398,3 +398,29 @@ def test_the_database_check_turns_an_unreachable_database_into_a_reason(monkeypa
     assert eval_answers.check_database() == [
         "cannot check that the database is current (OperationalError): run make up, then make ingest"
     ]
+
+
+# ---- Tracing ----------------------------------------------------------------------
+
+
+def test_with_a_run_tracer_each_case_has_a_findyfixy_run_inside_its_eval_case_trace() -> None:
+    """The adapter's run nests under the harness's case span, ending with the triage or the error."""
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+    from opentelemetry.trace import StatusCode
+
+    from app.trace_adapter import RunTracer
+    from harness.trace.tracing import TraceConfig, Tracing
+
+    exporter = InMemorySpanExporter()
+    tracing = Tracing.start(TraceConfig("http://127.0.0.1:1", "pk-lf-t", "sk-lf-t", "t"), exporter=exporter)
+    sut = FindyFixy(make_graph=graph_factory(fail_on={"g2"}), candidates=ranked(), small_model="s",
+                    large_model="l", run_tracer=RunTracer(tracing.tracer()))
+    report = run([golden("g1", "S"), golden("g2", "S2")], sut=sut, tracing=tracing)
+    tracing.flush()
+    spans = list(exporter.get_finished_spans())
+    for record in report["cases"]:
+        mine = {s.name: s for s in spans if format(s.context.trace_id, "032x") == record["trace_id"]}
+        assert mine["findyfixy run"].parent.span_id == mine[f"eval case {record['id']}"].context.span_id
+    failed = next(s for s in spans if s.name == "findyfixy run" and s.status.status_code is StatusCode.ERROR)
+    assert "RuntimeError" in failed.status.description
+    tracing.close()

@@ -88,9 +88,10 @@ class TraceConfig:
 class Tracing:
     """A running tracer provider. Build with `start`; close once, at exit."""
 
-    def __init__(self, provider: TracerProvider) -> None:
+    def __init__(self, provider: TracerProvider, config: TraceConfig) -> None:
         """Hold the provider. Use `start` instead of calling this directly."""
         self._provider = provider
+        self.config = config  # what scores (scores.py) are sent with: the same backend and keys
 
     @classmethod
     def start(cls, config: TraceConfig, exporter: SpanExporter | None = None) -> Tracing:
@@ -118,7 +119,7 @@ class Tracing:
             max_export_batch_size=MAX_BATCH,
             export_timeout_millis=EXPORT_TIMEOUT_S * 1000,
         ))
-        return cls(provider)
+        return cls(provider, config)
 
     def tracer(self) -> Tracer:
         """The tracer spans are made with. The name says which component made them."""

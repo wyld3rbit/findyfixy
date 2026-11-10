@@ -66,11 +66,14 @@ from app.events import Emit, no_emit
 from app.golden import DEFAULT_PATH as GOLDEN_PATH, load_golden
 from app.graph import Recall
 from app.paths import EVALS, REPORTS, ROOT
-from app.settings import MissingEnvironment, load_env, read_models
+from app.settings import MissingEnvironment, load_env, read_models, read_tracing
+from app.trace_adapter import RunTracer
 from app.wiring import SharedRetrieval
 from harness.eval import cli
 from harness.eval.attest import Inputs
 from harness.eval.cli import AttestationSpec, ConfigError, Session, SessionFactory
+from harness.trace.scores import LangfuseScores
+from harness.trace.tracing import Tracing
 
 BASELINE_PATH = EVALS / "baseline.json"
 ATTESTATION_PATH = EVALS / "attestation.json"
@@ -125,7 +128,11 @@ def check_database() -> list[str]:
 
 @contextmanager
 def open_live_session(
-    negative_control: bool, *, emit: Emit = no_emit, retrieval: SharedRetrieval | None = None
+    negative_control: bool,
+    *,
+    emit: Emit = no_emit,
+    retrieval: SharedRetrieval | None = None,
+    tracing: Tracing | None = None,
 ) -> Iterator[Session]:
     """Open the real database, retriever and embedder, and yield the live adapter.
 
@@ -149,6 +156,12 @@ def open_live_session(
     The command line passes none: the session builds its own and closes it at
     the end, even when the run fails. Either way the shared object's lock keeps
     retrieval and embedding to one thread at a time, so `--workers` is safe.
+
+    `tracing` works the same way: the console passes the provider it already
+    runs. The command line passes none, and the session starts one when
+    tracing is configured (`read_tracing`) and closes it at the end, which
+    sends what is queued. With tracing, every case's graph run is a trace
+    under the harness's case span, and the scores land on it.
     """
     from app.graph import build_graph
     from app.llm import ollama_ask
@@ -160,9 +173,21 @@ def open_live_session(
         raise ConfigError(f"set the environment variable {err}") from err
     small, large = models.small, models.large
     goldens = load_golden(GOLDEN_PATH)
+    owns_tracing = tracing is None
     owned = retrieval is None
-    shared = SharedRetrieval() if retrieval is None else retrieval
+    shared: SharedRetrieval | None = None
+    scores: LangfuseScores | None = None
     try:
+        if tracing is None:
+            trace_config = read_tracing()
+            tracing = Tracing.start(trace_config) if trace_config else None
+        run_tracer = RunTracer(tracing.tracer()) if tracing is not None else None
+        if run_tracer is not None:
+            emit = run_tracer.wrap(emit)
+        # The score backend is chosen here, in the composition root; the
+        # harness only sees the ScoreSink seam.
+        scores = LangfuseScores(tracing.config) if tracing is not None else None
+        shared = SharedRetrieval() if retrieval is None else retrieval
         shared.candidates(goldens[0].question, 1)  # warm-up, not measured
 
         def make_graph(recall: Recall) -> Invokable:
@@ -175,11 +200,19 @@ def open_live_session(
                 recall=None if negative_control else recall,
             )
 
-        sut = FindyFixy(make_graph=make_graph, candidates=shared.candidates, small_model=small, large_model=large)
-        yield Session(sut=sut, cases=[to_case(g) for g in goldens], judge_model=models.judge, embed=shared.embed)
+        sut = FindyFixy(make_graph=make_graph, candidates=shared.candidates, small_model=small,
+                        large_model=large, run_tracer=run_tracer)
+        yield Session(sut=sut, cases=[to_case(g) for g in goldens], judge_model=models.judge,
+                      embed=shared.embed, tracing=tracing, scores=scores)
     finally:
-        if owned:
+        if owned and shared is not None:
             shared.close()
+        if scores is not None:
+            scores.close()
+            if scores.dropped:
+                print(f"warning: {scores.dropped} score(s) not sent to the trace backend", file=sys.stderr)
+        if owns_tracing and tracing is not None:
+            tracing.close()
 
 
 def main(

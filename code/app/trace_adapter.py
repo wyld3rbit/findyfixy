@@ -20,6 +20,13 @@ What it does
     A hunt (many runs on one emitter) sends `run_started` once per run, so each
     run gets its own trace. The `hunt_*` events have no span.
 
+    An eval case has no `run_started` event: the graph alone runs, inside the
+    harness's case span. `RunTracer` covers that: the code that runs a case
+    opens the run directly (`with run_tracer.run(question) as spans`), the
+    session's shared emitter forwards events to the run open on the calling
+    thread, and the run's spans nest under the case span through
+    OpenTelemetry's current context.
+
 Why an adapter and not spans in the graph
     The graph already reports every step through `emit` (app/events.py), and
     the console, the tests and the event log read the same stream. Tracing is
@@ -40,10 +47,12 @@ Failure modes
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
-from app.events import Event
+from app.events import Emit, Event
 from harness.trace.spans import (
     GEN_AI_INPUT_TOKENS,
     GEN_AI_OPERATION,
@@ -96,22 +105,15 @@ class EventSpans:
         """The mapping table in the module docstring, one branch per event kind."""
         d: dict[str, Any] = event.data
         if event.kind == "run_started":
-            self._tree = SpanTree(
-                self._tracer,
-                TRACE_NAME,
-                input=d.get("question"),
-                attributes={
-                    "findyfixy.run": d.get("run"),
-                    "findyfixy.mode": d.get("mode"),
-                    "findyfixy.small_model": d.get("small_model"),
-                    "findyfixy.large_model": d.get("large_model"),
-                    "findyfixy.threshold": d.get("threshold"),
-                    "findyfixy.tools": d.get("tools"),
-                    "findyfixy.recall": d.get("recall"),
-                },
-            )
-            self.trace_ids.append(self._tree.trace_id)
-            self._pending_tools = []
+            self.start_run(d.get("question"), {
+                "findyfixy.run": d.get("run"),
+                "findyfixy.mode": d.get("mode"),
+                "findyfixy.small_model": d.get("small_model"),
+                "findyfixy.large_model": d.get("large_model"),
+                "findyfixy.threshold": d.get("threshold"),
+                "findyfixy.tools": d.get("tools"),
+                "findyfixy.recall": d.get("recall"),
+            })
             return
         tree = self._tree
         if tree is None:  # an event outside a run (a hunt's own events)
@@ -157,12 +159,75 @@ class EventSpans:
             if kind == "route":
                 tree.set({"findyfixy.route": d.get("target")})
         elif kind == "run_finished":
-            tree.set({"findyfixy.model_used": d.get("model_used")})
-            tree.finish(output=d.get("triage"))
-            self._tree = None
+            self.finish_run(output=d.get("triage"), model_used=d.get("model_used"))
         elif kind == "run_failed":
-            tree.finish(error=f"{d.get('error_type')}: {d.get('error')}")
-            self._tree = None
+            self.finish_run(error=f"{d.get('error_type')}: {d.get('error')}")
+
+    def start_run(self, question: Any, attributes: Mapping[str, Any] | None = None) -> None:
+        """Open a run's top span: what `run_started` does, for callers that emit no such event."""
+        self._tree = SpanTree(self._tracer, TRACE_NAME, input=question, attributes=attributes)
+        self.trace_ids.append(self._tree.trace_id)
+        self._pending_tools = []
+
+    def finish_run(self, *, output: Any = None, error: str | None = None, model_used: str | None = None) -> None:
+        """End the open run, if any: what `run_finished` and `run_failed` do."""
+        tree, self._tree = self._tree, None
+        if tree is None:
+            return
+        if model_used is not None:
+            tree.set({"findyfixy.model_used": model_used})
+        tree.finish(output=output, error=error)
+
+
+class RunTracer:
+    """Run traces for code that shares one emitter across runs and threads (an eval session).
+
+    `run(question)` opens a run for the calling thread; `wrap(emit)` returns an
+    emitter that also feeds each event to the run open on the thread that
+    emits it. Parallel eval workers never share a trace.
+
+    The open run lives in a `ContextVar`, the mechanism OpenTelemetry uses for
+    the current span. Code that copies the context to another thread (as
+    LangGraph does for a node it runs on an executor) carries both the span
+    and the run along; a thread-local would lose the run there.
+    """
+
+    def __init__(self, tracer: Tracer) -> None:
+        """Hold the tracer. No run is open in any context yet."""
+        self._tracer = tracer
+        self._current: ContextVar[EventSpans | None] = ContextVar("findyfixy_run", default=None)
+
+    @contextmanager
+    def run(self, question: str, attributes: Mapping[str, Any] | None = None) -> Iterator[EventSpans]:
+        """Open a run on this thread for the block. End it with `finish_run` on the yielded spans.
+
+        A run still open when the block ends (an exception, or a caller that
+        did not finish it) is ended here, as an error when the block raised.
+        """
+        spans = EventSpans(self._tracer)
+        spans.start_run(question, attributes)
+        token = self._current.set(spans)
+        error: str | None = None
+        try:
+            yield spans
+        except BaseException as err:
+            error = f"{type(err).__name__}: {err}"
+            raise
+        finally:
+            spans.finish_run(error=error)  # a no-op when the caller already finished it
+            self._current.reset(token)
+
+    def wrap(self, emit: Emit) -> Emit:
+        """`emit`, plus the event fed to this thread's open run (if any)."""
+
+        def traced(kind: Any, /, **data: Any) -> None:
+            """Emit as before, then trace."""
+            emit(kind, **data)
+            spans = self._current.get()
+            if spans is not None:
+                spans(Event(kind, 0.0, data))  # spans use real time; `t` is not read
+
+        return traced
 
 
 def _scalar(value: Any) -> str | int | float | bool | None:

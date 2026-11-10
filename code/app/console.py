@@ -860,20 +860,21 @@ def main(argv: list[str] | None = None) -> None:
     # One database connection, embedder and reranker for the whole process:
     # triage recall and the eval session share it, so a live eval loads no copy.
     retrieval = SharedRetrieval() if models else None
+    # One tracer provider for the process: triage runs and live eval runs share it.
+    trace_config = read_tracing()
+    tracing = Tracing.start(trace_config) if trace_config else None
     live_eval_suite = None
     if retrieval is not None:
         from app.eval_answers import GOLDEN_PATH, open_live_session
         from app.golden import load_golden
 
         live_eval_suite = live_eval(
-            partial(open_live_session, retrieval=retrieval),
+            partial(open_live_session, retrieval=retrieval, tracing=tracing),
             golden_path=GOLDEN_PATH,
             repo_dir=ROOT,
             progress=lambda msg: print(msg, file=sys.stderr, flush=True),
             size=len(load_golden(GOLDEN_PATH)),
         )
-    trace_config = read_tracing()
-    tracing = Tracing.start(trace_config) if trace_config else None
     hub = RunHub(
         tracing=tracing,
         live_models=(models.small, models.large) if models else None,

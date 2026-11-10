@@ -73,6 +73,18 @@ Stopping
     design. The case in flight finishes first; a judge call is never cut off
     halfway.
 
+Tracing and scores (optional)
+    With `tracing`, each case is one trace: a top span "eval case <id>" made
+    current while the system answers, so an app that traces its own steps
+    (FindyFixy: app/trace_adapter.py) nests them under it with no span handed
+    over; then, in the judge pass, a "judge" span in the same trace with one
+    child per metric. The case span ends when the answer is done, so its
+    latency is the answer's. With `scores`, each label match and each metric
+    score goes to the backend on that trace (harness/trace/scores.py); a
+    failed metric is an error on its span, never a score of 0. The record
+    gains `trace_id`. Neither changes an answer, a score or the report's
+    numbers: tracing only observes. Without them nothing is imported.
+
 What changes at scale
     One local model server on one GPU caps parallelism at a few workers
     (`MAX_WORKERS`). Cost is about ten judge calls per case. With more cases,
@@ -87,7 +99,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import threading
 import time
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from harness.eval.case import Case
 from harness.eval.events import EvalEmit, no_eval_emit
@@ -112,6 +124,11 @@ from harness.eval.stats import (
     require_schema,
 )
 from harness.eval.sut import Answer, SystemUnderTest
+
+if TYPE_CHECKING:
+    from harness.trace.scores import ScoreSink
+    from harness.trace.spans import SpanTree
+    from harness.trace.tracing import Tracing
 
 # A hard cap, not a suggestion. Each worker holds one more conversation in the
 # model server's memory (its KV cache), and every extra request queues on the
@@ -214,6 +231,7 @@ class _Answered:
     case: Case
     record: dict[str, Any]
     answer: Answer | None
+    tree: SpanTree | None = None  # the case's trace, when tracing is on
 
 
 @dataclass(frozen=True)
@@ -223,6 +241,7 @@ class _ToJudge:
     case: Case
     record: dict[str, Any]
     answer: Answer
+    tree: SpanTree | None = None
 
 
 def answer_case(
@@ -231,8 +250,52 @@ def answer_case(
     sut: SystemUnderTest,
     timer: Callable[[], float],
     on_event: EvalEmit = no_eval_emit,
+    tracing: Tracing | None = None,
+    run_attributes: Mapping[str, Any] | None = None,
 ) -> _Answered:
-    """Answer one case and score its labels. No judge call.
+    """Answer one case and score its labels, inside the case's trace when tracing is on.
+
+    The case span is current while the system answers, so the app's own spans
+    nest under it. It ends here, with the labels and the answer (or the run
+    error) on it, and the record gains the trace id. `run_attributes` mark
+    which eval run the case belongs to (its session, the control flag), so
+    two runs, or a control run and a real one, never mix in the backend.
+    The span ends even when something inside raises, so no child is orphaned.
+    """
+    if tracing is None:
+        return _answer(case, sut=sut, timer=timer, on_event=on_event)
+    from harness.trace.spans import SpanTree
+
+    tree = SpanTree(tracing.tracer(), f"eval case {case.id}", input=case.question,
+                    attributes={**(run_attributes or {}), "eval.case": case.id, "eval.group": case.group})
+    try:
+        with tree.activate():
+            result = _answer(case, sut=sut, timer=timer, on_event=on_event)
+    except BaseException as err:
+        tree.finish(error=f"{type(err).__name__}: {err}")
+        raise
+    record = result.record
+    tree.set({f"eval.{key}": record[key] for label in case.expected for key in (label, match_name(label))})
+    if record["run_error"]:
+        tree.finish(error=record["run_error"])
+    else:
+        tree.finish(output=result.answer.text if result.answer else None)
+    try:
+        _merge(record, {"trace_id": tree.trace_id}, f"tracing for case {case.id}")
+    except ValueError as err:  # the app's meta already uses the name: a run error, like any meta clash
+        record["run_error"] = f"{type(err).__name__}: {err}"
+        return _Answered(case, record, None, tree)
+    return _Answered(case, record, result.answer, tree)
+
+
+def _answer(
+    case: Case,
+    *,
+    sut: SystemUnderTest,
+    timer: Callable[[], float],
+    on_event: EvalEmit,
+) -> _Answered:
+    """Answer one case and score its labels. No judge call, no tracing.
 
     Emits `case_answered`. A case that ends in a run error also emits
     `case_scored` here, so every case still closes on the stream.
@@ -275,6 +338,8 @@ def score_case(
     judge: Judge,
     embed: Embed,
     on_event: EvalEmit = no_eval_emit,
+    tree: SpanTree | None = None,
+    scores: ScoreSink | None = None,
 ) -> None:
     """Judge one answered case with the four metrics. Fills `record` in place.
 
@@ -282,7 +347,36 @@ def score_case(
     `Answer`, not an optional one, so a case with a run error cannot reach it.
     Returns nothing on purpose: the record is the one the answer pass made,
     and the report reads it from there, so there is one copy to keep right.
+
+    With `tree` (the case's trace), a "judge" span joins that trace with one
+    child per metric. With `scores`, every label match and every metric that
+    did not fail is sent as a score on the trace.
     """
+    judge_tree = tree.follow("judge") if tree is not None else None
+    try:
+        results = _judge(case, record, answer, judge=judge, embed=embed, on_event=on_event, judge_tree=judge_tree)
+    except BaseException as err:
+        if judge_tree is not None:  # end the span even on a bug, so its children are not orphaned
+            judge_tree.finish(error=f"{type(err).__name__}: {err}")
+        raise
+    if judge_tree is not None:
+        judge_tree.finish()
+    if scores is not None and tree is not None:
+        _send_scores(scores, tree.trace_id, case, record, results)
+    on_event("case_scored", id=case.id)
+
+
+def _judge(
+    case: Case,
+    record: dict[str, Any],
+    answer: Answer,
+    *,
+    judge: Judge,
+    embed: Embed,
+    on_event: EvalEmit,
+    judge_tree: SpanTree | None,
+) -> dict[str, MetricResult]:
+    """The four metrics, in order, each in its own span when tracing. Fills `record`, returns the results."""
     text, contexts = answer.text, list(answer.contexts)
     # In the fixed metric order, one at a time, so the judge sees the same call
     # sequence as before events existed and a viewer sees each score as it lands.
@@ -296,7 +390,11 @@ def score_case(
     )
     results: dict[str, MetricResult] = {}
     for name, compute in metrics:
+        if judge_tree is not None:
+            judge_tree.open("metric", name, attributes={"eval.metric": name})
         result = _safe_metric(compute)
+        if judge_tree is not None:
+            judge_tree.close("metric", output=result.score, error=result.error if result.failed else None)
         results[name] = result
         on_event(
             "metric_scored",
@@ -319,7 +417,28 @@ def score_case(
         }
         for n, r in results.items()
     }
-    on_event("case_scored", id=case.id)
+    return results
+
+
+def _send_scores(
+    scores: ScoreSink,
+    trace_id: str,
+    case: Case,
+    record: Mapping[str, Any],
+    results: Mapping[str, MetricResult],
+) -> None:
+    """Each label match as a boolean score, each metric that did not fail as a number.
+
+    A failed metric has no score: 0 would claim a bad answer when the judge
+    never answered. Its error is on the metric's span instead.
+    """
+    for label in case.expected:
+        name = match_name(label)
+        if record[name] is not None:
+            scores.score(trace_id, name, 1.0 if record[name] else 0.0, "BOOLEAN")
+    for name, result in results.items():
+        if not result.failed and result.score is not None:
+            scores.score(trace_id, name, float(result.score), "NUMERIC")
 
 
 def _status(record: Mapping[str, Any], case: Case) -> str:
@@ -389,8 +508,10 @@ def run_eval(
     workers: int = 1,
     on_event: EvalEmit = no_eval_emit,
     should_stop: Callable[[], bool] = lambda: False,
+    tracing: Tracing | None = None,
+    scores: ScoreSink | None = None,
 ) -> Report:
-    """Run every case and return the report dict. No I/O.
+    """Run every case and return the report dict. No I/O apart from optional tracing.
 
     Everything that touches a model, the database or the clock is injected,
     so the whole pipeline runs in tests with fakes.
@@ -407,6 +528,9 @@ def run_eval(
     `eval_started` goes out only after validation, so a run refused up front
     reports nothing.
 
+    `tracing` and `scores` turn on the case traces and scores ("Tracing and
+    scores" above). The caller owns both and closes them.
+
     `should_stop` is asked before each case in each pass. Yes raises
     `EvalStopped` once the cases already started have finished (see
     "Stopping" above).
@@ -420,6 +544,12 @@ def run_eval(
     answered_count = 0
     judged_count = 0
     on_event("eval_started", n=n, cases=[c.id for c in cases], system=dict(sut.describe()))
+    # Every case trace of this run shares one session (Langfuse groups traces
+    # by `session.id`), so a run's traces are one view and two runs never mix.
+    run_attributes = {
+        "session.id": f"eval {provenance.get('timestamp_utc', 'unstamped')}",
+        "eval.negative_control": bool(provenance.get("negative_control", False)),
+    }
 
     def answer_one(index: int, case: Case) -> _Answered:
         """Answer one case and report progress. The counter is shared, so it is locked."""
@@ -429,7 +559,8 @@ def run_eval(
                 done = answered_count
             raise EvalStopped(f"stopped after {done} of {n} cases")
         on_event("case_started", id=case.id, group=case.group, index=index + 1, n=n)
-        result = answer_case(case, sut=sut, timer=timer, on_event=on_event)
+        result = answer_case(case, sut=sut, timer=timer, on_event=on_event, tracing=tracing,
+                             run_attributes=run_attributes)
         with progress_lock:
             answered_count += 1
             progress(
@@ -445,7 +576,8 @@ def run_eval(
             with progress_lock:
                 done = judged_count
             raise EvalStopped(f"stopped after judging {done} of {len(to_judge)} answered cases")
-        score_case(item.case, item.record, item.answer, judge=judge, embed=embed, on_event=on_event)
+        score_case(item.case, item.record, item.answer, judge=judge, embed=embed, on_event=on_event,
+                   tree=item.tree, scores=scores)
         with progress_lock:
             judged_count += 1
             progress(f"[judged {judged_count}/{len(to_judge)}] {item.case.id}")
@@ -460,7 +592,7 @@ def run_eval(
     start = timer()
     answered = each(lambda pair: answer_one(*pair), list(enumerate(cases)))
     answered_at = timer()
-    to_judge = [_ToJudge(a.case, a.record, a.answer) for a in answered if a.answer is not None]
+    to_judge = [_ToJudge(a.case, a.record, a.answer, a.tree) for a in answered if a.answer is not None]
     each(judge_one, to_judge)  # score_case fills each record in place
     finished_at = timer()
     # `answered` keeps the order of `cases`, and holds the records the judge pass filled.

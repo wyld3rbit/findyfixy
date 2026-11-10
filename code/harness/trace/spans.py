@@ -46,7 +46,8 @@ What changes at scale
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 import json
 from typing import TYPE_CHECKING, Any, Literal
@@ -114,20 +115,34 @@ class SpanTree:
         *,
         attributes: Attributes | None = None,
         input: Any = None,  # noqa: A002 - the backend's word for it
+        parent: SpanTree | None = None,
     ) -> None:
-        """Start the root span now. `name` also names the trace in the backend."""
+        """Start this tree's top span now.
+
+        Its parent is `parent`'s top span when given (a later step of the same
+        trace, such as the judge pass after the answer), else whatever span is
+        current on this thread (`activate`), else none. Only a span with no
+        parent names the trace: a nested tree must not rename the trace it
+        joins.
+        """
         # Resolved once per run, not per span: the run's thread makes every span.
         from opentelemetry import trace
         from opentelemetry.trace import Status, StatusCode
 
         self._in_context = trace.set_span_in_context
         self._error_status = lambda text: Status(StatusCode.ERROR, text)
-        root_attrs = {**_clean(attributes), LF_TRACE_NAME: name}
+        context = trace.set_span_in_context(parent._root) if parent is not None else None
+        self._is_trace_root = parent is None and not trace.get_current_span().get_span_context().is_valid
+        root_attrs = dict(_clean(attributes))
         if input is not None:
-            # Both: the trace's input (the list view) and the root span's (the tree).
-            root_attrs[LF_TRACE_INPUT] = root_attrs[LF_INPUT] = as_text(input)
+            root_attrs[LF_INPUT] = as_text(input)
+        if self._is_trace_root:
+            root_attrs[LF_TRACE_NAME] = name
+            if input is not None:  # the trace's input (the list view), next to the span's (the tree)
+                root_attrs[LF_TRACE_INPUT] = root_attrs[LF_INPUT]
         self._tracer = tracer
-        self._root = tracer.start_span(name, attributes=root_attrs)
+        self._use_span = trace.use_span
+        self._root = tracer.start_span(name, context=context, attributes=root_attrs)
         # Innermost last. A list, not a dict: order is the parent rule.
         self._open: list[_Open] = []
 
@@ -135,6 +150,25 @@ class SpanTree:
     def trace_id(self) -> str:
         """The trace's id as 32 hex characters: what a backend's URL and score API use."""
         return format(self._root.get_span_context().trace_id, "032x")
+
+    def follow(self, name: str, *, attributes: Attributes | None = None) -> SpanTree:
+        """A new tree in the same trace, as a child of this one's top span, even after it ended.
+
+        For a later step of the same unit of work: the judge pass of an eval
+        case runs after the case's answer span has ended.
+        """
+        return SpanTree(self._tracer, name, attributes=attributes, parent=self)
+
+    @contextmanager
+    def activate(self) -> Iterator[None]:
+        """Make this tree's top span the current one on this thread, for code that makes its own spans.
+
+        An app called inside `activate` starts its spans as children of this
+        one, through OpenTelemetry's context, without being handed a span.
+        The span does not end when the block ends; `finish` ends it.
+        """
+        with self._use_span(self._root, end_on_exit=False):
+            yield
 
     def _find(self, key: str) -> int | None:
         """The index of the innermost open span named `key`, or None."""
@@ -214,7 +248,7 @@ class SpanTree:
         """End every open span, innermost first, then the root. Call once, at the run's end."""
         while self._open:
             self._end(self._open.pop().span, error=error)
-        extra = {LF_TRACE_OUTPUT: as_text(output)} if output is not None else None
+        extra = {LF_TRACE_OUTPUT: as_text(output)} if output is not None and self._is_trace_root else None
         self._end(self._root, attributes=extra, output=output, error=error)
 
     def _end(
