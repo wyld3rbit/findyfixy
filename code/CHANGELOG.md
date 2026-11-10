@@ -549,7 +549,39 @@ Faithfulness asks whether each claim is supported by the recalled incidents. Adv
 - Baseline frozen with `make eval-freeze` from that report: `code/evals/baseline.json`, floors at the mean minus 0.05, failure-rate cap 0.15. The gate passes on its own source run and fails the control. Tests that start servers (tools and console) ran during the work, so latency in the baseline's provenance is not gated.
 - Open: the answering quality of the router with two Qwen3 tiers (not tested); the Colima memory default and the loopback-binding test (wrap-up); subpackage moves (wrap-up).
 
+### One source of truth per day, one docs folder (2026-11-09)
+
+- `notes/day1.md` to `notes/day4.md` were folded, word for word, into the Results sections of `lessons/d01.md` to `lessons/d04.md`, and `notes/evidence.md` into each lesson's Evidence section. `notes/models.md` moved to `record/models.md`. `notes/` is gone. Earlier entries in this file name the old paths on purpose.
+- The root `docs/` folder (ADRs, `demo.gif`, `space-needle.png`) moved into `code/docs/` with `git mv`. `tools/adr_snapshot.py` now writes to `code/docs/adr/img/`; a re-run produced identical diagrams.
+- The tracker's per-day `plan` field, its check in `tools/check.py` and its line on the page were removed: the plan now lives in the lesson's Build section.
+- `lessons/d05.md` was rewritten for the harness focus: the eval gate moves into a `harness/` package behind a `SystemUnderTest` interface, with an attested CI gate on `main`. Not built yet.
+- Checks: `make check` OK (45 tracker tests), `make test` 552 passed, `make adr-snapshot` no diff, no broken relative links in the ADRs and READMEs.
+
+### Day 5: the eval gate moves into the harness (2026-11-09)
+
+- New package `harness/eval/`: `case.py` and `sut.py` define the seam (`Case`, `Answer`, `SystemUnderTest` with `describe`, `answer`, `summarise`). `judge.py`, `metrics.py`, `stats.py` (was `app/eval_stats.py`), `report.py` (was `app/eval_report.py`) and `provenance.py` (was `app/eval_provenance.py`) moved with `git mv`. `runner.py` and `cli.py` are the generic runner and command line. Nothing under `harness/` imports `app`; `tests/test_architecture.py` enforces it and was shown to fail when the rule was broken.
+- FindyFixy plugs in through `app/eval_adapter.py` (holdout recall, graph call, severity label, twin data). `app/eval_answers.py` is now a thin entry point; every make target and flag is unchanged.
+- Equivalence proof with no live models: with the new code the saved final run (`eval-20261027T044126Z`) passes the gate, the no-recall control (`eval-20261027T044746Z`) fails with the same 8 messages in the same order, and re-freezing the final run reproduces `evals/baseline.json` byte for byte. Fast tests pin the same facts without the git-ignored reports.
+- Differs from before: the table column `twin_recall` is now `twin_recall_rate`; `make case` prints labels and app data as `LABEL` and `META` lines; new reports record `negative_control` instead of `recall_enabled` (old reports still read); an adapter error on one case is recorded as that case's run error instead of ending the run.
+- A fresh-agent review found 10 issues; all are fixed. Inputs are validated before any case runs, so a bad group name or key clash cannot lose a scored run; a clash in one answer becomes that case's run error. FindyFixy's legacy key `recall_enabled` is passed in by the app (`legacy_control`), so the harness holds no app vocabulary. Records store their label names (`labels`). Relative imports are banned by a test, so the cycle and vendor checks see every import. One schema constant each for records and provenance.
+- The architecture page marks harness controls in violet, renames the Evals box's subtitle to "harness, any app", and adds a planned "CI gate" box. `tools/adr_snapshot.py` skips boxes added after a phase and drops the colour attribute, so the ADR 0001 to 0004 pictures are byte-identical.
+- Tests: `make test` 612 passed, 14 deselected. `make check` OK.
+
+### Day 5: the visualizer shows the harness and runs evals live (2026-11-09)
+
+- `code/docs/architecture.html` has two lanes: Harness on top (Eval gate built; CI gate, Tracing, Policy, Gateway, Human review planned) and FindyFixy below (the triage flow). Arrows show cases going in and answers being scored.
+- New Eval run mode in the console: 1 to N golden cases, live or fake. Each case animates through the app lane from the graph's real events, then the harness lane shows the judge's scores. A full run is gated against `evals/baseline.json`; a subset shows "subset, gate not applied". The console never writes reports or baselines.
+- The harness runner takes an injected event callback with its own vocabulary (`harness/eval/events.py`), so the harness still never imports the app. `app/console_eval.py` bridges it into the console stream.
+- `tests/test_page_truth.py`: each box names its code (`data-code`). A built box must point at real code, a planned box at code that does not exist yet, every graph node needs a box, and every app and harness event kind needs a handler on the page. Each test was shown to fail once.
+- ADR pictures for phases 1 to 4 are frozen files checked by hash; from phase 5 on they are drawn from the page.
+- Differs from the lesson: the visualizer work was not in the original Build steps; it was added at the learner's request so the page shows today's system objectively.
+- A fresh-agent review found 10 issues; all are fixed. An eval run can be stopped between cases (it ends with `eval_failed`, reason "stopped"), and POST /stop now says `false` when nothing can stop. The page test replays the unmodified fake stream, sped up through the page's own reduced-motion setting. The case limit comes from the golden set's size. `SharedRetrieval` in `app/wiring.py` gives the console one embedder, reranker and connection for both triage and eval runs, instead of a second copy of about 1.3 GB. One stamped emitter (`app/events.py`) serves app and harness events. A root `.gitattributes` keeps the frozen ADR pictures byte-exact on any clone.
+- Tests: `make test` 650 passed, 14 deselected. `make check` OK. The equivalence proof still passes.
+
+### README gif: a live eval run (2026-11-09)
+
+- `code/docs/demo.gif` now shows a live Eval run of 2 golden cases (g01, g02) in the two-lane visualizer: Qwen3 4B-instruct answering, Qwen2.5 7B judging, 0 run errors, ending with "subset, gate not applied". Recorded from headless Chrome through its DevTools protocol (no extension), 64 s of run time, unchanged frames dropped and waits shortened to 28.8 s, 679 KB. The README caption, intro and "Try it" now describe the harness and the Eval run mode.
+
 ### Next
 
-- Day 1 drill and evidence line, if wanted.
-- Day 2: run it live, then tools (direct vs MCP) and the measurement table.
+- Day 5 step 4: the attested CI gate (`lessons/d05.md`).

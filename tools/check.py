@@ -7,9 +7,9 @@ Checks:
 1. record/progress.json parses as JSON.
 2. Every day has the required fields, and every `done` index points at a real check.
 3. Every lesson file renders to non-empty HTML.
-4. Decisions have all fields; a day's `plan` has a valid status and an existing file.
+4. Decisions and log entries have all fields.
 5. The README and CLAUDE.md name only make targets and files that exist (tools/check_docs.py).
-6. No em-dashes in lessons, plan or progress data.
+6. No em-dashes in lessons or progress data.
 
 Exits non-zero on the first class of failure, with a one-line reason per problem.
 """
@@ -24,7 +24,6 @@ from lessons import LESSON_NUMBERS, ROOT, lesson_file, render  # noqa: E402
 
 REQUIRED_DAY = {"n", "week", "date", "title", "file", "outcome", "checks", "done"}
 REQUIRED_DECISION = {"date", "day", "decision", "rejected", "why"}
-PLAN_STATUSES = {"draft", "approved", "built", "gated"}
 REQUIRED_TOP = {"updated", "plannedStart", "plannedEnd", "countdownStart", "countdownEnd", "log", "days"}
 
 
@@ -57,12 +56,6 @@ def problems() -> list[str]:
             out.append(f"day {d['n']}: done indexes out of range {bad}")
         if not (ROOT / d["file"]).exists():
             out.append(f"day {d['n']}: lesson file {d['file']} not found")
-        plan = d.get("plan")
-        if plan is not None:
-            if plan.get("status") not in PLAN_STATUSES:
-                out.append(f"day {d['n']}: plan status must be one of {sorted(PLAN_STATUSES)}")
-            if not (ROOT / plan.get("file", "")).is_file():
-                out.append(f"day {d['n']}: plan file {plan.get('file')} not found")
     for dec in data.get("decisions", []):
         if not REQUIRED_DECISION <= dec.keys():
             out.append(f"decision malformed: {dec}")

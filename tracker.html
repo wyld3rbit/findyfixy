@@ -82,9 +82,6 @@ body.log-open #logPanel{transform:none;visibility:visible}
 .viz iframe{width:100%;height:760px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .lessonbox{margin:10px 0}
 .lessonbox summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:15px}
-.plan{font-size:15px;margin:0 0 10px}
-.plan .st{font-weight:600;color:var(--accent)}
-.plan .st-approved,.plan .st-built,.plan .st-gated{color:var(--ok)}
 .dec{margin:0 0 12px;font-size:15px}
 .dec summary{cursor:pointer;color:var(--accent);font-weight:600}
 .dec ul{list-style:none;margin:6px 0 0;padding:0}
@@ -137,8 +134,8 @@ function loadLesson(n, el){
 function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 function startBlock(n){
   var f = "d" + (n < 10 ? "0"+n : n) + ".md";
-  var start = "start day "+n+". "+(n>1 ? "Warm-up first: ask me to explain day "+(n-1)+" from memory, then tell me in one line what I missed. " : "")+"Read "+f+" and CLAUDE.md. Give me the outcome in one sentence and a plan for the whole day: steps in order, files each step creates, packages with licenses, and how I verify each one. Wait for my approval. Then walk me through one step at a time, showing the plan for any step that writes code, and wait for me to say done. Build everything in code/. At the end, run the self-check with me, save my numbers to notes/day"+n+".md, then ask me the drill. Last, ask for my evidence line and save it to notes/evidence.md.";
-  var resume = "resume day "+n+". Check notes/ and git log to see where I stopped, tell me in one line, then continue one step at a time.";
+  var start = "start day "+n+". "+(n>1 ? "Warm-up first: ask me to explain day "+(n-1)+" from memory, then tell me in one line what I missed. " : "")+"Read "+f+" and CLAUDE.md. Give me the outcome in one sentence and a plan for the whole day: steps in order, files each step creates, packages with licenses, and how I verify each one. Wait for my approval. Then walk me through one step at a time, showing the plan for any step that writes code, and wait for me to say done. Build everything in code/. At the end, run the self-check with me, save my numbers to the lesson's Results section, then ask me the drill. Last, ask for my evidence line and save it under the lesson's Evidence heading.";
+  var resume = "resume day "+n+". Check the lesson's Results section, code/CHANGELOG.md and git log to see where I stopped, tell me in one line, then continue one step at a time.";
   return '<div class="lesson start"><h3>Start in Claude Code</h3>'
     + '<p>1. In Terminal, go to this training folder (the one that holds CLAUDE.md). Then run:</p><pre><code>'+esc('claude')+'</code></pre>'
     + '<p>2. Paste into Claude Code:</p><pre><code>'+esc(start)+'</code></pre>'
@@ -237,10 +234,9 @@ function loadViz(){
   });
 }
 
-/* Plan status and decisions for one day, from record/progress.json. Text is escaped: the record is data, not markup. */
+/* Decisions for one day, from record/progress.json. Text is escaped: the record is data, not markup. */
 function recordHTML(d){
   var out = "";
-  if(d.plan) out += '<div class="plan"><span class="st st-'+esc(d.plan.status)+'">Plan: '+esc(d.plan.status)+'</span> <code>'+esc(d.plan.file)+'</code></div>';
   var decs = (DATA.decisions || []).filter(function(x){ return x.day === d.n; });
   if(decs.length){
     out += '<details class="dec"><summary>Decisions ('+decs.length+')</summary><ul>';

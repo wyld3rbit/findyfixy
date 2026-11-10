@@ -31,7 +31,7 @@ Failure modes and what changes at scale
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, TypeVar
 
 EventKind = Literal[
     "run_started",
@@ -81,15 +81,32 @@ def no_emit(kind: EventKind, /, **data: Any) -> None:
     """The default `Emit`: report nothing. Lets callers skip the argument."""
 
 
-def make_emit(sink: Callable[[Event], None], clock: Callable[[], float]) -> Emit:
-    """Build an `Emit` that stamps events with elapsed time and sends them on.
+E = TypeVar("E")
 
-    The start time is read once, here. Call this at the start of a run, not
-    at import time, so `t` begins at 0 for each run.
+
+def make_stamped_emit(
+    sink: Callable[[E], None],
+    clock: Callable[[], float],
+    event: Callable[[Any, float, dict[str, Any]], E],
+) -> Callable[..., None]:
+    """Build an emitter that stamps each event with elapsed time and sends it on.
+
+    `event(kind, t, data)` builds the event object, so one implementation
+    serves any vocabulary: the app's `Event` here, and the harness events the
+    console streams beside it (app/console_eval.py). The harness itself never
+    imports this; it only receives the emitter. The start time is read once,
+    here. Call this at the start of a run, not at import time, so `t` begins at
+    0 for each run.
     """
     start = clock()
 
-    def emit(kind: EventKind, /, **data: Any) -> None:
-        sink(Event(kind=kind, t=clock() - start, data=data))
+    def emit(kind: Any, /, **data: Any) -> None:
+        """Stamp one event with the time since the start and send it on."""
+        sink(event(kind, clock() - start, data))
 
     return emit
+
+
+def make_emit(sink: Callable[[Event], None], clock: Callable[[], float]) -> Emit:
+    """Build an `Emit` for the app's own events. See `make_stamped_emit`."""
+    return make_stamped_emit(sink, clock, Event)

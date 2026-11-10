@@ -7,16 +7,32 @@ long and hid what it does. Nothing here is imported by the real run path.
 
 Invented data is marked as invented: the recalled incidents have `FAKE-` IDs, and the
 scripted tool model reports no token usage, because made-up numbers would look real.
+
+The fake eval run (`fake_eval`) is the same idea one level up. The harness runner,
+the FindyFixy adapter and the graph are the real ones. Only the parts that would
+need a model or a database are scripted: the replies, the recalled incidents, the
+judge and the embedder. The cases are invented and say so (`FAKE-` IDs), and the
+system under test describes itself as `data: FAKE`, so the page marks every score
+from such a run as fake.
 """
 
 import json
-from collections.abc import Callable
-from typing import Literal
+from collections.abc import Callable, Sequence
+from itertools import cycle
+from typing import Any, Literal, TypeVar
 
 from langchain_core.messages import AIMessage
+from pydantic import BaseModel
 
+from app.console_eval import EvalResult, EvalSuite
+from app.eval_adapter import FindyFixy, Invokable
 from app.events import Emit
+from app.graph import Recall, build_graph
 from app.triage import Ask, Prior
+from harness.eval.case import Case
+from harness.eval.events import EvalEmit
+from harness.eval.metrics import ActionRating, Claims, Questions, Verdict
+from harness.eval.runner import run_eval
 
 
 Scenario = Literal[
@@ -138,3 +154,124 @@ def inject_bad_first_reply(ask: Ask, small_model: str, emit: Emit) -> Ask:
         return ask(model, prompt)
 
     return wrapped
+
+
+# ---- Fake eval run ------------------------------------------------------------
+
+# The scripted scenario each fake case plays, in turn. Mostly routine, with an
+# escalation, a retry and one case whose models never give a valid record, so a
+# full fake run shows every path, including a run error the gate must catch.
+FAKE_EVAL_SCENARIOS: tuple[Scenario, ...] = (
+    "stay_small", "escalate", "retry_then_small", "stay_small", "stay_small",
+    "escalate", "stay_small", "retry_then_small", "stay_small", "large_fails",
+)
+# The invented set mirrors the golden set's shape (20 twin, 10 no_twin), so a
+# full fake run exercises the gate. Its size is this data's own, not a limit.
+FAKE_EVAL_CASES = 30
+_FAKE_TWIN_CASES = 20
+
+T = TypeVar("T", bound=BaseModel)
+
+
+def fake_cases(n: int = FAKE_EVAL_CASES) -> list[Case]:
+    """Invented golden cases, shaped like FindyFixy's: 20 twin, then 10 no_twin.
+
+    Twin cases name `FAKE-1` as their twin, which `FAKE_RECALL` returns, so the
+    twin recall rate is computed for real on invented data. Expected severities
+    alternate, so some scripted answers match and some miss.
+    """
+    return [
+        Case(
+            id=f"FAKE-g{i:02d}",
+            group="twin" if i <= _FAKE_TWIN_CASES else "no_twin",
+            question=f"Fake alert {i}: invented text, no model is called.",
+            reference="Root cause: invented for the demo. Remediation: invented for the demo.",
+            expected={"severity": "sev2" if i % 3 else "sev1"},
+            meta={"source_id": f"FAKE-SRC-{i:02d}", "twin_id": "FAKE-1" if i <= _FAKE_TWIN_CASES else None},
+        )
+        for i in range(1, n + 1)
+    ]
+
+
+class ScriptedJudge:
+    """A judge that answers by schema from a fixed script. No model.
+
+    Verdicts follow a fixed cycle (two supported, one not), so the scores vary
+    and the page has something to show, but they measure nothing. One instance
+    per run, called from one thread (the console runs one worker).
+    """
+
+    def __init__(self) -> None:
+        """Start the verdict and rating cycles at the beginning."""
+        self._supported = cycle((True, True, False))
+        self._rating = cycle(("helpful", "partial", "helpful", "unhelpful"))
+
+    def ask(self, prompt: str, schema: type[T]) -> T:
+        """A canned reply of the right schema."""
+        if schema is Claims:
+            return Claims(claims=["FAKE claim: the component is named.", "FAKE claim: an action is given."])
+        if schema is Questions:
+            return Questions(questions=["FAKE question one?", "FAKE question two?", "FAKE question three?"])
+        if schema is ActionRating:
+            return ActionRating(rating=next(self._rating), reason="FAKE rating")
+        if schema is Verdict:
+            return Verdict(supported=next(self._supported), reason="FAKE verdict")
+        raise TypeError(f"the scripted judge has no reply for {schema.__name__}")
+
+
+def fake_embed(texts: Sequence[str]) -> list[list[float]]:
+    """A deterministic stand-in for the embedder: a 2-d vector from each text's length."""
+    return [[1.0, (len(t) % 7) / 10] for t in texts]
+
+
+class FakeFindyFixy(FindyFixy):
+    """The real adapter, describing itself as fake so a viewer can say so."""
+
+    def describe(self) -> dict[str, Any]:
+        """The adapter's settings plus `data: FAKE`."""
+        return {**super().describe(), "data": "FAKE"}
+
+
+def fake_eval(sleep: Callable[[float], None], delay: float) -> EvalSuite:
+    """An eval run on invented cases with scripted models: no model, no database.
+
+    The real runner, adapter and graph run, so the events on the page are the
+    ones the code really emits. Each case compiles a graph whose `ask` plays the
+    next scenario in `FAKE_EVAL_SCENARIOS`; `delay` per model call keeps it
+    watchable (tests pass 0). The report is never written. The suite's size is
+    the number of invented cases.
+    """
+    cases = fake_cases()
+
+    def run(n: int, *, emit: Emit, on_event: EvalEmit, should_stop: Callable[[], bool]) -> EvalResult:
+        """Run the first `n` invented cases and return the report."""
+        scenarios = cycle(FAKE_EVAL_SCENARIOS)
+
+        def make_graph(recall: Recall) -> Invokable:
+            """A graph for one case, playing the next scripted scenario."""
+            return build_graph(
+                fake_ask(next(scenarios), sleep, delay),
+                small_model="small",
+                large_model="large",
+                emit=emit,
+                recall=recall,
+            )
+
+        sut = FakeFindyFixy(
+            make_graph=make_graph,
+            candidates=lambda question, k: list(FAKE_RECALL[:k]),
+            small_model="small",
+            large_model="large",
+        )
+        report = run_eval(
+            cases[:n],
+            sut=sut,
+            judge=ScriptedJudge(),
+            embed=fake_embed,
+            provenance={"data": "FAKE"},
+            on_event=on_event,
+            should_stop=should_stop,
+        )
+        return EvalResult(report=report, subset=n < len(cases))
+
+    return EvalSuite(run=run, size=len(cases))

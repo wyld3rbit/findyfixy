@@ -132,7 +132,7 @@ def test_line_numbers_are_reported_and_each_rule_once_per_line():
     ("path", "expected"),
     [(".env", True), ("code/.env.local", True), ("k/server.pem", True), ("a/id_rsa", True),
      ("credentials-prod.json", True), (".env.example", False), ("code/app/env.py", False),
-     ("notes/day2.md", False)],
+     ("lessons/d02.md", False)],
 )
 def test_forbidden_files(path, expected):
     assert sp.forbidden_file(path) is expected

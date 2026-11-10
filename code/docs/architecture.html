@@ -9,22 +9,36 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1220'/%3E%3Ccircle cx='27' cy='27' r='13' fill='none' stroke='%235cc8ff' stroke-width='6'/%3E%3Cline x1='37' y1='37' x2='52' y2='52' stroke='%235cc8ff' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M20 27l5 5 9-10' fill='none' stroke='%234ade80' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <!--
   What this is
-    One page: the system as a schematic, a Run button, and a live event log.
-    Served by `uv run python -m app.console`. Opening the file directly shows
-    the diagram but cannot run anything (it needs the server's /run and /events).
+    One page: the system as a schematic in two lanes, a Run button, and a live
+    event log. The top lane is the harness. The bottom lane is
+    FindyFixy, the app the harness tests. Served by `uv run python -m app.console`.
+    Opening the file directly shows the diagram but cannot run anything (it
+    needs the server's /run, /eval and /events).
 
   How it works
-    POST /run starts a run. GET /events streams that run as Server-Sent Events.
-    Each event does two things: it is written to the log at once, and it is
-    queued as an animation step. The queue plays steps one after another, so a
-    burst of events (a fast fake run) still reads as a sequence.
+    POST /run starts a triage run; POST /eval starts an eval run of the first N
+    golden cases. GET /events streams the run as Server-Sent Events. Each event
+    carries its `source`: "app" (the graph's events, app/events.py) or
+    "harness" (the runner's events, harness/eval/events.py). Each event does two
+    things: it is written to the log at once, and it is queued as an animation
+    step. The queue plays steps one after another, so a burst of events (a fast
+    fake run) still reads as a sequence.
+
+  Honest status
+    Every node carries data-status (built or planned) and data-code: the graph
+    node ("graph:small") or the module (a path relative to code/) that
+    implements it, or "none". DESCRIBE, in the script, has one entry per event
+    kind the code can emit. tests/test_page_truth.py fails when a built node
+    names code that does not exist, a planned node names code that does, the
+    graph has a node the page lacks, or an event kind has no entry.
 
   Security note
     Event data includes model output, which is untrusted text. Everything from
     the stream goes in with textContent, never as markup.
 
   How to extend (one edit per build day)
-    Change a node's `status` in NODES from "planned" to "built". Nothing else.
+    Flip a node's data-status from "planned" to "built" and point its data-code
+    at the code. Add the phase to tools/adr_snapshot.py.
 -->
 <style>
   :root {
@@ -39,6 +53,7 @@
     --bad: #fb7185;
     --warn: #fbbf24;
     --planned: #7f8fb0;
+    --harness: #c084fc;
   }
   * { box-sizing: border-box; }
   /* Author CSS such as `.field { display: grid }` beats the browser's own
@@ -68,7 +83,7 @@
   .hint { color: var(--muted); font-size: 12px; }
   .qtext { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; }
   @media (min-width: 900px) { .qtext { grid-template-columns: 1fr 1fr; } }
-  #huntstatus:empty, #msg:empty { display: none; }
+  #huntstatus:empty, #evalstatus:empty, #msg:empty { display: none; }
   .check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text); }
   .check input { margin-top: 3px; }
   label { font-size: 12px; color: var(--muted); }
@@ -85,13 +100,20 @@
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   textarea { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font: 13px/1.4 ui-monospace, Menlo, monospace; width: 100%; height: 104px; resize: vertical; }
   #preview { margin: 0; height: 104px; max-height: none; overflow: auto; white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); }
-  #huntstatus { margin-top: 8px; font-size: 14px; }
+  #huntstatus, #evalstatus { margin-top: 8px; font-size: 14px; }
+  #evalstatus.ok { color: var(--ok); }
+  #evalstatus.bad { color: var(--bad); }
+  #evalstatus.warn { color: var(--warn); }
   #msg { color: var(--warn); min-height: 1.4em; margin-top: 8px; font-size: 13px; }
 
   /* The schematic keeps a minimum width and scrolls inside its panel on a
      phone, so its labels stay readable and the page itself never scrolls sideways. */
   .schematic { overflow-x: auto; }
   svg { width: 100%; min-width: 720px; height: auto; display: block; }
+  .lane { fill: #0d1729; stroke: var(--line); stroke-width: 1; }
+  .lane.harness { stroke: var(--harness); stroke-opacity: .45; }
+  .lane-label { fill: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; }
+  .lane-label.harness { fill: var(--harness); }
   .edge { fill: none; stroke: var(--line); stroke-width: 2; }
   .edge.dashed { stroke-dasharray: 5 5; }
   .edge.faint { opacity: 0; transition: opacity .2s; }
@@ -106,6 +128,9 @@
   .node[data-status=planned] rect { stroke: var(--planned); stroke-dasharray: 5 4; }
   .node[data-status=planned] .t { fill: var(--planned); }
   .node[data-status=planned] .s { fill: var(--planned); }
+  /* Harness controls. The app's own steps keep the accent colour.
+     Only the stroke changes, so a planned control stays dashed. */
+  .node[data-layer=harness] rect { stroke: var(--harness); }
   .node.active rect, .node.active polygon { stroke: #fff; fill: #12304d; }
   .node.calling rect { animation: pulse 1s ease-in-out infinite; }
   .node.ok rect, .node.ok polygon { stroke: var(--ok); }
@@ -122,6 +147,7 @@
   .legend span::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 2px solid; margin-right: 6px; vertical-align: middle; }
   .l-built::before { border-color: var(--accent); }
   .l-planned::before { border-color: var(--planned); border-top-style: dashed !important; }
+  .l-harness::before { border-color: var(--harness); }
 
   .lower { display: grid; gap: 16px; grid-template-columns: 1fr; }
   @media (min-width: 900px) { .lower { grid-template-columns: 1.6fr 1fr; } }
@@ -134,6 +160,10 @@
   #log .k.bad { color: var(--bad); }
   #log .k.ok { color: var(--ok); }
   #log .k.warn { color: var(--warn); }
+  #log .k.h { color: var(--harness); }
+  #log .k.h.bad { color: var(--bad); }
+  #log .k.h.ok { color: var(--ok); }
+  #log .k.h.warn { color: var(--warn); }
   #log pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; color: var(--muted); display: none; }
   #log li.open pre { display: block; }
   #log li:empty { display: none; }
@@ -150,18 +180,29 @@
 <body>
 <header>
   <h1>FindyFixy</h1>
-  <p>Fire a run and watch it move through the system. Dashed boxes are not built yet.</p>
+  <p>Fire a run and watch it move through the system. Top lane: the harness. Bottom lane: FindyFixy. Dashed boxes are not built yet.</p>
 </header>
 
 <main>
   <section class="panel" aria-label="Run controls">
     <div class="controls">
       <div class="field">
+        <label for="kind">Run</label>
+        <select id="kind">
+          <option value="triage" selected>Triage run (one question)</option>
+          <option value="eval">Eval run (golden cases, scored)</option>
+        </select>
+      </div>
+      <div class="field">
         <label for="mode">Mode</label>
         <select id="mode">
           <option value="live" selected>Live (Ollama)</option>
           <option value="fake">Fake (scripted, no model)</option>
         </select>
+      </div>
+      <div class="field" id="cases-field" hidden>
+        <label for="cases">Cases, first N of <span id="cases-size">the set</span></label>
+        <input type="number" id="cases" min="1" value="2" title="The gate applies only when every case runs: the baseline is defined on the full set.">
       </div>
       <div class="field grow" id="fake-field">
         <label for="scenario">Scenario</label>
@@ -180,7 +221,7 @@
       </div>
       <div class="actions">
         <button id="run">Run</button>
-        <button id="stop" class="secondary" hidden>Stop hunt</button>
+        <button id="stop" class="secondary" hidden>Stop</button>
         <button id="replay" class="secondary" disabled>Replay</button>
       </div>
     </div>
@@ -201,15 +242,28 @@
       </div>
     </div>
     <div id="huntstatus" role="status" aria-live="polite"></div>
+    <div id="evalstatus" role="status" aria-live="polite"></div>
     <div id="msg" role="status" aria-live="polite"></div>
   </section>
 
   <section class="panel" aria-label="Architecture schematic">
     <div class="schematic">
-    <svg viewBox="0 50 940 420" role="img" aria-labelledby="svgtitle">
-      <title id="svgtitle">The question first goes to a recall step that looks up similar past incidents, then to an investigate step that may look up deploys with a tool, then to the small model, then validation, then a route that either ends or escalates to the large model, and finally a triage record.</title>
+    <svg viewBox="-60 -128 1000 594" role="img" aria-labelledby="svgtitle">
+      <title id="svgtitle">Two lanes. The top lane is the harness: an eval gate that is built, and a CI gate, tracing, policy, gateway and human review that are planned. The bottom lane is FindyFixy, the app under test. The eval gate sends each golden case into the app as a question. The question goes to a recall step that looks up similar past incidents, then to an investigate step that may look up deploys with a tool, then to the small model, then validation, then a route that either ends or escalates to the large model, and finally a triage record. The triage record goes back to the eval gate, which scores the answer.</title>
 
-      <!-- edges -->
+      <!-- lanes: the harness on top, the app it tests below -->
+      <rect class="lane harness" x="-54" y="-122" width="988" height="114" rx="10"/>
+      <text class="lane-label harness" x="-44" y="-106">Harness</text>
+      <rect class="lane" x="-54" y="24" width="988" height="436" rx="10"/>
+      <text class="lane-label" x="-20" y="44">FindyFixy</text>
+
+      <!-- edges between the lanes: cases go in, answers come back to be scored -->
+      <path id="e_eval_q" class="edge" d="M-28,-16 L-28,260 L10,260"/>
+      <path id="e_rec_eval" class="edge" d="M845,228 L845,10 L70,10 L70,-16"/>
+      <text class="edge-label" x="-36" y="130" transform="rotate(-90 -36 130)">cases in</text>
+      <text class="edge-label" x="460" y="4">answers scored</text>
+
+      <!-- app edges -->
       <path id="e_q_inv" class="edge" d="M120,260 L142,260"/>
       <path id="e_inv_small" class="edge" d="M272,260 L294,260"/>
       <path id="e_q_small" class="edge dashed faint" d="M65,292 C65,338 330,338 330,292"/>
@@ -228,62 +282,62 @@
       <text class="edge-label" x="71" y="182">similar incidents</text>
       <text id="l_bypass" class="edge-label" x="198" y="356" style="opacity:0">tool step off</text>
 
-      <!-- built nodes -->
-      <g class="node" id="n_q" data-status="built">
-        <title>In: The pasted incident report or log lines.&#10;Out: The same text, unchanged, to every step.&#10;Logic: Capped at 8000 characters. Treated as untrusted input.</title>
+      <!-- app nodes: data-code names the graph node or module that implements each box -->
+      <g class="node" id="n_q" data-status="built" data-code="graph:__start__">
+        <title>In: The pasted incident report or log lines. In an eval run, a golden case's alert.&#10;Out: The same text, unchanged, to every step.&#10;Logic: Capped at 8000 characters. Treated as untrusted input.</title>
         <rect x="10" y="228" width="110" height="64" rx="8"/>
         <text class="t" x="65" y="256">Question</text>
         <text class="s" x="65" y="274">incident report</text>
       </g>
-      <g class="node" id="n_inv" data-status="built">
+      <g class="node" id="n_inv" data-status="built" data-code="graph:investigate">
         <title>In: The question.&#10;Out: Evidence text from tool calls. May be empty.&#10;Logic: A tool-calling model decides whether to call get_recent_deploys. The loop has a turn cap. Every run pays for these model requests, even when no tool is called.</title>
         <rect x="142" y="228" width="130" height="64" rx="8"/>
         <text class="t" x="207" y="254">Investigate</text>
         <text class="s" x="207" y="271">tool-calling model</text>
         <text class="badge" x="207" y="286" id="b_inv"> </text>
       </g>
-      <g class="node" id="n_small" data-status="built">
+      <g class="node" id="n_small" data-status="built" data-code="graph:small">
         <title>In: The question, the recalled incidents and the evidence.&#10;Out: A triage record: severity, component, next action, confidence.&#10;Logic: Temperature 0, output constrained to the schema. If the record stays invalid after the retry, the result is empty and the route escalates.</title>
         <rect x="294" y="228" width="130" height="64" rx="8"/>
         <text class="t" x="359" y="254">Small model</text>
         <text class="s" x="359" y="271">answers first</text>
         <text class="badge" x="359" y="286" id="b_small"> </text>
       </g>
-      <g class="node" id="n_val" data-status="built">
+      <g class="node" id="n_val" data-status="built" data-code="app/triage.py">
         <title>In: The model's raw reply.&#10;Out: A checked triage record, or a typed error.&#10;Logic: Pydantic checks the severity value and the 0 to 1 confidence bound. An invalid reply is asked again once, with the error text added.</title>
         <rect x="446" y="228" width="130" height="64" rx="8"/>
         <text class="t" x="511" y="254">Validate</text>
         <text class="s" x="511" y="271">Pydantic, 1 retry</text>
         <text class="badge" x="511" y="286" id="b_val"> </text>
       </g>
-      <g class="node" id="n_route" data-status="built">
+      <g class="node" id="n_route" data-status="built" data-code="app/graph.py">
         <title>In: The triage record.&#10;Out: End the run, or escalate to the large model.&#10;Logic: A pure function, no model call. Escalates when the record is missing or confidence is below 0.7 (exactly 0.7 stays). If both models are the same name it always ends.</title>
         <polygon points="658,215 718,260 658,305 598,260"/>
         <text class="t" x="658" y="258">Route</text>
         <text class="badge" x="658" y="274" id="b_route"> </text>
       </g>
-      <g class="node" id="n_large" data-status="built">
+      <g class="node" id="n_large" data-status="built" data-code="graph:large">
         <title>In: The same question, recall and evidence as the small model.&#10;Out: The final triage record, overwriting the small model's.&#10;Logic: Same step as the small model. No tier above it, so an invalid reply fails loudly.</title>
         <rect x="593" y="388" width="130" height="64" rx="8"/>
         <text class="t" x="658" y="414">Large model</text>
         <text class="s" x="658" y="431">second tier, if set</text>
         <text class="badge" x="658" y="446" id="b_large"> </text>
       </g>
-      <g class="node" id="n_rec" data-status="built">
+      <g class="node" id="n_rec" data-status="built" data-code="graph:__end__">
         <title>In: The final record.&#10;Out: Severity, component, next action, confidence and the model used.&#10;Logic: Shown as is. It is the only thing downstream steps read.</title>
         <rect x="780" y="228" width="130" height="64" rx="8"/>
         <text class="t" x="845" y="254">Triage record</text>
         <text class="s" x="845" y="271">severity, component</text>
         <text class="badge" x="845" y="286" id="b_rec"> </text>
       </g>
-      <g class="node" id="n_recall" data-status="built">
+      <g class="node" id="n_recall" data-status="built" data-code="graph:recall">
         <title>In: The question.&#10;Out: Up to 3 similar past incidents, each with severity, cause and fix, as prompt text.&#10;Logic: BM25 (keyword) and vector search each take their top 50. Reciprocal-rank fusion merges them, a cross-encoder reranker re-scores the best 30, and results collapse to one per incident. A database fault stops the run instead of being hidden.</title>
         <rect x="10" y="62" width="110" height="64" rx="8"/>
         <text class="t" x="65" y="86">Recall</text>
         <text class="s" x="65" y="103">hybrid + rerank</text>
         <text class="badge" x="65" y="119" id="b_recall"> </text>
       </g>
-      <g class="node" id="n_tool" data-status="built">
+      <g class="node" id="n_tool" data-status="built" data-code="app/tools.py">
         <title>In: Service name and a number of hours.&#10;Out: JSON of that service's deploys in the window, newest first.&#10;Logic: Arguments are validated again inside the tool, so a direct call is as safe as one from a model.</title>
         <rect x="142" y="62" width="130" height="64" rx="8"/>
         <text class="t" x="207" y="86">Deploy tool</text>
@@ -291,36 +345,44 @@
         <text class="badge" x="207" y="119" id="b_tool"> </text>
       </g>
 
-      <!-- planned nodes: one edit per build day flips data-status to built -->
-      <g class="node" data-status="planned">
+      <!-- harness nodes: one edit per build day flips data-status to built -->
+      <g class="node" id="n_eval" data-status="built" data-layer="harness" data-code="harness/eval/runner.py">
+        <title>In: An app's golden cases, through one interface (SystemUnderTest: describe, answer, summarise). FindyFixy plugs in with an adapter: 30 cases, each with a reference severity, cause and fix.&#10;Out: Scores per metric with confidence intervals, a saved report, and a pass or fail gate.&#10;Logic: The harness package (code/harness/eval) never imports the app. A judge model from a different family scores faithfulness, context recall, action quality and response relevancy; labels such as severity are matched exactly. The gate fails if a score drops below its frozen floor (baseline mean minus 0.05), regresses outside its 95% interval, or the judge failure rate passes 0.15. Moving it into the harness changed no score: the frozen baseline still reproduces byte for byte.&#10;Watch it: choose Eval run above. Each case goes into the app lane, the answer comes back, and the metrics are scored here. The console is a viewer: it writes no report and no baseline, and it applies the gate only when every golden case ran.</title>
+        <rect x="-44" y="-96" width="130" height="80" rx="8"/>
+        <text class="t" x="21" y="-74">Eval gate</text>
+        <text class="s" x="21" y="-58">harness, any app</text>
+        <text class="badge" x="21" y="-43" id="b_eval"> </text>
+        <text class="badge" x="21" y="-28" id="b_evalscore"> </text>
+      </g>
+      <g class="node" data-status="planned" data-layer="harness" data-code="harness/eval/attest.py">
+        <title>Planned for Day 5, step 4. Not built, no behavior yet.&#10;A passing local eval run writes an attestation: a fingerprint of every file that changes answers, plus the verdict. CI fails a change to those files that has no matching passing attestation.</title>
+        <rect x="124" y="-96" width="130" height="64" rx="8"/>
+        <text class="t" x="189" y="-70">CI gate</text>
+        <text class="s" x="189" y="-52">Day 5, attested</text>
+      </g>
+      <g class="node" data-status="planned" data-layer="harness" data-code="none">
         <title>Planned for Day 6. Not built, no behavior yet.</title>
-        <rect x="294" y="70" width="130" height="56" rx="8"/>
-        <text class="t" x="359" y="94">Tracing</text>
-        <text class="s" x="359" y="112">Day 6, Langfuse</text>
+        <rect x="292" y="-96" width="130" height="64" rx="8"/>
+        <text class="t" x="357" y="-70">Tracing</text>
+        <text class="s" x="357" y="-52">Day 6, Langfuse</text>
       </g>
-      <g class="node" data-status="planned">
+      <g class="node" data-status="planned" data-layer="harness" data-code="none">
         <title>Planned for Day 7. Not built, no behavior yet.</title>
-        <rect x="446" y="70" width="130" height="56" rx="8"/>
-        <text class="t" x="511" y="94">Policy</text>
-        <text class="s" x="511" y="112">Day 7, guardrails</text>
+        <rect x="460" y="-96" width="130" height="64" rx="8"/>
+        <text class="t" x="525" y="-70">Policy</text>
+        <text class="s" x="525" y="-52">Day 7, guardrails</text>
       </g>
-      <g class="node" data-status="planned">
+      <g class="node" data-status="planned" data-layer="harness" data-code="none">
         <title>Planned for Day 8. Not built, no behavior yet.</title>
-        <rect x="598" y="70" width="130" height="56" rx="8"/>
-        <text class="t" x="663" y="94">Gateway</text>
-        <text class="s" x="663" y="112">Day 8, routing</text>
+        <rect x="628" y="-96" width="130" height="64" rx="8"/>
+        <text class="t" x="693" y="-70">Gateway</text>
+        <text class="s" x="693" y="-52">Day 8, routing</text>
       </g>
-      <g class="node" data-status="built">
-        <title>In: The 30 golden cases, each with a reference severity, cause and fix.&#10;Out: Scores per metric with confidence intervals, a saved report, and a pass or fail gate.&#10;Logic: Runs every case through the real pipeline. A judge model from a different family scores severity, faithfulness, context recall, action quality and response relevancy. The gate fails if a score drops below its frozen floor (baseline mean minus 0.05) or the judge failure rate passes 0.15.</title>
-        <rect x="10" y="396" width="130" height="56" rx="8"/>
-        <text class="t" x="75" y="420">Evals</text>
-        <text class="s" x="75" y="438">golden set, gate</text>
-      </g>
-      <g class="node" data-status="planned">
+      <g class="node" data-status="planned" data-layer="harness" data-code="none">
         <title>Planned for Day 9. Not built, no behavior yet.</title>
-        <rect x="780" y="396" width="130" height="56" rx="8"/>
-        <text class="t" x="845" y="420">Human review</text>
-        <text class="s" x="845" y="438">Day 9, approval</text>
+        <rect x="796" y="-96" width="130" height="64" rx="8"/>
+        <text class="t" x="861" y="-70">Human review</text>
+        <text class="s" x="861" y="-52">Day 9, approval</text>
       </g>
 
       <circle id="dot" r="7" cx="0" cy="0"/>
@@ -329,6 +391,7 @@
     <div class="legend">
       <span class="l-built">built</span>
       <span class="l-planned">planned (day shown)</span>
+      <span class="l-harness">harness control</span>
     </div>
   </section>
 
@@ -371,6 +434,9 @@ const banks = { lesson: [], incidents: [] };   // filled from /config
 let reloadPending = false;    // dev mode: a reload is due once the current run ends
 let hunting = false;          // true once the stream shows a hunt_started
 let iteration = [];           // events of the hunt's current run, for the slow replay
+// Cases per eval set, by mode, and the default count. Filled from /config; the
+// server reads each size from its set and checks every request against it.
+const evalCfg = { sizes: { live: null, fake: null }, fallback: 2 };
 
 // ---- small helpers -------------------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -389,13 +455,30 @@ function nodeEl(id) { return $("n_" + id); }
 
 function setBadge(id, text) { $("b_" + id).textContent = text || " "; }
 
-function resetVisuals() {
-  document.querySelectorAll(".node").forEach((n) => n.classList.remove("active", "calling", "ok", "bad", "warn"));
+// The app lane only. An eval run clears it before each case and leaves the
+// harness lane (the Eval gate's progress) as it is.
+function resetApp() {
+  document.querySelectorAll(".node:not([data-layer=harness])").forEach((n) => n.classList.remove("active", "calling", "ok", "bad", "warn", "skipped"));
   ["recall", "inv", "tool", "small", "val", "route", "large", "rec"].forEach((id) => setBadge(id, ""));
-  document.querySelectorAll(".node").forEach((n) => n.classList.remove("skipped"));
   $("e_q_small").style.opacity = 0;
   $("l_bypass").style.opacity = 0;
   $("dot").classList.remove("on");
+}
+
+function resetVisuals() {
+  resetApp();
+  document.querySelectorAll(".node[data-layer=harness]").forEach((n) => n.classList.remove("active", "calling", "ok", "bad", "warn"));
+  ["eval", "evalscore"].forEach((id) => setBadge(id, ""));
+}
+
+// No tool step: show the bypass and dim the boxes that stay idle. A triage run
+// says so in run_started; the eval graph never has one. An investigate event,
+// if one arrives anyway, un-dims its box.
+function showToolBypass() {
+  nodeEl("inv").classList.add("skipped");
+  nodeEl("tool").classList.add("skipped");
+  $("e_q_small").style.opacity = 1;
+  $("l_bypass").style.opacity = 1;
 }
 
 function mark(id, ...cls) {
@@ -429,30 +512,66 @@ async function travel(edgeId) {
 }
 
 // ---- event log -----------------------------------------------------------
-function summarize(ev) {
-  const d = ev.data;
-  switch (ev.kind) {
-    case "run_started": return `${d.mode} run, small=${d.small_model}, large=${d.large_model}, ${d.forced ? "ESCALATION FORCED" : "threshold " + d.threshold}${d.stress && d.stress !== "none" ? ", STRESS: " + d.stress.replaceAll("_", " ") : ""}`;
-    case "node_entered": return d.model ? `${d.node} (${d.model})` : d.node;
-    case "tool_call": return `${d.name}(${Object.entries(d.args).map(([k, v]) => k + "=" + v).join(", ")})`;
-    case "tool_result": return d.error ? `ERROR ${clip(d.result, 80)}` : clip(d.result, 90);
-    case "model_request": return `${d.model ?? "tool model"}, attempt ${d.attempt}`;
-    case "model_reply": return `${d.model ?? "tool model"}, attempt ${d.attempt}, ${d.reply.length} chars, ${servedText(d)}${d.input_tokens != null ? `, ${d.input_tokens} in / ${d.output_tokens} out tokens` : ""}`;
-    case "validation": return d.ok ? `attempt ${d.attempt} valid` : `attempt ${d.attempt} INVALID`;
-    case "fault_injected": return `INJECTED: ${d.model} reply replaced, ${d.field} = ${d.value}`;
-    case "retry": return `re-asking ${d.model}, attempt ${d.attempt}`;
-    case "node_exited":
+// Short text for metric and label values from a harness event.
+function scoreText(score) { return score == null ? "FAILED" : score.toFixed(2); }
+function metricName(name) { return name.replace("response_", "").replaceAll("_", " "); }
+function labelsText(d) {
+  return Object.entries(d.labels).map(([k, v]) => {
+    const want = d.expected[k];
+    return v === want ? String(v) : `${v == null ? "none" : v}, expected ${want}`;
+  }).join("; ") || "no labels";
+}
+function evalVerdict(d) {
+  if (d.subset) return { cls: "warn", badge: "subset, no gate", text: `subset, gate not applied (${d.summary.n} case${d.summary.n === 1 ? "" : "s"} ran; the baseline is defined on the full set)` };
+  if (d.gate.length === 0) return { cls: "ok", badge: "gate PASS", text: "PASS: the gate found no problem against evals/baseline.json" };
+  return { cls: "bad", badge: "gate FAIL", text: `FAIL: ${d.gate.length} gate problem(s), listed under Result` };
+}
+
+// The handler table: one entry per event kind the code can emit, per source.
+// "app" is app/events.py (the graph); "harness" is harness/eval/events.py (the
+// runner). tests/test_page_truth.py parses this table and fails when a kind is
+// missing or stale, so no event can arrive that the page does not show.
+const DESCRIBE = {
+  app: {
+    run_started: (d) => `${d.mode} run, small=${d.small_model}, large=${d.large_model}, ${d.forced ? "ESCALATION FORCED" : "threshold " + d.threshold}${d.stress && d.stress !== "none" ? ", STRESS: " + d.stress.replaceAll("_", " ") : ""}`,
+    node_entered: (d) => d.model ? `${d.node} (${d.model})` : d.node,
+    tool_call: (d) => `${d.name}(${Object.entries(d.args).map(([k, v]) => k + "=" + v).join(", ")})`,
+    tool_result: (d) => d.error ? `ERROR ${clip(d.result, 80)}` : clip(d.result, 90),
+    model_request: (d) => `${d.model ?? "tool model"}, attempt ${d.attempt}`,
+    model_reply: (d) => `${d.model ?? "tool model"}, attempt ${d.attempt}, ${d.reply.length} chars, ${servedText(d)}${d.input_tokens != null ? `, ${d.input_tokens} in / ${d.output_tokens} out tokens` : ""}`,
+    validation: (d) => d.ok ? `attempt ${d.attempt} valid` : `attempt ${d.attempt} INVALID`,
+    fault_injected: (d) => `INJECTED: ${d.model} reply replaced, ${d.field} = ${d.value}`,
+    retry: (d) => `re-asking ${d.model}, attempt ${d.attempt}`,
+    node_exited: (d) => {
       if (d.node === "recall") return d.incidents.length ? `${d.incidents.length} similar incident(s): ${d.incidents.join(", ")}` : "no similar incidents";
       if (d.node === "investigate") return `${d.calls} tool call(s), ${d.turns} turn(s), ${tokensText(d)}${d.hit_turn_cap ? ", HIT TURN CAP" : ""}`;
       return d.triage ? `${d.node} produced a record` : `${d.node} produced no valid record`;
-    case "route": return `confidence ${d.confidence === null ? "none" : d.confidence} vs ${d.threshold} -> ${d.target === "__end__" ? "done" : d.target}${d.threshold > 1 ? " (forced)" : ""}`;
-    case "run_finished": return `final: ${d.model_used} model`;
-    case "run_failed": return `${d.error_type}`;
-    case "hunt_started": return `up to ${d.max} runs, ${d.questions} question(s) in rotation`;
-    case "hunt_run": return `run ${d.index} of ${d.max}`;
-    case "hunt_finished": return `${d.reason} after ${d.runs} run(s)`;
-    default: return "";
-  }
+    },
+    route: (d) => `confidence ${d.confidence === null ? "none" : d.confidence} vs ${d.threshold} -> ${d.target === "__end__" ? "done" : d.target}${d.threshold > 1 ? " (forced)" : ""}`,
+    run_finished: (d) => `final: ${d.model_used} model`,
+    run_failed: (d) => `${d.error_type}`,
+    hunt_started: (d) => `up to ${d.max} runs, ${d.questions} question(s) in rotation`,
+    hunt_run: (d) => `run ${d.index} of ${d.max}`,
+    hunt_finished: (d) => `${d.reason} after ${d.runs} run(s)`,
+  },
+  harness: {
+    eval_started: (d) => `${d.n} case(s): ${clip(d.cases.join(", "), 60)}; ${clip(Object.entries(d.system).map(([k, v]) => k + "=" + v).join(", "), 90)}`,
+    case_started: (d) => `case ${d.index} of ${d.n}: ${d.id} (${d.group})`,
+    case_answered: (d) => d.run_error ? `${d.id} RUN ERROR ${clip(d.run_error, 90)}` : `${d.id} answered ${labelsText(d)}`,
+    metric_scored: (d) => `${d.id} ${d.name} ${scoreText(d.score)}${d.failed && d.error ? ": " + clip(d.error, 60) : ""}`,
+    case_scored: (d) => `${d.id} scored`,
+    eval_finished: (d) => `${d.summary.n} case(s), ${d.summary.n_run_errors} run error(s); ${evalVerdict(d).text}`,
+    eval_failed: (d) => d.reason === "stopped" ? `stopped: ${d.error}` : `${d.error_type}: ${clip(d.error, 120)}`,
+  },
+};
+
+function sourceOf(ev) { return ev.source || "app"; }
+
+// Own keys only: a kind named like an Object method must not find a handler.
+function summarize(ev) {
+  const table = DESCRIBE[sourceOf(ev)];
+  if (!table || !Object.hasOwn(table, ev.kind)) return `UNHANDLED ${sourceOf(ev)} event kind`;
+  return table[ev.kind](ev.data);
 }
 
 function addLog(ev) {
@@ -460,6 +579,12 @@ function addLog(ev) {
   const li = document.createElement("li");
   const t = document.createElement("span"); t.className = "t"; t.textContent = ev.t.toFixed(2) + "s";
   const k = document.createElement("span"); k.className = "k"; k.textContent = ev.kind;
+  if (sourceOf(ev) === "harness") {
+    k.classList.add("h");
+    if (ev.kind === "eval_failed" || (ev.kind === "case_answered" && ev.data.run_error) || (ev.kind === "metric_scored" && ev.data.failed)) k.classList.add("bad");
+    if (ev.kind === "eval_finished") k.classList.add(evalVerdict(ev.data).cls);
+  }
+  if (!Object.hasOwn(DESCRIBE[sourceOf(ev)] || {}, ev.kind)) k.classList.add("warn");
   if (ev.kind === "run_failed" || (ev.kind === "validation" && !ev.data.ok) || (ev.kind === "tool_result" && ev.data.error)) k.classList.add("bad");
   if (ev.kind === "run_finished" || (ev.kind === "validation" && ev.data.ok)) k.classList.add("ok");
   if (ev.kind === "fault_injected") k.classList.add("warn");
@@ -498,7 +623,8 @@ function showResult(rows) {
 // ---- animation: one async step per event ---------------------------------
 // `view` tracks which node is "current", so a validation event knows whether
 // to light the Validate box (small model) or just flag the large node.
-const view = { recall: null, node: null, forced: false, tools: false, toolStep: null, served: {}, hasMismatch: false, live: false, replaying: false, stress: "none" };
+const view = { recall: null, node: null, forced: false, tools: false, toolStep: null, served: {}, hasMismatch: false, live: false, replaying: false, stress: "none",
+               evalRun: { n: 0, index: 0, id: "", fake: false, latest: {} } };
 
 
 // Compact text for a tool call's arguments, and for what came back.
@@ -533,7 +659,102 @@ function tokensText(d) {
   return d.input_tokens == null ? "tokens unknown" : `${d.input_tokens} in / ${d.output_tokens} out tokens`;
 }
 
+// The result panel during an eval run: where it is, and the case's latest scores.
+function showEvalProgress() {
+  const e = view.evalRun;
+  showResult([
+    ["Status", "running", ""],
+    ["Case", `${e.index} of ${e.n}${e.id ? ": " + e.id : ""}`, ""],
+    ...Object.entries(e.latest).map(([name, score]) => [metricName(name), scoreText(score), score == null ? "bad" : ""]),
+    ...(e.fake ? [["Data", "FAKE: invented cases, scripted models and judge", "bad"]] : []),
+  ]);
+}
+
+function finishEval(d) {
+  const v = evalVerdict(d);
+  const fake = view.evalRun.fake ? "FAKE data. " : "";
+  $("evalstatus").className = v.cls;
+  $("evalstatus").textContent = `${fake}Verdict: ${v.text}.`;
+  mark("eval", v.cls);
+  setBadge("eval", v.badge);
+  const rows = [
+    ["Status", "finished", "ok"],
+    ["Cases", `${d.summary.n}, ${d.summary.n_run_errors} with a run error`, d.summary.n_run_errors ? "bad" : ""],
+    ...Object.entries(d.summary.scores).map(([name, st]) => [metricName(name),
+      st.mean == null ? `n/a, ${st.n_failed} failed` : `${st.mean.toFixed(3)}${st.ci ? ` [${st.ci[0].toFixed(2)}, ${st.ci[1].toFixed(2)}]` : ""}${st.n_failed ? `, ${st.n_failed} failed` : ""}`, ""]),
+    ["Gate", d.subset ? "subset, gate not applied" : (d.gate.length ? "FAIL" : "PASS"), v.cls],
+    ...(d.subset ? [] : d.gate.map((problem, i) => [`Problem ${i + 1}`, problem, "bad"])),
+    ...(view.evalRun.fake ? [["Data", "FAKE: invented cases, scripted models and judge", "bad"]] : []),
+  ];
+  showResult(rows);
+}
+
+// Harness events: the Eval gate's progress, and the hand-off to and from the app lane.
+async function animateHarness(ev) {
+  const d = ev.data;
+  switch (ev.kind) {
+    case "eval_started":
+      resetVisuals();
+      view.evalRun = { n: d.n, index: 0, id: "", fake: d.system.data === "FAKE", latest: {} };
+      view.live = !view.evalRun.fake;
+      if (!view.replaying) pace = view.live ? PACE_REALTIME : PACE_NORMAL;
+      mark("eval", "active");
+      setBadge("eval", `0 of ${d.n} cases`);
+      $("evalstatus").className = "";
+      $("evalstatus").textContent = `${view.evalRun.fake ? "FAKE data. " : ""}Eval run: ${d.n} case(s).`;
+      showEvalProgress();
+      break;
+    case "case_started":
+      resetApp();
+      Object.assign(view, { node: null, recall: null, tools: false, toolStep: null, served: {} });
+      Object.assign(view.evalRun, { index: d.index, id: d.id, latest: {} });
+      mark("eval", "calling");
+      setBadge("eval", `case ${d.index} of ${d.n}`);
+      setBadge("evalscore", "");
+      showToolBypass();
+      await travel("e_eval_q");
+      mark("q", "active");
+      showEvalProgress();
+      break;
+    case "case_answered": {
+      if (view.node === "large") await travel("e_large_rec");
+      const miss = Object.entries(d.labels).some(([k, v]) => v !== d.expected[k]);
+      mark("rec", d.run_error ? "bad" : (miss ? "warn" : "ok"));
+      setBadge("rec", d.run_error ? "run error" : labelsText(d));
+      await travel("e_rec_eval");
+      mark("eval", "calling");
+      setBadge("eval", `scoring ${d.id}`);
+      break;
+    }
+    case "metric_scored":
+      view.evalRun.latest[d.name] = d.score;
+      setBadge("evalscore", `${metricName(d.name)} ${scoreText(d.score)}`);
+      showEvalProgress();
+      break;
+    case "case_scored":
+      mark("eval", "active");
+      setBadge("eval", `case ${view.evalRun.index} of ${view.evalRun.n} scored`);
+      break;
+    case "eval_finished":
+      finishEval(d);
+      break;
+    case "eval_failed": {
+      const stopped = d.reason === "stopped";
+      mark("eval", stopped ? "warn" : "bad");
+      setBadge("eval", stopped ? "stopped" : "run failed");
+      $("evalstatus").className = stopped ? "warn" : "bad";
+      $("evalstatus").textContent = stopped
+        ? `${view.evalRun.fake ? "FAKE data. " : ""}Eval run stopped: ${d.error}. No verdict: a stopped run is not a designed subset.`
+        : `Eval run failed: ${d.error_type}. No verdict.`;
+      showResult([["Status", stopped ? "stopped" : "failed", stopped ? "warn" : "bad"], ["Error", d.error_type, ""], ["Detail", d.error, ""]]);
+      break;
+    }
+  }
+  await sleep(catchingUp() ? 0 : pace.step);
+}
+
 async function animate(ev) {
+  if (sourceOf(ev) === "harness") return animateHarness(ev);
   const d = ev.data;
   switch (ev.kind) {
     case "run_started":
@@ -550,13 +771,7 @@ async function animate(ev) {
       if (!view.replaying) pace = view.live ? PACE_REALTIME : PACE_NORMAL;
       mark("q", "active");
       if (!d.recall) nodeEl("recall").classList.add("skipped");
-      if (!d.tools) {
-        // No tool step: show the bypass, and dim the boxes that stay idle.
-        nodeEl("inv").classList.add("skipped");
-        nodeEl("tool").classList.add("skipped");
-        $("e_q_small").style.opacity = 1;
-        $("l_bypass").style.opacity = 1;
-      }
+      if (!d.tools) showToolBypass();   // no tool step: the bypass, idle boxes dimmed
       showResult([["Status", "running", ""], ["Question", clip(d.question, 160), ""],
                   ...(d.stress && d.stress !== "none" ? [["Stress", d.stress.replaceAll("_", " "), "bad"]] : [])]);
       break;
@@ -571,6 +786,8 @@ async function animate(ev) {
       }
       if (d.node === "investigate") {
         view.node = "inv";
+        view.tools = true;
+        nodeEl("inv").classList.remove("skipped");
         await travel("e_q_inv");
         mark("inv", "calling");
         setBadge("inv", "asking the model");
@@ -578,6 +795,7 @@ async function animate(ev) {
       }
       view.node = d.node;
       if (d.node === "small") await travel(view.tools ? "e_inv_small" : "e_q_small");
+      nodeEl(d.node).classList.remove("skipped");
       mark(d.node, "active");
       break;
     case "tool_call":
@@ -716,21 +934,26 @@ function openStream() {
   hunting = false;
   iteration = [];
   $("huntstatus").textContent = "";
+  $("evalstatus").textContent = "";
   pace = PACE_NORMAL;
   source = new EventSource("/events?from=0");
   source.onmessage = (m) => {
     const ev = JSON.parse(m.data);
     addLog(ev);
-    if (ev.kind === "hunt_started") hunting = true;
-    if (ev.kind === "run_started") iteration = [];
+    const app = sourceOf(ev) === "app";
+    if (app && ev.kind === "hunt_started") hunting = true;
+    if (app && ev.kind === "run_started") iteration = [];
     if (hunting) iteration.push(ev);
     backlog++;
     queue = queue.then(() => { backlog--; return animate(ev); });
-    // A hunt ends on hunt_finished. Its inner runs also end with run_finished
-    // or run_failed, which must NOT close the stream.
-    const ends = hunting
-      ? ev.kind === "hunt_finished"
-      : ev.kind === "run_finished" || ev.kind === "run_failed";
+    // An eval run ends on its own harness terminal; the graph inside each case
+    // never emits run_finished. A hunt ends on hunt_finished. Its inner runs
+    // also end with run_finished or run_failed, which must NOT close the stream.
+    const ends = !app
+      ? ev.kind === "eval_finished" || ev.kind === "eval_failed"
+      : hunting
+        ? ev.kind === "hunt_finished"
+        : ev.kind === "run_finished" || ev.kind === "run_failed";
     if (ev.kind === "hunt_finished") queue = queue.then(() => finishHunt(ev.data));
     if (ends) {
       source.close();
@@ -748,8 +971,16 @@ function openStream() {
 
 async function startRun() {
   const mode = $("mode").value;
+  const evalRun = $("kind").value === "eval";
   const body = { mode };
-  if (mode === "fake") {
+  if (evalRun) {
+    // The server checks the range again (1 to the set's size). This only keeps
+    // the request sensible when the box holds something odd.
+    const n = Math.round(Number($("cases").value));
+    const size = evalCfg.sizes[mode] ?? n;
+    body.cases = Number.isFinite(n) && n >= 1 ? Math.min(size, n) : evalCfg.fallback;
+    $("cases").value = body.cases;
+  } else if (mode === "fake") {
     body.scenario = $("scenario").value;
   } else {
     body.question = $("custom").value.trim() || $("question").value;
@@ -766,7 +997,7 @@ async function startRun() {
   $("replay").disabled = true;
   let res;
   try {
-    res = await fetch("/run", {
+    res = await fetch(evalRun ? "/eval" : "/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -784,7 +1015,7 @@ async function startRun() {
     return;
   }
   lastRunExists = true;
-  $("stop").hidden = !body.hunt_max;
+  $("stop").hidden = !(body.hunt_max || evalRun);   // the runs that honour /stop
   openStream();
 }
 
@@ -820,19 +1051,33 @@ function showPreview() {
   $("preview").textContent = typed || $("question").value;
 }
 
+// Triage runs choose a question (live) or a scenario (fake). Eval runs choose
+// only how many golden cases to run; live or fake still applies.
 function syncMode() {
   const live = $("mode").value === "live";
-  $("fake-field").hidden = live;
-  for (const id of ["qset-field", "question-field", "live-extra"]) $(id).hidden = !live;
+  const evalRun = $("kind").value === "eval";
+  $("cases-field").hidden = !evalRun;
+  const size = evalCfg.sizes[$("mode").value];
+  if (size) { $("cases").max = size; $("cases-size").textContent = String(size); }
+  $("fake-field").hidden = live || evalRun;
+  for (const id of ["qset-field", "question-field", "live-extra"]) $(id).hidden = !live || evalRun;
 }
 
 async function init() {
   $("mode").addEventListener("change", syncMode);
+  $("kind").addEventListener("change", syncMode);
   $("run").addEventListener("click", startRun);
-  $("stop").addEventListener("click", () => {
-    fetch("/stop", { method: "POST" }).catch(() => say("Could not reach the server to stop."));
+  // The server says whether anything will stop; the message repeats its answer.
+  $("stop").addEventListener("click", async () => {
     $("stop").disabled = true;
-    say("Stopping after the current run.");
+    try {
+      const res = await fetch("/stop", { method: "POST" });
+      const stopping = (await res.json()).stopping;
+      say(stopping ? "Stopping after the current run or case." : "Nothing to stop: the run has already ended.");
+    } catch (_) {
+      say("Could not reach the server to stop.");
+      $("stop").disabled = false;
+    }
   });
   // A hunt looks for real slips, so it cannot be combined with a forced fault
   // (the server refuses it). Retry and escalation can be combined.
@@ -852,6 +1097,12 @@ async function init() {
       $("usetools").parentElement.title = "Set SMALL_MODEL and LARGE_MODEL in .env and restart the console.";
     }
     if (cfg.dev_reload) startDevReload();
+    if (cfg.eval_sizes) {
+      evalCfg.sizes = cfg.eval_sizes;
+      evalCfg.fallback = cfg.eval_default;
+      $("cases").value = cfg.eval_default;
+      syncMode();
+    }
     for (const [name, text] of Object.entries(cfg.stresses || {})) {
       if (name === "none") continue;
       const o = new Option(name.replaceAll("_", " "), name);
