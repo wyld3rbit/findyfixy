@@ -1,5 +1,5 @@
 {
-  "created_utc": "2026-11-10T20:55:18+00:00",
+  "created_utc": "2026-11-10T23:32:34+00:00",
   "files": {
     "app/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "app/corpus.py": "9ca21e617d785967727cc5b5ff00b021dede5208158c121cdde6d36c3a2beb3d",
@@ -12,7 +12,7 @@
     "app/investigate.py": "05a658c146bb60a2c23aa2e2b589c0ca86daf2151ac05fcfcd24b69cf62435ce",
     "app/llm.py": "a3f0b30ae6f5c64650a8af30934d25f265a9ad57451a8cbb5afb71a3e8a6fe42",
     "app/model_cache.py": "5d7be354d6c4c1a8b059c76ac2175818ebffb5ca13d9294d9119736e93a4c373",
-    "app/paths.py": "a9f9a00d88c3b0b186231f7b56edb6ac941f3bb87afbb1ff6d24d663bf63eeb3",
+    "app/paths.py": "4bc2d0e389700cc02c32072fe1dfa0109150e5b85c77421222a97628fa2da800",
     "app/retrieve.py": "c7a0e2937e215b039e2b0db2ad4515dcbbc09ac4740cdb0a5d5ecb523375217b",
     "app/search.py": "a554f54e9dccf61560e24c3f718c9941177eb10ff9a0a65c6acda2e3f27f991f",
     "app/settings.py": "3215781a4b3323ef468a833ccf6259ad40d1aee2668436b20aec12a4b5f76474",
@@ -48,7 +48,7 @@
     "harness/trace/tracing.py": "6646ac25c2d46da817ebde5d68feabdfa7ed1c0012b02855e594e92ee361b37b",
     "uv.lock": "d693e217e6297afa9fce10a78e1069009c736d3bc0f758fba16e0d27133d9565"
   },
-  "fingerprint": "580e02454043b691f915ac838dc49b7d083f21ecb8e1a457037488b538cfcdd4",
+  "fingerprint": "2c2eaacb9f95f84ba310225f13ca3d69010eb489a40dffaadf1e781c5cadfa61",
   "inputs": {
     "entry_modules": [
       "app.eval_answers"
@@ -61,16 +61,16 @@
     ]
   },
   "report": {
-    "name": "eval-20261110T205517Z.json",
-    "sha256": "c4c390ed5d27e408e29e79853abb5c84245f38eac77a25e8e1793c2efcbe20fa"
+    "name": "eval-20261110T233234Z.json",
+    "sha256": "c86bce6ab677b5ce4b7e2f34c50498ee26e2e3fae9e4543cadfa48f31c93b9e9"
   },
   "run": {
-    "git_sha": "e157a28",
+    "git_sha": "f3ccd7e",
     "judge_digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
     "judge_model": "qwen2.5:7b",
     "large_model": "qwen3:4b-instruct",
     "small_model": "qwen3:4b-instruct",
-    "timestamp_utc": "2026-11-10T20:43:16+00:00"
+    "timestamp_utc": "2026-11-10T23:21:21+00:00"
   },
   "verdict": "pass",
   "version": 1

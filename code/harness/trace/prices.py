@@ -20,8 +20,11 @@ Why the backend computes the cost
 Failure model
     This is an operator command, not part of a run. It fails loudly: a bad
     table raises `PriceTableError` naming the problem before anything is
-    sent, and an HTTP error from the backend propagates. A run never waits on
-    it and never depends on it.
+    sent; a definition already in the backend whose pattern would also price
+    a table model raises `PriceConflict` before anything changes; an HTTP
+    error from the backend propagates. Each model's new definition is created
+    before its old one is deleted, so a failure part-way leaves every model
+    with at least one price. A run never waits on this and never depends on it.
 
 What changes at scale
     Real per-token prices vary by tier, region and contract. A larger system
@@ -50,6 +53,10 @@ _FIELDS = {"name", "input_per_token", "output_per_token", "reference"}
 
 class PriceTableError(ValueError):
     """The price table is malformed. The message names the entry and the problem."""
+
+
+class PriceConflict(RuntimeError):
+    """A backend definition outside the table would also price a table model. Nothing was changed."""
 
 
 @dataclass(frozen=True)
@@ -95,17 +102,21 @@ def parse_prices(text: str) -> list[ModelPrice]:
     seen: set[str] = set()
     for index, entry in enumerate(entries):
         where = f"model {index + 1}"
+        if not isinstance(entry, dict):
+            raise PriceTableError(f"{where}: must be a [[model]] table, got {entry!r}")
         if set(entry) != _FIELDS:
             missing, unknown = sorted(_FIELDS - set(entry)), sorted(set(entry) - _FIELDS)
             raise PriceTableError(f"{where}: missing {missing}, unknown {unknown}")
         name, reference = entry["name"], entry["reference"]
-        if not isinstance(name, str) or not name.strip():
-            raise PriceTableError(f"{where}: name must be a non-empty string")
+        if not isinstance(name, str) or not name or name != name.strip():
+            raise PriceTableError(f"{where}: name must be a non-empty string with no surrounding spaces, "
+                                  f"got {name!r}")
         if not isinstance(reference, str) or not reference.strip():
             raise PriceTableError(f"{where} ({name}): reference must name the source of the price")
-        if name in seen:
+        # The backend matches case-insensitively, so "Qwen3:8b" and "qwen3:8b" are one model.
+        if name.casefold() in seen:
             raise PriceTableError(f"{where}: {name} is listed twice")
-        seen.add(name)
+        seen.add(name.casefold())
         prices.append(ModelPrice(name, _price(entry, "input_per_token", where),
                                  _price(entry, "output_per_token", where), reference))
     return prices
@@ -113,11 +124,17 @@ def parse_prices(text: str) -> list[ModelPrice]:
 
 @dataclass(frozen=True)
 class SyncPlan:
-    """What a sync does. `delete` holds backend ids of definitions that `create` replaces."""
+    """What a sync does. `replace` maps each model to create to the backend ids of the definitions it replaces."""
 
     create: list[ModelPrice] = field(default_factory=list)
-    delete: list[str] = field(default_factory=list)
+    replace: dict[str, list[str]] = field(default_factory=dict)
     unchanged: list[ModelPrice] = field(default_factory=list)
+    conflicts: list[str] = field(default_factory=list)
+
+    @property
+    def delete(self) -> list[str]:
+        """Every backend id this plan removes."""
+        return [definition_id for ids in self.replace.values() for definition_id in ids]
 
 
 def _same(price: ModelPrice, definition: dict[str, Any]) -> bool:
@@ -131,28 +148,56 @@ def _same(price: ModelPrice, definition: dict[str, Any]) -> bool:
             and close(definition.get("outputPrice"), price.output_per_token))
 
 
+def _matches(pattern: object, name: str) -> bool:
+    """Whether a backend match pattern matches `name`, read with Python's regex engine.
+
+    The backend evaluates patterns in its database; Python's engine agrees on
+    the anchored, escaped patterns this module writes and on common hand-written
+    ones. A pattern Python cannot read is treated as a match, so it is reported
+    as a conflict for a person to look at rather than ignored.
+    """
+    if not isinstance(pattern, str):
+        return False
+    flags = re.IGNORECASE if pattern.startswith("(?i)") else 0
+    try:
+        return re.search(pattern.removeprefix("(?i)"), name, flags) is not None
+    except re.error:
+        return True
+
+
 def plan_sync(prices: list[ModelPrice], definitions: list[dict[str, Any]]) -> SyncPlan:
     """Compare the table with the backend's definitions. Pure: sends nothing.
 
     Only the project's own definitions count (`isLangfuseManaged` false): the
-    backend's built-in prices for hosted models are never touched. Only
-    names in the table are managed, so a definition someone added by hand
-    for another model stays. A model with exactly one matching definition is
+    backend's built-in prices for hosted models are never touched. A model
+    with exactly one definition of its name that says what the table says is
     unchanged; anything else (none, different prices, duplicates) is
-    replaced, so a re-run converges to one definition per model.
+    replaced, so a re-run converges to one definition per model. A project
+    definition under another name whose pattern also matches a table model
+    is a conflict: the model would be priced twice, and which price the
+    backend uses is not defined. Conflicts are listed for `sync` to refuse.
     """
     own: dict[str, list[dict[str, Any]]] = {}
     for definition in definitions:
         if not definition.get("isLangfuseManaged"):
-            own.setdefault(definition.get("modelName", ""), []).append(definition)
+            own.setdefault(str(definition.get("modelName", "")).casefold(), []).append(definition)
     plan = SyncPlan()
     for price in prices:
-        current = own.get(price.name, [])
+        current = own.get(price.name.casefold(), [])
         if len(current) == 1 and _same(price, current[0]):
             plan.unchanged.append(price)
         else:
-            plan.delete.extend(d["id"] for d in current)
+            plan.replace[price.name] = [d["id"] for d in current]
             plan.create.append(price)
+    table = {price.name.casefold() for price in prices}
+    for name, others in own.items():
+        if name in table:
+            continue
+        for definition in others:
+            hit = [p.name for p in prices if _matches(definition.get("matchPattern"), p.name)]
+            if hit:
+                plan.conflicts.append(f"{definition.get('modelName')!r} (pattern {definition.get('matchPattern')!r}) "
+                                      f"also matches {', '.join(hit)}")
     return plan
 
 
@@ -176,15 +221,20 @@ class LangfuseModels:
     """Langfuse's `/api/public/models`, authenticated with the project's key pair."""
 
     def __init__(self, config: TraceConfig, *, timeout_s: float = TIMEOUT_S) -> None:
-        """Hold the URL and headers. Sends nothing until called."""
-        self._url = config.host.rstrip("/") + MODELS_PATH
+        """Hold the base URL and auth headers. Sends nothing until called."""
+        self._base = config.host.rstrip("/")
         self._headers = {**config.headers, "Content-Type": "application/json"}
         self._timeout_s = timeout_s
 
-    def _call(self, method: str, url: str, body: dict[str, Any] | None = None) -> Any:
-        """One request; the JSON reply, or None for an empty one. HTTP errors propagate."""
+    def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
+        """One request; the JSON reply, or None for an empty one. HTTP errors propagate.
+
+        `scores.py` makes the same authenticated call. Sharing it would touch
+        a module on the eval's attested path, so the two stay separate until
+        that module changes for its own reason.
+        """
         data = json.dumps(body).encode() if body is not None else None
-        request = urllib.request.Request(url, data=data, headers=self._headers, method=method)
+        request = urllib.request.Request(self._base + path, data=data, headers=self._headers, method=method)
         with urllib.request.urlopen(request, timeout=self._timeout_s) as response:  # noqa: S310 - our configured host
             raw = response.read()
         return json.loads(raw) if raw else None
@@ -194,7 +244,7 @@ class LangfuseModels:
         definitions: list[dict[str, Any]] = []
         page = 1
         while True:
-            reply = self._call("GET", f"{self._url}?limit={PAGE_SIZE}&page={page}")
+            reply = self._call("GET", f"{MODELS_PATH}?limit={PAGE_SIZE}&page={page}")
             definitions.extend(reply["data"])
             if page >= reply["meta"]["totalPages"]:
                 return definitions
@@ -202,7 +252,7 @@ class LangfuseModels:
 
     def create(self, price: ModelPrice) -> None:
         """Add a token-priced definition that matches the model name exactly."""
-        self._call("POST", self._url, {
+        self._call("POST", MODELS_PATH, {
             "modelName": price.name,
             "matchPattern": price.match_pattern,
             "unit": "TOKENS",
@@ -214,19 +264,24 @@ class LangfuseModels:
         """Remove one of the project's own definitions."""
         from urllib.parse import quote
 
-        self._call("DELETE", f"{self._url}/{quote(definition_id, safe='')}")
+        self._call("DELETE", f"{MODELS_PATH}/{quote(definition_id, safe='')}")
 
 
 def sync(prices: list[ModelPrice], api: ModelsApi) -> SyncPlan:
     """Make the backend's definitions match the table, and return what was done.
 
-    Deletes before creates: a model briefly has no price, never two. A trace
-    that arrives in that gap stays unpriced; for an operator command run
-    between runs that is the cheaper failure than a double definition.
+    Refuses with `PriceConflict`, changing nothing, when another definition
+    would also price a table model. Otherwise, model by model, it creates
+    the new definition, then deletes the old ones. A failure part-way leaves
+    every model priced (old or new, never none); in the moment between
+    create and delete a model has two definitions, which an operator command
+    run between eval runs can afford, and a re-run converges.
     """
     plan = plan_sync(prices, api.list())
-    for definition_id in plan.delete:
-        api.delete(definition_id)
+    if plan.conflicts:
+        raise PriceConflict("; ".join(plan.conflicts))
     for price in plan.create:
         api.create(price)
+        for definition_id in plan.replace[price.name]:
+            api.delete(definition_id)
     return plan

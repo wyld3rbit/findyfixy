@@ -25,6 +25,7 @@ The `code/app/` package. Dependencies point inward: only entry points and `code/
 **Entry points and wiring**
 - `code/app/wiring.py`, `code/app/settings.py` and `code/app/paths.py`: the composition root, the configuration read from the environment, and where files live.
 - `code/app/tracing.py`: `command_trace`, how each command (triage, retrieval eval, ingest, search, the tool paths) becomes a trace, with the tracer built from settings. The MCP server and the console build their provider at startup and use the harness's `CommandTrace` per tool call or request. `code/app/wiring.py` `stage_spans` turns the retriever's stages into spans.
+- `code/app/prices.py`: `make obs-prices`, which registers `code/config/prices.toml` with Langfuse through the harness's `code/harness/trace/prices.py`.
 - `code/app/console.py`, `code/app/console_fakes.py`, `code/app/dev_reload.py` and `code/app/stress.py`: the live console, its scripted stand-ins, hot reload and stress settings.
 - `code/app/console_eval.py`: the console's eval run. It streams the harness's events next to the graph's for each case, and applies the gate read-only. It writes no report.
 - `code/app/mcp_server.py`, `code/app/mcp_client.py`, `code/app/mcp_run.py` and `code/app/direct_run.py`: the tool served over MCP and the two measured paths to it.

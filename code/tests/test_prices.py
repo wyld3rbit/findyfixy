@@ -2,10 +2,13 @@
 
 What these tests cover
     `parse_prices` rejects every malformed entry by name instead of defaulting
-    to zero. `plan_sync` touches only the project's own definitions and
-    converges to one definition per model. `sync` deletes before it creates.
-    The committed table parses and covers every model in `record/models.md`'s
-    allowed set that the app can run.
+    to zero, and names that differ only in case or spaces. `plan_sync` touches
+    only the project's own definitions, converges to one definition per
+    model, and reports a definition under another name whose pattern would
+    also price a table model. `sync` refuses on such a conflict and creates
+    each model's new definition before deleting its old ones. The committed
+    table parses and prices the four pulled models; `make obs-prices` checks
+    the configured ones at run time (`unpriced`).
 
 What a staff+ reader should notice
     The backend is a fake `ModelsApi`: no network. The match pattern is
@@ -20,7 +23,8 @@ import re
 import pytest
 
 from app.paths import PRICES
-from harness.trace.prices import ModelPrice, PriceTableError, parse_prices, plan_sync, sync
+from app.prices import unpriced
+from harness.trace.prices import ModelPrice, PriceConflict, PriceTableError, parse_prices, plan_sync, sync
 
 ONE = """
 [[model]]
@@ -45,6 +49,7 @@ def test_a_valid_table_parses() -> None:
     (("0.00000005", "nan"), ">= 0"),
     (('"gpt-5-nano"', '""'), "reference"),
     (('"qwen3:4b"', '" "'), "name"),
+    (('"qwen3:4b"', '"qwen3:4b "'), "spaces"),
 ])
 def test_a_malformed_entry_is_rejected_by_name(change: tuple[str, str], message: str) -> None:
     """No default fills a gap: a typo cannot price a model at zero."""
@@ -53,9 +58,13 @@ def test_a_malformed_entry_is_rejected_by_name(change: tuple[str, str], message:
 
 
 def test_a_model_listed_twice_and_an_empty_table_are_rejected() -> None:
-    """Two prices for one model would leave the backend to pick one."""
+    """Two prices for one model would leave the backend to pick one; it matches names in any case."""
     with pytest.raises(PriceTableError, match="twice"):
         parse_prices(ONE + ONE)
+    with pytest.raises(PriceTableError, match="twice"):
+        parse_prices(ONE + ONE.replace('"qwen3:4b"', '"Qwen3:4B"'))
+    with pytest.raises(PriceTableError, match="table"):
+        parse_prices("model = [1]")
     with pytest.raises(PriceTableError, match="no"):
         parse_prices("")
     with pytest.raises(PriceTableError, match="TOML"):
@@ -95,15 +104,25 @@ def test_a_matching_definition_is_left_alone() -> None:
 def test_a_missing_changed_or_duplicated_definition_is_replaced(definitions, deleted) -> None:
     """Every case ends at exactly one definition with the table's prices."""
     plan = plan_sync([PRICE], definitions)
-    assert plan.create == [PRICE] and plan.delete == deleted
+    assert plan.create == [PRICE] and plan.delete == deleted and plan.conflicts == []
 
 
 def test_built_in_and_unlisted_definitions_are_never_touched() -> None:
-    """The backend's hosted-model prices and a hand-added definition stay."""
+    """The backend's hosted-model prices and a hand-added definition for another model stay."""
     managed = own(PRICE, "m", isLangfuseManaged=True, inputPrice=9.0)
     other = own(ModelPrice("other", 1, 1, "x"), "o")
     plan = plan_sync([PRICE], [managed, other])
-    assert plan.delete == [] and plan.create == [PRICE]
+    assert plan.delete == [] and plan.create == [PRICE] and plan.conflicts == []
+
+
+def test_another_definition_that_also_matches_a_table_model_is_a_conflict() -> None:
+    """A hand-added catch-all would price the model twice: reported, and `sync` changes nothing."""
+    catch_all = {"id": "c", "modelName": "qwen-any", "matchPattern": "(?i)^qwen.*", "isLangfuseManaged": False}
+    assert plan_sync([PRICE], [catch_all]).conflicts
+    api = FakeModels([catch_all])
+    with pytest.raises(PriceConflict, match="qwen-any"):
+        sync([PRICE], api)
+    assert api.calls == []
 
 
 class FakeModels:
@@ -123,15 +142,21 @@ class FakeModels:
         self.calls.append(f"delete {definition_id}")
 
 
-def test_sync_deletes_before_it_creates() -> None:
-    """A model is briefly unpriced, never priced twice."""
-    api = FakeModels([own(PRICE, "a", outputPrice=1.0)])
-    sync([PRICE], api)
-    assert api.calls == ["delete a", "create qwen3:4b"]
+def test_sync_creates_before_it_deletes_model_by_model() -> None:
+    """A failure part-way leaves every model priced: old or new, never none."""
+    other = ModelPrice("qwen3:8b", 2.5e-7, 2e-6, "gpt-5-mini")
+    api = FakeModels([own(PRICE, "a", outputPrice=1.0), own(other, "b", inputPrice=1.0)])
+    sync([PRICE, other], api)
+    assert api.calls == ["create qwen3:4b", "delete a", "create qwen3:8b", "delete b"]
+
+
+def test_configured_models_without_a_price_are_named() -> None:
+    """`make obs-prices` refuses these, so no configured model's calls go unpriced."""
+    assert unpriced(["qwen3:4b", "Qwen3:4B", "qwen3:14b"], ["qwen3:4b"]) == ["qwen3:14b"]
 
 
 def test_the_committed_table_parses_and_names_a_source_for_each_price() -> None:
-    """The file `make obs-prices` reads is valid, and prices every model the app may run."""
+    """The file `make obs-prices` reads is valid, and prices the four models pulled for this project."""
     prices = {p.name: p for p in parse_prices(PRICES.read_text(encoding="utf-8"))}
     assert {"qwen2.5:1.5b", "qwen3:4b-instruct", "qwen2.5:7b", "qwen3:8b"} <= set(prices)
     assert all(p.reference for p in prices.values())

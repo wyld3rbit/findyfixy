@@ -160,6 +160,10 @@
     {
       "date": "2026-11-10",
       "entry": "Day 6 step 6: Tracing box built; every console run links to its Langfuse trace; embedder and reranker load from the local cache with no Hub call. Gate run identical case by case to the previous run, attestation over 46 files; 809 tests pass."
+    },
+    {
+      "date": "2026-11-10",
+      "entry": "Day 6 step 7 and close: reference price table registered with Langfuse (make obs-prices), so every model call has a cost. Two golden runs identical case by case; local-only run $0.0000431, 0 of 65 runs escalated, slowest node the small model at 3.12 s p95, lowest faithfulness g28 0.17. ADR 0007 written. Decided: harder versioned data and a computed escalation signal on Day 7; models stay on the laptop."
     }
   ],
   "decisions": [
@@ -358,6 +362,20 @@
       "decision": "The maintainer's pull requests auto-merge (merge commit) once the attestation and check jobs pass; 0 required approvals; attestation is a required check.",
       "rejected": "One required approval with an admin bypass on every merge; an Action that auto-merges by author",
       "why": "Only the maintainer has write access, so the approval only forced a bypass click. A skipped check counts as passing, so with only check required a failed attestation (which skips check) could merge. An Action merges as github-actions, and that merge would start no CI run on main."
+    },
+    {
+      "date": "2026-11-10",
+      "day": 6,
+      "decision": "Day 7 starts with harder, versioned incident data: corpus v2 and golden v2 next to v1, which stays a frozen regression set. v2 includes alerts with no precedent, conflicting signals, cascades across services, and raw noisy alert text. Escalation gains a signal the system computes itself, measured on the golden set before and after.",
+      "rejected": "Replace v1 in place; golden set only; keep the self-reported confidence as the only escalation signal",
+      "why": "Two golden runs and the five triage questions escalated 0 of 35 runs: qwen3:4b-instruct never wrote a confidence below 0.7, even on a case with faithfulness 0.17. Harder data alone may not lower a self-reported number. Keeping v1 keeps the Day 3 to 6 numbers reproducible."
+    },
+    {
+      "date": "2026-11-10",
+      "day": 6,
+      "decision": "Models stay on the laptop.",
+      "rejected": "Ollama on the Mac mini (M4, 16 GB) through a key-restricted SSH tunnel",
+      "why": "The learner's call: not needed now."
     }
   ],
   "days": [

@@ -6,7 +6,7 @@
 # its own, so the real commands stay readable in one place each.
 
 .DEFAULT_GOAL := help
-.PHONY: help adr-snapshot setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative obs-secrets obs-up obs-down case golden ingest audit verify-attestation tracker ui check
+.PHONY: help adr-snapshot setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative obs-secrets obs-up obs-down obs-prices case golden ingest audit verify-attestation tracker ui check
 
 help:
 	@echo "First time:       make setup"
@@ -18,7 +18,7 @@ help:
 	@echo "See test cases:   make golden   make case ID=g07"
 	@echo "Freeze baseline:  make eval-freeze REPORT=reports/eval-<timestamp>.json"
 	@echo "Compare runs:     make eval-compare REPORT=reports/eval-<timestamp>.json"
-	@echo "Trace backend:    make obs-secrets   make obs-up   make obs-down   (Langfuse on 127.0.0.1:3000)"
+	@echo "Trace backend:    make obs-secrets   make obs-up   make obs-down   make obs-prices   (Langfuse on 127.0.0.1:3000)"
 	@echo "Tracker page:     make tracker"
 	@echo "Landing page:     make ui   (tracker with the visualization embedded)"
 	@echo "Decision records:  make adr-snapshot   (redraw the diagram in each ADR)"
@@ -75,5 +75,5 @@ check:
 	  if [ $$rc -eq 2 ]; then echo "(cache miss, retrying online)"; $(UV_TOOLS) --with pytest pytest tools -q; else exit $$rc; fi
 	python3 tools/scan_private.py --tree
 
-obs-secrets obs-up obs-down:
+obs-secrets obs-up obs-down obs-prices:
 	$(MAKE) -C code $@
