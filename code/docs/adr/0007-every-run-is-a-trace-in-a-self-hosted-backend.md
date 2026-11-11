@@ -53,7 +53,7 @@ Real user data in prompts: add redaction before export and a retention policy. M
 
 Step 1, answer first and judge after: report `eval-20261110T064445Z`, identical case by case to the attested run `eval-20261110T025827Z`. Wall time 846.4 s before, 663.4 s after (answer pass 84.3 s, judge pass 579.1 s). Each model load took 1.9 to 3.2 s, and the case-by-case order paid two loads per case.
 
-Gate runs during the phase, each identical case by case to the one before: `eval-20261110T080005Z`, `eval-20261110T085644Z`, `eval-20261110T184932Z`, `eval-20261110T205517Z`, `eval-20261110T233234Z` (attestation over 46 files), and `eval-20261110T234417Z` with `qwen3:8b` as the large model. The scores, unchanged since ADR 0006: severity match 0.77, faithfulness 0.79, response relevancy 0.67, context recall 0.93, action quality 0.92.
+Gate runs during the phase, each identical case by case to the one before: `eval-20261110T080005Z`, `eval-20261110T085644Z`, `eval-20261110T184932Z`, `eval-20261110T205517Z`, `eval-20261110T233234Z`, `eval-20261110T234417Z` with `qwen3:8b` as the large model, and `eval-20261111T003655Z` after the review fixes (attestation over 46 files). The scores, unchanged since ADR 0006: severity match 0.77, faithfulness 0.79, response relevancy 0.67, context recall 0.93, action quality 0.92.
 
 The three dashboard questions, over the last two runs (60 FindyFixy runs), read through Langfuse's metrics API:
 
@@ -65,7 +65,7 @@ The three dashboard questions, over the last two runs (60 FindyFixy runs), read 
 | Slowest node at p95 | the small model's node, 3.12 s, against recall at 0.48 s; a whole run 3.54 s |
 | Lowest faithfulness | g28 (0.17), g27 (0.4), g08 (0.4) in both runs |
 
-Isolation: the test suite sends nothing to the live backend (57 traces before a full test run, 57 after). A hung exporter and a refused connection leave span creation fast (tests). 828 tests pass.
+Isolation: the test suite sends nothing to the live backend (57 traces before a full test run, 57 after). A hung exporter and a refused connection leave span creation fast (tests). 831 tests pass.
 
 ## Limits
 
