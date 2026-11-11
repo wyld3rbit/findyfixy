@@ -1,24 +1,38 @@
 [project]
-name = "findyfixy"
+name = "wyld3rness"
 version = "0.1.0"
-description = "Event detection, determination and mitigation agent: small-model-first routing with LangGraph and Ollama"
+description = "A harness for LLM applications: an eval gate attested in CI, and every run traced with OpenTelemetry"
+readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.13,<3.14"
+# Only what the harness itself imports. The example app's own libraries are
+# declared in examples/findyfixy/pyproject.toml, so installing the harness
+# alone never pulls in torch, Postgres drivers or LangGraph.
 dependencies = [
-    "langchain-mcp-adapters>=0.3.2",
     "langchain-ollama>=1.1.0",
-    "langgraph>=1.2.16",
-    "mcp>=1.30.0,<2",
+    "ollama>=0.6.3",
     "opentelemetry-api>=1.45.2",
     "opentelemetry-exporter-otlp-proto-http>=1.45.2",
     "opentelemetry-sdk>=1.45.2",
-    "pgvector>=0.5.1",
-    "psycopg[binary]>=3.3.6",
     "pydantic>=2.14.1",
-    "python-dotenv>=1.2.4",
-    "rank-bm25>=0.2.2",
-    "sentence-transformers>=6.1.0",
 ]
+
+# The CI gate's check, for a local run. CI itself calls the file with plain
+# `python3 -I` and no install, so that nothing it hashes is imported.
+[project.scripts]
+wyld3rness-attest = "wyld3rness.eval.attest:main"
+
+[build-system]
+# uv's own build backend: the same supplier as the installer, no extra one.
+requires = ["uv_build>=0.13.1,<0.14"]
+build-backend = "uv_build"
+
+# One lock and one .venv for the harness and the example apps that test it.
+# `uv sync --all-packages` installs every member; `uv sync --package wyld3rness`
+# installs the harness alone, which is how `make test-harness` proves it stands
+# without any app.
+[tool.uv.workspace]
+members = ["examples/findyfixy"]
 
 [tool.uv]
 # Release cooldown: ignore anything published after this date, because fresh
@@ -32,7 +46,8 @@ exclude-newer = "2026-11-02T00:00:00Z"
 # ever raises ImportError for one of these, delete its line here.
 # An override also cancels a package you add yourself: `uv add pyjwt` succeeds,
 # then `import jwt` fails. Day 7 needs pyjwt and Day 9 needs a server such as
-# uvicorn, so delete those lines FIRST. tests/test_dependencies.py fails if not.
+# uvicorn, so delete those lines FIRST. examples/findyfixy/tests/test_dependencies.py
+# fails if not, for a package added to any workspace member.
 override-dependencies = [
   "uvicorn ; sys_platform == 'never'",
   "python-multipart ; sys_platform == 'never'",
@@ -42,15 +57,17 @@ override-dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=2.4.1",
     "pytest>=9.1.1",
     "pytest-sugar>=1.1.1",
+    "ruff>=0.17.3",
 ]
 
 [tool.pytest.ini_options]
-# The project is not an installable package, so put the repo root on the
-# import path. Without this, `import app` fails inside tests.
-pythonpath = ["."]
-testpaths = ["tests"]
+# Both packages are installed (editable) by `uv sync --all-packages`, so no
+# path tweak is needed: tests import `wyld3rness` and `findyfixy` as a user would.
+# tests/ is the harness's suite, examples/findyfixy/tests/ the example's.
+testpaths = ["tests", "examples/findyfixy/tests"]
 # Tests that call real models are deselected by default. They need a running
 # Ollama and are slow and non-deterministic. Run them with:
 #   uv run pytest -m integration
@@ -58,8 +75,47 @@ testpaths = ["tests"]
 # runs the whole golden set through live models and takes a long time. Run it with:
 #   uv run pytest -m quality
 # A -m on the command line overrides this one (the last -m wins).
+# Test file names are unique across both suites: pytest's default import mode
+# imports each by its bare name.
 addopts = "-m 'not integration and not quality'"
 markers = [
     "integration: needs a live service, Ollama or Postgres (run with `pytest -m integration`)",
     "quality: the answer-quality release gate, live models, minutes long (run with `pytest -m quality`)",
 ]
+
+[tool.ruff]
+# The code is written to 120 columns; wrapping it at 88 would add noise, not clarity.
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, import order, bugbear, pyupgrade, simplify and Ruff's own.
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Synthetic incident text, one sentence per string: splitting them adds noise, not clarity.
+"examples/findyfixy/src/findyfixy/retrieval/corpus.py" = ["E501"]
+"examples/findyfixy/src/findyfixy/evals/queries.py" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["wyld3rness", "findyfixy"]
+# `import x` and `from x import y` sorted together by module name, as the code already is.
+force-sort-within-sections = true
+
+[tool.mypy]
+python_version = "3.13"
+files = ["src", "examples/findyfixy/src"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+
+# The harness is the product: strict.
+[[tool.mypy.overrides]]
+module = "wyld3rness.*"
+strict = true
+
+# Libraries that ship no type information.
+[[tool.mypy.overrides]]
+module = ["rank_bm25", "pgvector.*", "sentence_transformers.*"]
+ignore_missing_imports = true

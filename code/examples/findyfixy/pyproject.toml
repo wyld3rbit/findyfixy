@@ -1,0 +1,43 @@
+[project]
+name = "findyfixy"
+version = "0.1.0"
+description = "An incident-triage agent: the example app the wyld3rness harness is tested on"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "wyld3rness",
+    "langchain-core>=1.6.12",
+    "langchain-mcp-adapters>=0.3.2",
+    "langchain-ollama>=1.1.0",
+    "langgraph>=1.2.16",
+    "mcp>=1.30.0,<2",
+    "opentelemetry-api>=1.45.2",
+    "pgvector>=0.5.1",
+    "psycopg[binary]>=3.3.6",
+    "pydantic>=2.14.1",
+    "python-dotenv>=1.2.4",
+    "rank-bm25>=0.2.2",
+    "sentence-transformers>=6.1.0",
+]
+
+# Commands. `uv run <name>` from code/; the Makefile wraps the common ones.
+[project.scripts]
+findyfixy-console = "findyfixy.console.server:main"
+findyfixy-triage = "findyfixy.triage.graph:main"
+findyfixy-ingest = "findyfixy.retrieval.ingest:main"
+findyfixy-search = "findyfixy.retrieval.search:main"
+findyfixy-eval = "findyfixy.evals.answers:main"
+findyfixy-eval-retrieval = "findyfixy.evals.retrieval:main"
+findyfixy-golden = "findyfixy.evals.golden:main"
+findyfixy-prices = "findyfixy.observability.prices:main"
+findyfixy-mcp-server = "findyfixy.mcp.server:main"
+findyfixy-mcp-run = "findyfixy.mcp.run:main"
+findyfixy-direct-run = "findyfixy.tools.direct_run:main"
+
+[tool.uv.sources]
+wyld3rness = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14"]
+build-backend = "uv_build"

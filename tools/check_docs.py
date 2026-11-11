@@ -29,19 +29,21 @@ DOCS = (
     "tools/README.md",
     ".githooks/README.md",
     "code/README.md",
-    "code/app/README.md",
-    "code/harness/README.md",
-    "code/infra/README.md",
+    "code/src/wyld3rness/README.md",
     "code/tests/README.md",
-    "code/data/README.md",
-    "code/evals/README.md",
+    "code/infra/README.md",
+    "code/examples/findyfixy/README.md",
+    "code/examples/findyfixy/tests/README.md",
+    "code/examples/findyfixy/data/README.md",
+    "code/examples/findyfixy/evals/README.md",
     "code/docs/README.md",
     "code/docs/adr/README.md",
 )
 
 # Paths a doc may name that are absent from a fresh clone on purpose: secrets
 # the user creates, and generated output that is git-ignored.
-ALLOWED_MISSING = ("code/.env", "code/infra/langfuse/.env", "code/.venv", ".audit-req.txt", "reports/", "code/reports/", "code/evals/baseline.json")
+ALLOWED_MISSING = ("code/examples/findyfixy/.env", "code/infra/langfuse/.env", "code/.venv", ".audit-req.txt", "reports/",
+                   "code/examples/findyfixy/reports/")
 
 # Targets the docs name before they exist, on purpose. Remove an entry when the
 # target is built; the check then covers it like any other.

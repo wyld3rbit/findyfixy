@@ -13,9 +13,11 @@ This folder is a 10-day course. The learner is learning the LLM production stack
 
 ## The checks
 
-Run these from this folder. Show the command and its real output as evidence. A pre-commit hook blocks a commit unless `make check` passes, and `make test` too when `code/` is staged.
+Run these from this folder. Show the command and its real output as evidence. A pre-commit hook blocks a commit unless `make check` passes, and `make lint` and `make test` too when `code/` is staged.
 
-- `make test`: the product tests. Fakes only, about a minute.
+- `make test`: the harness and FindyFixy tests. Fakes only, about a minute.
+- `make test-harness`: the harness tests alone, with no app installed.
+- `make lint`: Ruff (lint and format) and mypy.
 - `make check`: the tracker data, the tracker server tests and the privacy scan.
 - `make audit`: known vulnerabilities and startup hooks. Required after any change to `uv.lock`.
 - `make eval-gate`: the answer-quality gate. Live models, many minutes.
@@ -46,7 +48,7 @@ He runs the course with you alone. Keep the record true without being asked.
 - **If he asks to change a lesson**, edit the `.md` file. The server renders it on request.
 - **Before every commit that touches these files**, `make check` must pass. Fix anything it reports.
 - Tell him in one line what you changed in the record.
-- **Every step keeps every artifact current, unasked, in the same commit as the code**: the live visualizer (`code/docs/architecture.html`, then `make adr-snapshot`), every README, the day's lesson (Build, Results), `code/CHANGELOG.md`, `record/progress.json`, and the ADR at day close. Before each commit, check the diff against this list and name in one line what was updated.
+- **Every step keeps every artifact current, unasked, in the same commit as the code**: the live visualizer (`code/examples/findyfixy/src/findyfixy/console/static/architecture.html`, then `make adr-snapshot`), every README, the day's lesson (Build, Results), `code/CHANGELOG.md`, `record/progress.json`, and the ADR at day close. Before each commit, check the diff against this list and name in one line what was updated.
 - His own browser ticks are a convenience stored in that browser. `record/progress.json` is the record.
 
 ## Supply-chain security (every dependency change)

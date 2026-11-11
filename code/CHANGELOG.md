@@ -649,6 +649,49 @@ Three independent read-only reviews (part 05 article, dead code and artifacts, d
 - `code/docs/demo.gif` was taken before Day 5 closed, so it still showed CI gate and Tracing as planned. It now shows the same live Eval run of 2 golden cases with both boxes built: Qwen3 4B-instruct answering, Qwen2.5 7B judging, ending with "subset, gate not applied". Recorded as before from headless Chrome through its DevTools protocol, at 1280 by 1000 scaled to 960 wide, 55 s of run time cut to 39 s with unchanged frames dropped, 441 KB.
 - `README.md` is rewritten in connected prose with the bottom line first. A new section, The harness, explains each built control in one paragraph, including the attested CI gate, which the README had not mentioned, and points to the architecture page and the decision records. The command blocks, the disclaimer and the license are unchanged.
 
+### Restructure, commit 1: wyld3rness at the root, FindyFixy as an example (2026-11-10)
+
+The learner's call: the harness is the product and FindyFixy is the agent it is tested on, so the layout now says so. `code/` is a uv workspace. Its root project is the harness, renamed `wyld3rness`, in a `src/` layout (`code/src/wyld3rness/`, tests in `code/tests/`). FindyFixy is a workspace member at `code/examples/findyfixy/` with its own `pyproject.toml`, its package in `src/findyfixy/` grouped into subpackages (triage, retrieval, tools, mcp, evals, observability, console), and its data, evals, config, compose file and tests beside it. Every file moved with `git mv`.
+
+- Both packages are installable (build backend `uv_build`), so the `pythonpath = ["."]` workaround is gone. `uv sync --all-packages` installs both; one `uv.lock` resolves to exactly the same versions as before.
+- `make test-harness` runs the harness suite in a throwaway environment with no app installed, and CI runs it too. A deliberate `import findyfixy` in a harness module failed it with `ModuleNotFoundError`. The harness rules test now allows only the standard library, its declared dependencies and itself.
+- The CI gate's fingerprint follows imports across several source roots (`src`, `examples/findyfixy/src`), recorded in the attestation. The format is version 2; a version 1 file is refused by its version. Paths are relative to the workspace root, so CI still verifies with one `--root code`.
+- The harness's test fakes ship as `wyld3rness.testing`, so FindyFixy's tests import them from the package rather than from another test folder.
+- The compose file names its project (`findyfixy`), so the database no longer depends on the folder the file sits in. The new project starts empty: run `make ingest` once.
+- The architecture page moved into the console package (`findyfixy/console/static/`), since the console is what serves it.
+- `test_scan_private.py` moved to `tools/`, next to the tool it tests.
+- Closed in the attestation commit: the gate run `eval-20261111T043712Z` on the restructured tree passed and is identical case by case to `eval-20261111T003655Z` (answers, contexts, labels, every metric score). The version 2 attestation covers 51 files: the 46 from before at their new paths and the five new subpackage `__init__.py` files.
+
+### Restructure, commit 2: declared commands (2026-11-10)
+
+- FindyFixy's entry points are declared in `[project.scripts]`: `findyfixy-console`, `findyfixy-triage`, `findyfixy-ingest`, `findyfixy-search`, `findyfixy-eval`, `findyfixy-eval-retrieval`, `findyfixy-golden`, `findyfixy-prices`, `findyfixy-mcp-server`, `findyfixy-mcp-run` and `findyfixy-direct-run`. The Makefile, the usage messages and the page call them by name. The harness declares `wyld3rness-attest`.
+- Changed from the plan: no `wyld3rness-prices`. The price sync is a harness API, but the command reads FindyFixy's settings and table, so it stays the app's `findyfixy-prices`. CI still calls the attestation check as a file with `python3 -I` and no install, so nothing it hashes is imported.
+- The MCP client still starts the server as `python -m findyfixy.mcp.server` with the client's own interpreter, so the server always runs in the same environment.
+
+### Restructure, commit 3: Ruff and mypy (2026-11-10)
+
+- Dev dependencies: `ruff` 0.17.3 and `mypy` 2.4.1, both MIT, pinned under the release cooldown. mypy brings `librt`, `ast-serialize`, `mypy-extensions` and `pathspec`. `make audit` found no known vulnerabilities. The startup-hook check now allows the workspace's own editable installs, `wyld3rness.pth` and `findyfixy.pth`, each one line naming a `src/` folder.
+- `make lint` runs `ruff check`, `ruff format --check` and `mypy`. The pre-commit hook runs it when `code/` is staged, and CI runs it before the tests.
+- Ruff: pycodestyle, pyflakes, import order, bugbear, pyupgrade, simplify and Ruff's own rules, at 120 columns. The whole tree is formatted once. Findings were fixed, not suppressed, with two exceptions that carry their reason: long sentences in the synthetic corpus and query modules (E501), and one temp file opened outside `with` because the cleanup needs its name.
+- `zip()` calls got `strict=True`. Each already checked that the lengths match, so no behaviour changed: a mismatch now raises instead of silently truncating.
+- mypy: strict on the harness, typed definitions required in FindyFixy. 59 errors fixed. The real ones: a baseline file that is valid JSON but not an object now fails with a message; the deploy tool validates its arguments with `model_validate` instead of passing an unchecked string; the LangGraph graphs are typed by their state (`TriageGraph`, `Investigator`); protocols that a library object must satisfy take positional-only parameters, so a parameter name no longer decides the match.
+
+### Restructure, commit 4: the docs say what the layout says (2026-11-10)
+
+- The root README leads with wyld3rness: what the harness does, how an app plugs in, then FindyFixy as the example app. `code/README.md` maps the workspace; `code/src/wyld3rness/README.md` adds the source roots, the test doubles and the packaging; `code/examples/findyfixy/README.md` maps the app and what sits beside its package; each test suite has its own README.
+- The architecture page's tooltips name the new paths. `CLAUDE.md` and the hooks README list `make lint` and `make test-harness`.
+
+### Restructure: review fixes (2026-11-10)
+
+An independent review of the risky parts (the attestation, paths, mypy-driven edits, build and CI, moved tests) found every behaviour change equivalent and the fingerprint covering what `main` covered, plus the five new subpackage `__init__.py` files. Fixed from its findings:
+
+- `.env` is loaded by exact path (`code/examples/findyfixy/.env`) at every entry point, not found by python-dotenv's walk up the folders, which would quietly use a `.env` in a parent folder when the right one is missing. The read is now visible to the attestation test, and `.env` is named there as read but deliberately not attested: git-ignored, holds secrets, and its model names are in every report.
+- The override guard (`test_dependencies.py`) checks the dependencies of every workspace member, not only the root's. A `pyjwt` added to FindyFixy now fails it (shown by adding it on purpose).
+- A test ties the attestation's source roots to the workspace members, so a new member cannot drop out of the fingerprint unnoticed.
+- The attestation check refuses a source root linked outside the checkout, and an attestation of no files. An older-format attestation exits 1 with the rerun hint, not 2.
+- `make audit` checks that the two allowed `.pth` files hold exactly their one `src/` line.
+- The compose file explains the one-time move from the old project `code`: `docker compose -p code down`, then `make up` and `make ingest`.
+
 ### Open items
 
 - Day 7 (decided 2026-11-10): harder incident data, versioned. Corpus v2 and golden v2 next to v1 (v1 frozen as a regression set), with no-precedent alerts, conflicting signals, cascades and raw noisy alert text; escalation gains a computed signal. Reason: 0 of 35 runs escalated on step 7, because the small model never reported a confidence below 0.7.

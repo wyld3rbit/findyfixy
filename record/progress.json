@@ -168,6 +168,14 @@
     {
       "date": "2026-11-10",
       "entry": "Day 6 merged (PR #11). README rewritten in connected prose with a section per built harness control, and the gif re-recorded so CI gate and Tracing show as built."
+    },
+    {
+      "date": "2026-11-10",
+      "entry": "Restructure, commits 1 to 4: wyld3rness at the root in a src layout, FindyFixy under examples/ with subpackages and declared commands, attestation v2 over two source roots, Ruff and mypy clean (59 type errors fixed), docs rewritten. 780 tests pass; the harness's 285 pass with no app installed. Gate re-run pending."
+    },
+    {
+      "date": "2026-11-10",
+      "entry": "Restructure review fixes and gate: run eval-20261111T043712Z passed, identical case by case to eval-20261111T003655Z; attestation v2 over 51 files. 783 tests; 287 harness tests with no app installed."
     }
   ],
   "decisions": [
@@ -380,6 +388,13 @@
       "decision": "Models stay on the laptop.",
       "rejected": "Ollama on the Mac mini (M4, 16 GB) through a key-restricted SSH tunnel",
       "why": "The learner's call: not needed now."
+    },
+    {
+      "date": "2026-11-10",
+      "day": 6,
+      "decision": "The harness is the root package, named wyld3rness; FindyFixy moves to code/examples/findyfixy as a uv workspace member. Ruff and mypy join the checks. The repo is renamed wyld3rness after the restructure merges.",
+      "rejected": "One findyfixy package holding the harness inside it",
+      "why": "The learner's call: the harness is the product and FindyFixy is a test agent. Separate packages make the harness's independence a fact of the packaging, proven by running its tests with no app installed."
     }
   ],
   "days": [

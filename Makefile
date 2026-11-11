@@ -1,23 +1,24 @@
 # Everything you run, from the training folder (the one that holds CLAUDE.md).
 #   make help
 #
-# The product lives in code/ and has its own Makefile. The targets here either
+# The product lives in code/ (the wyld3rness harness, with FindyFixy under
+# code/examples/findyfixy/) and has its own Makefile. The targets here either
 # hand off to it or run the tracker tools in tools/. Nothing here does work of
 # its own, so the real commands stay readable in one place each.
 
 .DEFAULT_GOAL := help
-.PHONY: help adr-snapshot setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative obs-secrets obs-up obs-down obs-prices case golden ingest audit verify-attestation tracker ui check
+.PHONY: help adr-snapshot setup up down console triage test test-harness lint eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative obs-secrets obs-up obs-down obs-prices case golden ingest audit verify-attestation tracker ui check
 
 help:
 	@echo "First time:       make setup"
 	@echo "Start / stop:     make up   make down"
 	@echo "Run the product:  make console   make triage   make ingest"
-	@echo "Measure / test:   make test   make eval-retrieval"
+	@echo "Measure / test:   make test   make test-harness   make lint   make eval-retrieval"
 	@echo "Answer quality:   make eval   make eval-gate   make eval-baseline   make eval-negative"
 	@echo "CI gate:          make verify-attestation   (the attestation eval-gate writes on a pass)"
 	@echo "See test cases:   make golden   make case ID=g07"
-	@echo "Freeze baseline:  make eval-freeze REPORT=reports/eval-<timestamp>.json"
-	@echo "Compare runs:     make eval-compare REPORT=reports/eval-<timestamp>.json"
+	@echo "Freeze baseline:  make eval-freeze REPORT=examples/findyfixy/reports/eval-<timestamp>.json"
+	@echo "Compare runs:     make eval-compare REPORT=examples/findyfixy/reports/eval-<timestamp>.json"
 	@echo "Trace backend:    make obs-secrets   make obs-up   make obs-down   make obs-prices   (Langfuse on 127.0.0.1:3000)"
 	@echo "Tracker page:     make tracker"
 	@echo "Landing page:     make ui   (tracker with the visualization embedded)"
@@ -25,7 +26,7 @@ help:
 	@echo "Before a commit:  make check   make audit"
 
 # Product targets: see code/Makefile for what each one runs.
-setup up down console triage test eval-retrieval eval eval-gate eval-baseline eval-negative golden ingest audit verify-attestation:
+setup up down console triage test test-harness lint eval-retrieval eval eval-gate eval-baseline eval-negative golden ingest audit verify-attestation:
 	$(MAKE) -C code $@
 
 # Targets that take a value are forwarded explicitly, because the pattern rule
@@ -55,7 +56,7 @@ tracker:
 ui:
 	@echo "Open http://127.0.0.1:8766  (the visualization is embedded; also at :8765).  Ctrl-C stops both."
 	@trap 'kill 0' INT TERM; \
-	(cd code && uv run python -m app.console) & \
+	(cd code && uv run --all-packages findyfixy-console) & \
 	uv run --no-project --with markdown python tools/serve.py & \
 	wait
 
