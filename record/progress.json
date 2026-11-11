@@ -172,6 +172,10 @@
     {
       "date": "2026-11-10",
       "entry": "Restructure, commits 1 to 4: wyld3rness at the root in a src layout, FindyFixy under examples/ with subpackages and declared commands, attestation v2 over two source roots, Ruff and mypy clean (59 type errors fixed), docs rewritten. 780 tests pass; the harness's 285 pass with no app installed. Gate re-run pending."
+    },
+    {
+      "date": "2026-11-10",
+      "entry": "Restructure review fixes and gate: run eval-20261111T043712Z passed, identical case by case to eval-20261111T003655Z; attestation v2 over 51 files. 783 tests; 287 harness tests with no app installed."
     }
   ],
   "decisions": [

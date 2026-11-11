@@ -660,7 +660,7 @@ The learner's call: the harness is the product and FindyFixy is the agent it is 
 - The compose file names its project (`findyfixy`), so the database no longer depends on the folder the file sits in. The new project starts empty: run `make ingest` once.
 - The architecture page moved into the console package (`findyfixy/console/static/`), since the console is what serves it.
 - `test_scan_private.py` moved to `tools/`, next to the tool it tests.
-- Open: the committed attestation is version 1 and predates the moves, so CI fails until a new gate run is committed (commit 5).
+- Closed in the attestation commit: the gate run `eval-20261111T043712Z` on the restructured tree passed and is identical case by case to `eval-20261111T003655Z` (answers, contexts, labels, every metric score). The version 2 attestation covers 51 files: the 46 from before at their new paths and the five new subpackage `__init__.py` files.
 
 ### Restructure, commit 2: declared commands (2026-11-10)
 
