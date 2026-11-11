@@ -644,6 +644,11 @@ Three independent read-only reviews (part 05 article, dead code and artifacts, d
 - Live: `make obs-prices` registered 4 models; a re-run printed all 4 unchanged. One triage call: 73 and 46 tokens priced at $0.00002205.
 - Two golden runs: `eval-20261110T233234Z` (gate, attestation over 46 files) and `eval-20261110T234417Z` with `LARGE_MODEL=qwen3:8b`; both identical case by case to `eval-20261110T205517Z`. Neither escalated, nor did the five triage questions. The answers to the dashboard questions are in `lessons/d06.md` Results. Read through Langfuse's v2 metrics API: its v1 score and trace read routes are 404 in v4's events-only mode, and the latency dashboard has no breakdown by span name.
 
+### README rewritten and the gif re-recorded (2026-11-10)
+
+- `code/docs/demo.gif` was taken before Day 5 closed, so it still showed CI gate and Tracing as planned. It now shows the same live Eval run of 2 golden cases with both boxes built: Qwen3 4B-instruct answering, Qwen2.5 7B judging, ending with "subset, gate not applied". Recorded as before from headless Chrome through its DevTools protocol, at 1280 by 1000 scaled to 960 wide, 55 s of run time cut to 39 s with unchanged frames dropped, 441 KB.
+- `README.md` is rewritten in connected prose with the bottom line first. A new section, The harness, explains each built control in one paragraph, including the attested CI gate, which the README had not mentioned, and points to the architecture page and the decision records. The command blocks, the disclaimer and the license are unchanged.
+
 ### Open items
 
 - Day 7 (decided 2026-11-10): harder incident data, versioned. Corpus v2 and golden v2 next to v1 (v1 frozen as a regression set), with no-precedent alerts, conflicting signals, cascades and raw noisy alert text; escalation gains a computed signal. Reason: 0 of 35 runs escalated on step 7, because the small model never reported a confidence below 0.7.
