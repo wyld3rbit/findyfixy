@@ -35,11 +35,9 @@ What changes at scale
 
 from __future__ import annotations
 
-import json
 import math
 import re
 import tomllib
-import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -221,23 +219,13 @@ class LangfuseModels:
     """Langfuse's `/api/public/models`, authenticated with the project's key pair."""
 
     def __init__(self, config: TraceConfig, *, timeout_s: float = TIMEOUT_S) -> None:
-        """Hold the base URL and auth headers. Sends nothing until called."""
-        self._base = config.host.rstrip("/")
-        self._headers = {**config.headers, "Content-Type": "application/json"}
+        """Hold the config. Sends nothing until called."""
+        self._config = config
         self._timeout_s = timeout_s
 
     def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
-        """One request; the JSON reply, or None for an empty one. HTTP errors propagate.
-
-        `scores.py` makes the same authenticated call. Sharing it would touch
-        a module on the eval's attested path, so the two stay separate until
-        that module changes for its own reason.
-        """
-        data = json.dumps(body).encode() if body is not None else None
-        request = urllib.request.Request(self._base + path, data=data, headers=self._headers, method=method)
-        with urllib.request.urlopen(request, timeout=self._timeout_s) as response:  # noqa: S310 - our configured host
-            raw = response.read()
-        return json.loads(raw) if raw else None
+        """One request through `TraceConfig.request`. HTTP errors propagate."""
+        return self._config.request(method, path, body, timeout_s=self._timeout_s)
 
     def list(self) -> list[dict[str, Any]]:
         """Every definition, page by page (the backend holds about 190 built-in ones)."""
