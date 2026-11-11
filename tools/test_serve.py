@@ -122,3 +122,36 @@ def test_asset_symlink_escape_is_refused(tmp_path):
 def test_asset_directory_is_refused(tmp_path):
     (tmp_path / "sub").mkdir()
     assert serve.asset_path("sub", tmp_path) is None
+
+
+def test_adr_index_lists_each_record_with_its_day(conn):
+    """Every record is listed, and a rebuilt phase ("Day 5, rebuilt") still maps to its day."""
+    status, ctype, body = get(conn, "/api/adrs")
+    assert status == 200 and ctype == "application/json"
+    by_n = {a["n"]: a for a in json.loads(body)}
+    assert by_n[1]["day"] == 1 and by_n[6]["day"] == 5
+    assert all(a["title"] and isinstance(a["day"], int) for a in by_n.values())
+
+
+def test_adr_renders_with_its_diagram_and_no_dead_links(conn):
+    """The diagram points at the image route; links to repo files become plain text."""
+    status, ctype, body = get(conn, "/api/adr/6")
+    html = body.decode()
+    assert status == 200 and ctype.startswith("text/html")
+    assert 'src="/api/adr-img/0006-architecture.svg"' in html
+    assert "<h1" not in html and 'href="0005-' not in html and "../../../lessons" not in html
+    assert "ADR 0005" in html  # the link text stays
+
+
+def test_adr_diagram_is_served_as_svg(conn):
+    """The image route serves exactly the record diagrams."""
+    status, ctype, body = get(conn, "/api/adr-img/0001-architecture.svg")
+    assert status == 200 and ctype == "image/svg+xml" and b"<svg" in body
+
+
+@pytest.mark.parametrize("path", ["/api/adr/0", "/api/adr/abc", "/api/adr/9999",
+                                  "/api/adr-img/../README.md", "/api/adr-img/0001-architecture.png",
+                                  "/api/adr-img/%2e%2e%2fREADME.md"])
+def test_unknown_adr_or_image_is_404(conn, path):
+    """No other file under code/docs can be reached through these routes."""
+    assert get(conn, path)[0] == 404

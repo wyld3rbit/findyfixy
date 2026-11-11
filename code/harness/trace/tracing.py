@@ -85,6 +85,25 @@ class TraceConfig:
 
         return f"{self.host.rstrip('/')}/project/{quote(self.project_id, safe='')}/traces/{quote(trace_id, safe='')}"
 
+    def request(self, method: str, path: str, body: object = None, *, timeout_s: float) -> Any:
+        """One authenticated call to the backend's API at `path`; the JSON reply, or None if empty.
+
+        The one place the harness talks HTTP to the backend outside OTLP
+        (scores, model prices), so auth headers and the call shape change in
+        one place. HTTP and network errors propagate: each caller decides
+        whether to drop (scores, during a run) or fail loudly (an operator
+        command).
+        """
+        import json
+        import urllib.request
+
+        data = json.dumps(body).encode() if body is not None else None
+        headers = {**self.headers, "Content-Type": "application/json"}
+        request = urllib.request.Request(self.host.rstrip("/") + path, data=data, headers=headers, method=method)
+        with urllib.request.urlopen(request, timeout=timeout_s) as response:  # noqa: S310 - our configured host
+            raw = response.read()
+        return json.loads(raw) if raw else None
+
     @property
     def endpoint(self) -> str:
         """The OTLP traces URL."""

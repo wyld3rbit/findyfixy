@@ -59,6 +59,7 @@ h2.wk{font-size:18px;margin:28px 0 10px}
 .start pre code{white-space:pre-wrap;word-break:break-word}
 .start pre{padding-right:70px}
 .copy{position:absolute;top:6px;right:6px;font:13px Verdana,sans-serif;color:var(--accent);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:2px 8px;cursor:pointer}
+.lesson img{max-width:100%;height:auto;background:#fff;border:1px solid var(--line);border-radius:8px;margin:10px 0}
 .lesson table{border-collapse:collapse;width:100%;font-size:15px;margin:10px 0}
 .lesson th,.lesson td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
 .checks h3{font-size:16px;margin:16px 0 4px}
@@ -108,8 +109,10 @@ body.log-open #logPanel{transform:none;visibility:visible}
 </div>
 <script>
 /* This page is code only. The record is record/progress.json and the lessons are
-   the .md files; tools/serve.py serves both (/api/progress, /api/lesson/N). */
+   the .md files; tools/serve.py serves both (/api/progress, /api/lesson/N), and the
+   decision records in code/docs/adr/ (/api/adrs, /api/adr/N). */
 var DATA = null;
+var ADRS = [];
 var KEY = "llm-sprint-v1";
 function load(){ try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e){ return {}; } }
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
@@ -122,13 +125,15 @@ function fmt(iso){ var p = iso.split("-"); return new Date(Date.UTC(+p[0], +p[1]
 function nextDay(){ for (var i=0;i<DATA.days.length;i++){ if(!dayDone(DATA.days[i])) return DATA.days[i]; } return null; }
 
 /* Lesson HTML is rendered by the server from the .md file and fetched on first open. */
-function loadLesson(n, el){
+function loadLesson(n, el){ loadHTML("/api/lesson/"+n, el, "Lesson text"); }
+function loadADR(n, el){ loadHTML("/api/adr/"+n, el, "The decision record"); }
+function loadHTML(url, el, what){
   if(el.dataset.loaded) return;
   el.dataset.loaded = "1";
   el.textContent = "Loading...";
-  fetch("/api/lesson/"+n).then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
+  fetch(url).then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
     .then(function(html){ el.innerHTML = html; addCopyButtons(el); })
-    .catch(function(){ delete el.dataset.loaded; el.textContent = "Lesson text could not be loaded. Is tools/serve.py running?"; });
+    .catch(function(){ delete el.dataset.loaded; el.textContent = what+" could not be loaded. Is tools/serve.py running?"; });
 }
 
 function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
@@ -267,6 +272,10 @@ function render(){
     html += recordHTML(d);
     html += startBlock(d.n);
     html += '<details class="lessonbox"><summary>Lesson text ('+esc(d.file)+')</summary><div class="lesson" data-lesson="'+d.n+'"></div></details>';
+    ADRS.filter(function(a){ return a.day === d.n; }).forEach(function(a){
+      var num = ("000"+a.n).slice(-4);
+      html += '<details class="lessonbox"><summary>Decision record: ADR '+num+', '+esc(a.title)+'</summary><div class="lesson" data-adr="'+a.n+'"></div></details>';
+    });
     html += '<div class="checks"><h3>Self-check</h3><ul class="ck">';
     d.checks.forEach(function(c,i){
       var id = "c"+d.n+"_"+i;
@@ -331,8 +340,9 @@ document.addEventListener("toggle", function(e){
     return;
   }
   if(box.classList && box.classList.contains("lessonbox") && box.open){
-    var el = box.querySelector("[data-lesson]");
-    loadLesson(+el.dataset.lesson, el);
+    var el = box.querySelector("[data-lesson]"), adr = box.querySelector("[data-adr]");
+    if(el) loadLesson(+el.dataset.lesson, el);
+    if(adr) loadADR(+adr.dataset.adr, adr);
   }
 }, true);
 
@@ -340,6 +350,11 @@ function boot(){
   fetch("/api/progress", {cache: "no-store"}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
     .then(function(data){
       DATA = data;
+      /* The records are optional: without them the page still renders. */
+      return fetch("/api/adrs", {cache: "no-store"}).then(function(r){ return r.ok ? r.json() : []; })
+        .catch(function(){ return []; }).then(function(list){ ADRS = list; });
+    })
+    .then(function(){
       START = localDate(DATA.countdownStart);
       END = localDate(DATA.countdownEnd);
       fitTop();

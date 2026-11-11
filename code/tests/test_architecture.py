@@ -135,7 +135,7 @@ def test_the_harness_does_not_work_out_paths_from_its_own_location() -> None:
 # Every module with a command `main`. `ingest`, `search` and `mcp_server` joined
 # on Day 6: each traces its command, so each reads tracing settings.
 ENTRY_POINTS = {"console", "eval_answers", "eval_retrieval", "graph", "direct_run", "mcp_run",
-                "ingest", "search", "mcp_server"}
+                "ingest", "search", "mcp_server", "prices"}
 
 
 def _importers(target: str) -> set[str]:

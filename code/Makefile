@@ -7,7 +7,7 @@
 #      how a hijacked package can persist. Only the known shims are allowed.
 # On any finding, stop and read it. Do not upgrade or remove to make it pass.
 
-.PHONY: audit hooks scan up down setup ingest console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative case golden verify-attestation obs-secrets obs-up obs-down
+.PHONY: audit hooks scan up down setup ingest console triage test eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative case golden verify-attestation obs-secrets obs-up obs-down obs-prices
 
 # Memory for the Colima VM, in GB. 6 on most days, 8 on Langfuse days:
 #   make up COLIMA_MEMORY=8
@@ -170,3 +170,9 @@ obs-up:
 
 obs-down:
 	docker compose -f $(LANGFUSE) --env-file infra/langfuse/.env down
+
+# obs-prices: register config/prices.toml (reference prices per token) with
+# the running Langfuse, which then prices every model call it receives.
+# Safe to re-run: unchanged prices are left alone.
+obs-prices:
+	uv run python -m app.prices

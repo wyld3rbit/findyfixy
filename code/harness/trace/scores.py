@@ -31,12 +31,10 @@ Credentials
 
 from __future__ import annotations
 
-import json
 import queue
 import threading
 import time
 from typing import Literal, Protocol
-import urllib.request
 
 from harness.trace.tracing import EXPORT_TIMEOUT_S, TraceConfig
 
@@ -62,8 +60,7 @@ class LangfuseScores:
 
     def __init__(self, config: TraceConfig, *, timeout_s: float = EXPORT_TIMEOUT_S) -> None:
         """Start the sending thread. Nothing is sent until `score` is called."""
-        self._url = config.host.rstrip("/") + SCORES_PATH
-        self._headers = {**config.headers, "Content-Type": "application/json"}
+        self._config = config
         self._timeout_s = timeout_s
         self._queue: queue.Queue[dict[str, object] | None] = queue.Queue(MAX_QUEUE)
         self.sent = 0
@@ -95,11 +92,8 @@ class LangfuseScores:
             body = self._queue.get()
             if body is None:
                 return
-            request = urllib.request.Request(self._url, data=json.dumps(body).encode(),
-                                             headers=self._headers, method="POST")
             try:
-                with urllib.request.urlopen(request, timeout=self._timeout_s) as response:  # noqa: S310 - our configured host
-                    response.read()
+                self._config.request("POST", SCORES_PATH, body, timeout_s=self._timeout_s)
                 self.sent += 1
             except Exception:  # noqa: BLE001 - any failure drops this score; the thread must live on
                 with self._count_lock:
