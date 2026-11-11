@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 jobs:
-  # The CI gate (code/harness/eval/attest.py). A live eval needs a GPU, so the
+  # The CI gate (code/src/wyld3rness/eval/attest.py). A live eval needs a GPU, so the
   # developer runs `make eval-gate` and commits the attestation it writes on a
   # pass. This job rehashes the answer-affecting files and fails when any
   # differs from the attested ones. Its own job and workspace, before any
@@ -39,7 +39,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Verify the eval attestation
-        run: python3 -I code/harness/eval/attest.py verify --root code --attestation evals/attestation.json
+        run: python3 -I code/src/wyld3rness/eval/attest.py verify --root code --attestation examples/findyfixy/evals/attestation.json
 
   check:
     needs: attestation
@@ -64,5 +64,11 @@ jobs:
       - name: Product tests
         if: ${{ !cancelled() }}
         run: |
-          uv sync --locked --project code
+          uv sync --locked --all-packages --project code
           make test
+
+      # The harness alone, in an environment with no app installed: proves the
+      # harness imports nothing of FindyFixy's. Small (no torch), so it is fast.
+      - name: Harness tests, no app installed
+        if: ${{ !cancelled() }}
+        run: make test-harness

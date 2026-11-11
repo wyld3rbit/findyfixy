@@ -76,7 +76,7 @@ def test_a_path_in_a_code_block_is_checked_too(tmp_path: Path) -> None:
     assert check_docs.problems(root, TMP_DOCS) == ["README.md: `tools/gone.py` does not exist"]
 
 
-@pytest.mark.parametrize("ref", ["code/.env", "reports/eval-x.json", "dNN.md", "notes/dayN.md", "/code-review", ".md", "https://example.org/a.md", "<file>.md"])
+@pytest.mark.parametrize("ref", ["code/examples/findyfixy/.env", "reports/eval-x.json", "dNN.md", "notes/dayN.md", "/code-review", ".md", "https://example.org/a.md", "<file>.md"])
 def test_things_that_are_not_checked_paths_are_ignored(tmp_path: Path, ref: str) -> None:
     root = repo(tmp_path, f"See `{ref}`.")
     assert check_docs.problems(root, TMP_DOCS) == []

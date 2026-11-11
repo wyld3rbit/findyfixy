@@ -8,22 +8,22 @@ FindyFixy is a prototype incident-triage assistant, and the test subject for a h
 
 ## The harness
 
-A harness is the set of controls around a model that make its output safe to ship. It lives in `code/harness/`, scores any app that plugs into its interface, and never imports FindyFixy. Three controls are built.
+A harness is the set of controls around a model that make its output safe to ship. It lives in `code/src/wyld3rness/`, scores any app that plugs into its interface, and never imports FindyFixy. Three controls are built.
 
-The eval gate runs the app on 30 golden cases with known answers and scores each answer for severity, faithfulness to the retrieved incidents, relevance, recall and the quality of the first action. It compares the scores against a frozen baseline in `code/evals/` and blocks a release that makes answers worse.
+The eval gate runs the app on 30 golden cases with known answers and scores each answer for severity, faithfulness to the retrieved incidents, relevance, recall and the quality of the first action. It compares the scores against a frozen baseline in `code/examples/findyfixy/evals/` and blocks a release that makes answers worse.
 
 The CI gate carries that verdict into pull requests. The eval gate needs live models, which CI does not have, so a passing local run on a clean tree writes an attestation: the hash of every file that can change an answer. CI recomputes those hashes and fails any change to an answer-affecting file that no passing run has covered.
 
-Tracing makes every run observable. Each FindyFixy run, eval case and command becomes an OpenTelemetry trace in a self-hosted Langfuse, with a span per step, the eval scores on their case, and a cost on every model call from a committed reference price table in `code/config/`. Tracing never slows a run and never changes an answer or a score.
+Tracing makes every run observable. Each FindyFixy run, eval case and command becomes an OpenTelemetry trace in a self-hosted Langfuse, with a span per step, the eval scores on their case, and a cost on every model call from a committed reference price table in `code/examples/findyfixy/config/`. Tracing never slows a run and never changes an answer or a score.
 
-The dashed boxes in the visualizer are the controls still to come: guardrails, a model gateway and human approval. The architecture page (`code/docs/architecture.html`, served by `make console`) shows how the parts connect, and `code/docs/adr/` holds one decision record per phase with the reasoning behind each choice.
+The dashed boxes in the visualizer are the controls still to come: guardrails, a model gateway and human approval. The architecture page (`code/examples/findyfixy/src/findyfixy/console/static/architecture.html`, served by `make console`) shows how the parts connect, and `code/docs/adr/` holds one decision record per phase with the reasoning behind each choice.
 
 ## Run it
 
 You need [uv](https://docs.astral.sh/uv/), Docker Compose with a runtime (Colima or Docker) and [Ollama](https://ollama.com/). Plan for 16 GB of memory and about 8.5 GB of model downloads.
 
 ```bash
-cp code/.env.example code/.env    # model names; edit if you use other models
+cp code/examples/findyfixy/.env.example code/examples/findyfixy/.env    # model names; edit if you use other models
 make setup                        # once per clone: packages, models, database, incidents
 make up                           # start the database
 make console                      # then open http://127.0.0.1:8765
@@ -47,7 +47,7 @@ make obs-prices       # once per stack: reference prices, so every model call ca
 make help             # everything else
 ```
 
-FindyFixy answers with the small model first and escalates to a large one when the answer is invalid or its confidence is low. To try that route, set `LARGE_MODEL` in `code/.env` to a different model than `SMALL_MODEL`, for example `qwen3:8b`. With the same name on both, there is one model and no escalation. Secrets, if you add any, go in `code/.env`, which is git-ignored.
+FindyFixy answers with the small model first and escalates to a large one when the answer is invalid or its confidence is low. To try that route, set `LARGE_MODEL` in `code/examples/findyfixy/.env` to a different model than `SMALL_MODEL`, for example `qwen3:8b`. With the same name on both, there is one model and no escalation. Secrets, if you add any, go in `code/examples/findyfixy/.env`, which is git-ignored.
 
 ## Disclaimer
 

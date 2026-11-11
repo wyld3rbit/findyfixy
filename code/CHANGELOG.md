@@ -649,6 +649,19 @@ Three independent read-only reviews (part 05 article, dead code and artifacts, d
 - `code/docs/demo.gif` was taken before Day 5 closed, so it still showed CI gate and Tracing as planned. It now shows the same live Eval run of 2 golden cases with both boxes built: Qwen3 4B-instruct answering, Qwen2.5 7B judging, ending with "subset, gate not applied". Recorded as before from headless Chrome through its DevTools protocol, at 1280 by 1000 scaled to 960 wide, 55 s of run time cut to 39 s with unchanged frames dropped, 441 KB.
 - `README.md` is rewritten in connected prose with the bottom line first. A new section, The harness, explains each built control in one paragraph, including the attested CI gate, which the README had not mentioned, and points to the architecture page and the decision records. The command blocks, the disclaimer and the license are unchanged.
 
+### Restructure, commit 1: wyld3rness at the root, FindyFixy as an example (2026-11-10)
+
+The learner's call: the harness is the product and FindyFixy is the agent it is tested on, so the layout now says so. `code/` is a uv workspace. Its root project is the harness, renamed `wyld3rness`, in a `src/` layout (`code/src/wyld3rness/`, tests in `code/tests/`). FindyFixy is a workspace member at `code/examples/findyfixy/` with its own `pyproject.toml`, its package in `src/findyfixy/` grouped into subpackages (triage, retrieval, tools, mcp, evals, observability, console), and its data, evals, config, compose file and tests beside it. Every file moved with `git mv`.
+
+- Both packages are installable (build backend `uv_build`), so the `pythonpath = ["."]` workaround is gone. `uv sync --all-packages` installs both; one `uv.lock` resolves to exactly the same versions as before.
+- `make test-harness` runs the harness suite in a throwaway environment with no app installed, and CI runs it too. A deliberate `import findyfixy` in a harness module failed it with `ModuleNotFoundError`. The harness rules test now allows only the standard library, its declared dependencies and itself.
+- The CI gate's fingerprint follows imports across several source roots (`src`, `examples/findyfixy/src`), recorded in the attestation. The format is version 2; a version 1 file is refused by its version. Paths are relative to the workspace root, so CI still verifies with one `--root code`.
+- The harness's test fakes ship as `wyld3rness.testing`, so FindyFixy's tests import them from the package rather than from another test folder.
+- The compose file names its project (`findyfixy`), so the database no longer depends on the folder the file sits in. The new project starts empty: run `make ingest` once.
+- The architecture page moved into the console package (`findyfixy/console/static/`), since the console is what serves it.
+- `test_scan_private.py` moved to `tools/`, next to the tool it tests.
+- Open: the committed attestation is version 1 and predates the moves, so CI fails until a new gate run is committed (commit 5).
+
 ### Open items
 
 - Day 7 (decided 2026-11-10): harder incident data, versioned. Corpus v2 and golden v2 next to v1 (v1 frozen as a regression set), with no-precedent alerts, conflicting signals, cascades and raw noisy alert text; escalation gains a computed signal. Reason: 0 of 35 runs escalated on step 7, because the small model never reported a confidence below 0.7.

@@ -1,24 +1,33 @@
 [project]
-name = "findyfixy"
+name = "wyld3rness"
 version = "0.1.0"
-description = "Event detection, determination and mitigation agent: small-model-first routing with LangGraph and Ollama"
+description = "A harness for LLM applications: an eval gate attested in CI, and every run traced with OpenTelemetry"
+readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.13,<3.14"
+# Only what the harness itself imports. The example app's own libraries are
+# declared in examples/findyfixy/pyproject.toml, so installing the harness
+# alone never pulls in torch, Postgres drivers or LangGraph.
 dependencies = [
-    "langchain-mcp-adapters>=0.3.2",
     "langchain-ollama>=1.1.0",
-    "langgraph>=1.2.16",
-    "mcp>=1.30.0,<2",
+    "ollama>=0.6.3",
     "opentelemetry-api>=1.45.2",
     "opentelemetry-exporter-otlp-proto-http>=1.45.2",
     "opentelemetry-sdk>=1.45.2",
-    "pgvector>=0.5.1",
-    "psycopg[binary]>=3.3.6",
     "pydantic>=2.14.1",
-    "python-dotenv>=1.2.4",
-    "rank-bm25>=0.2.2",
-    "sentence-transformers>=6.1.0",
 ]
+
+[build-system]
+# uv's own build backend: the same supplier as the installer, no extra one.
+requires = ["uv_build>=0.13.1,<0.14"]
+build-backend = "uv_build"
+
+# One lock and one .venv for the harness and the example apps that test it.
+# `uv sync --all-packages` installs every member; `uv sync --package wyld3rness`
+# installs the harness alone, which is how `make test-harness` proves it stands
+# without any app.
+[tool.uv.workspace]
+members = ["examples/findyfixy"]
 
 [tool.uv]
 # Release cooldown: ignore anything published after this date, because fresh
@@ -47,10 +56,10 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-# The project is not an installable package, so put the repo root on the
-# import path. Without this, `import app` fails inside tests.
-pythonpath = ["."]
-testpaths = ["tests"]
+# Both packages are installed (editable) by `uv sync --all-packages`, so no
+# path tweak is needed: tests import `wyld3rness` and `findyfixy` as a user would.
+# tests/ is the harness's suite, examples/findyfixy/tests/ the example's.
+testpaths = ["tests", "examples/findyfixy/tests"]
 # Tests that call real models are deselected by default. They need a running
 # Ollama and are slow and non-deterministic. Run them with:
 #   uv run pytest -m integration
@@ -58,6 +67,8 @@ testpaths = ["tests"]
 # runs the whole golden set through live models and takes a long time. Run it with:
 #   uv run pytest -m quality
 # A -m on the command line overrides this one (the last -m wins).
+# Test file names are unique across both suites: pytest's default import mode
+# imports each by its bare name.
 addopts = "-m 'not integration and not quality'"
 markers = [
     "integration: needs a live service, Ollama or Postgres (run with `pytest -m integration`)",

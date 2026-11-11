@@ -39,7 +39,7 @@ PROGRESS = ROOT / "record" / "progress.json"
 PAGE = ROOT / "tracker.html"
 ASSETS = ROOT / "assets"
 
-# Port of the live visualization (code/app/console.py). The page embeds it in a
+# Port of the live visualization (code/examples/findyfixy/src/findyfixy/console/server.py). The page embeds it in a
 # frame and probes it with fetch, so both need the origin allowed, and only it.
 CONSOLE_ORIGINS = "http://127.0.0.1:8765 http://localhost:8765"
 

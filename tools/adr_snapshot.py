@@ -1,7 +1,7 @@
 """Draw the architecture as it stood at the close of each phase, from the live page.
 
 Why: an ADR must show the system as it was when the decision was made. The
-page code/docs/architecture.html shows only the latest state, and GitHub shows
+page code/examples/findyfixy/src/findyfixy/console/static/architecture.html shows only the latest state, and GitHub shows
 an .html file as source. This script reads the page's own SVG, keeps the nodes
 that existed at a phase, marks the ones built later as planned, and writes a
 standalone SVG that GitHub renders inside a Markdown file. One source, so the
@@ -38,7 +38,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PAGE = ROOT / "code" / "docs" / "architecture.html"
+PAGE = ROOT / "code" / "examples" / "findyfixy" / "src" / "findyfixy" / "console" / "static" / "architecture.html"
 OUT = ROOT / "code" / "docs" / "adr" / "img"
 
 # The phase in which each node first existed. A node absent here is planned.

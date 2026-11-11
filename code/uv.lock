@@ -6,6 +6,10 @@ requires-python = "==3.13.*"
 exclude-newer = "2026-11-02T00:00:00Z"
 
 [manifest]
+members = [
+    "findyfixy",
+    "wyld3rness",
+]
 overrides = [
     { name = "click", marker = "sys_platform == 'never'" },
     { name = "pyjwt", marker = "sys_platform == 'never'" },
@@ -225,50 +229,38 @@ wheels = [
 [[package]]
 name = "findyfixy"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "examples/findyfixy" }
 dependencies = [
+    { name = "langchain-core" },
     { name = "langchain-mcp-adapters" },
     { name = "langchain-ollama" },
     { name = "langgraph" },
     { name = "mcp" },
     { name = "opentelemetry-api" },
-    { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "opentelemetry-sdk" },
     { name = "pgvector" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "rank-bm25" },
     { name = "sentence-transformers" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-sugar" },
+    { name = "wyld3rness" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "langchain-core", specifier = ">=1.6.12" },
     { name = "langchain-mcp-adapters", specifier = ">=0.3.2" },
     { name = "langchain-ollama", specifier = ">=1.1.0" },
     { name = "langgraph", specifier = ">=1.2.16" },
     { name = "mcp", specifier = ">=1.30.0,<2" },
     { name = "opentelemetry-api", specifier = ">=1.45.2" },
-    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.45.2" },
-    { name = "opentelemetry-sdk", specifier = ">=1.45.2" },
     { name = "pgvector", specifier = ">=0.5.1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic", specifier = ">=2.14.1" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "rank-bm25", specifier = ">=0.2.2" },
     { name = "sentence-transformers", specifier = ">=6.1.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "pytest-sugar", specifier = ">=1.1.1" },
+    { name = "wyld3rness", editable = "." },
 ]
 
 [[package]]
@@ -1810,6 +1802,41 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e8/dc/5cbfcb41824502f6af93b8f3943a4d06c67c23c7d2e31eb18748c4a5b2a7/websockets-16.1.1-cp313-cp313-win32.whl", hash = "sha256:cfb70b4eb56cac4da0a83588f3ad50d46beb0690391082f3d4e2d488c70b68ea", size = 179928, upload-time = "2026-07-17T22:50:01.685Z" },
     { url = "https://files.pythonhosted.org/packages/b0/c1/71e5deb5b7f8f226997ab64908c184ac3105c0155ce2d486f318e5dd08a8/websockets-16.1.1-cp313-cp313-win_amd64.whl", hash = "sha256:d9531d9cbeac99af6f038fb1bc351403531f7d634a2c2e10e2f7c854c6ed5b68", size = 180242, upload-time = "2026-07-17T22:50:03.117Z" },
     { url = "https://files.pythonhosted.org/packages/be/4d/2d0d67834092e354d2b0498f014a41249a89556bc406cf86f3e1557bb463/websockets-16.1.1-py3-none-any.whl", hash = "sha256:6abbd3e82c731c8e531714466acd5d87b5e88ac3243465337ba71d68e23ae7e3", size = 173814, upload-time = "2026-07-17T22:51:04.184Z" },
+]
+
+[[package]]
+name = "wyld3rness"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "langchain-ollama" },
+    { name = "ollama" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
+    { name = "pydantic" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-sugar" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "langchain-ollama", specifier = ">=1.1.0" },
+    { name = "ollama", specifier = ">=0.6.3" },
+    { name = "opentelemetry-api", specifier = ">=1.45.2" },
+    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.45.2" },
+    { name = "opentelemetry-sdk", specifier = ">=1.45.2" },
+    { name = "pydantic", specifier = ">=2.14.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-sugar", specifier = ">=1.1.1" },
 ]
 
 [[package]]
