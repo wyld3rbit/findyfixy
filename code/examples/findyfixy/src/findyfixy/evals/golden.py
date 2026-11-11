@@ -219,7 +219,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         print(format_cases(load_golden()))
         return
     if args:
-        raise SystemExit("usage: python -m findyfixy.evals.golden [--show]")
+        raise SystemExit("usage: findyfixy-golden [--show]")
     cases = build_golden(read_incidents())
     write_golden(cases)
     twins = sum(c.group == "twin" for c in cases)

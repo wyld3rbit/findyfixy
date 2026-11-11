@@ -33,7 +33,7 @@ What the numbers can and cannot say
       arguments (a 1 hour window for a 24 hour question) pass validation, so
       this column is the only place the mistake is visible.
 
-Run it:   uv run python -m findyfixy.tools.direct_run [runs]
+Run it:   uv run findyfixy-direct-run [runs]
 Test it:  uv run pytest
 """
 

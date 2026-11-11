@@ -6,7 +6,7 @@ What it does
     (wyld3rness/eval/cli.py), which runs the cases, writes the report, and gates
     it against the committed baseline (`evals/baseline.json`).
 
-Run it:  uv run python -m findyfixy.evals.answers [--gate | --write-baseline | --no-recall]
+Run it:  uv run findyfixy-eval [--gate | --write-baseline | --no-recall]
 Every make target (`make eval`, `make eval-gate`, `make eval-baseline`,
 `make eval-negative`, `make case`, `make eval-freeze`) calls this module. The
 console's live eval run (findyfixy/console/eval_run.py) opens the same session, so the
@@ -103,7 +103,7 @@ ATTEST_EXTRA: tuple[str, ...] = (
     "uv.lock",  # library versions change answers (tokenizers, rerankers, clients)
     "examples/findyfixy/docker-compose.yml",  # pins the Postgres and pgvector image the retrieval runs on
 )
-PROG = "python -m findyfixy.evals.answers"
+PROG = "findyfixy-eval"
 NO_RECALL_HELP = "negative control: run without the recall step. Never saved as a baseline."
 # How FindyFixy marked a control run before the harness had `negative_control`:
 # reports written before 2026-11-09 carry `recall_enabled: False` instead. The

@@ -22,8 +22,8 @@ What it does
     The console is a viewer. An eval run here writes no report and no
     baseline; it applies the gate read-only, and only when every case ran.
 
-Run it:   uv run python -m findyfixy.console.server      (then open the printed address)
-Develop:  uv run python -m findyfixy.console.server --reload
+Run it:   uv run findyfixy-console      (then open the printed address)
+Develop:  uv run findyfixy-console --reload
           Restarts the server when code changes and reloads the page. See
           findyfixy/console/dev_reload.py. `--port N` picks another port.
 Test it:  uv run pytest
@@ -868,7 +868,7 @@ def parse_args(argv: list[str]) -> tuple[bool, int]:
         elif argv[i] == "--port" and i + 1 < len(argv) and argv[i + 1].isdigit():
             port, i = int(argv[i + 1]), i + 1
         else:
-            raise SystemExit(f"usage: python -m findyfixy.console.server [--reload] [--port N] (got {argv[i]!r})")
+            raise SystemExit(f"usage: findyfixy-console [--reload] [--port N] (got {argv[i]!r})")
         i += 1
     return reload, port
 

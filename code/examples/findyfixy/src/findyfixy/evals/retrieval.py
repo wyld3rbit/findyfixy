@@ -5,7 +5,7 @@ What it does
     and `hybrid_rerank`, and prints one table: recall@5, all@5, MRR and p50
     latency, for all queries and split by kind (exact-token and meaning).
 
-Run it:  uv run python -m findyfixy.evals.retrieval
+Run it:  uv run findyfixy-eval-retrieval
 
 The metrics
     recall@5: the share of queries where at least one correct incident is in

@@ -86,13 +86,13 @@ setup:
 # The commands below only name what already exists, so there is one short word
 # for each. Run them from code/ or, through the root Makefile, from the folder above.
 ingest:
-	$(RUN) python -m findyfixy.retrieval.ingest
+	$(RUN) findyfixy-ingest
 
 console:
-	$(RUN) python -m findyfixy.console.server
+	$(RUN) findyfixy-console
 
 triage:
-	$(RUN) python -m findyfixy.triage.graph
+	$(RUN) findyfixy-triage
 
 test:
 	$(RUN) pytest
@@ -105,7 +105,7 @@ test-harness:
 	uv run --isolated --package wyld3rness pytest tests
 
 eval-retrieval:
-	$(RUN) python -m findyfixy.evals.retrieval
+	$(RUN) findyfixy-eval-retrieval
 
 # Answer-quality evaluation: findyfixy/evals/answers.py runs FindyFixy through the
 # harness in wyld3rness/eval/. Needs make up and Ollama. Each run takes many
@@ -118,16 +118,16 @@ eval-retrieval:
 #   eval-baseline freeze this run as the new baseline. Review the diff before committing.
 #   eval-negative the proof the gate works: run WITHOUT recall; it must fail
 eval:
-	$(RUN) python -m findyfixy.evals.answers
+	$(RUN) findyfixy-eval
 
 eval-gate:
-	$(RUN) python -m findyfixy.evals.answers --gate
+	$(RUN) findyfixy-eval --gate
 
 eval-baseline:
-	$(RUN) python -m findyfixy.evals.answers --write-baseline
+	$(RUN) findyfixy-eval --write-baseline
 
 eval-negative:
-	$(RUN) python -m findyfixy.evals.answers --no-recall --gate
+	$(RUN) findyfixy-eval --no-recall --gate
 
 # verify-attestation: what CI runs. Rehashes the answer-affecting files and
 # exits 1 unless the attestation is a pass over exactly these files.
@@ -140,7 +140,7 @@ verify-attestation:
 # golden: print the 30 golden cases (alert, expected severity, reference) to read
 # and check by eye. Read-only.
 golden:
-	$(RUN) python -m findyfixy.evals.golden --show
+	$(RUN) findyfixy-golden --show
 
 # case: print one case from the newest report: the alert, what the model and the
 # judge saw, the answer and every judge decision. For checking a score by eye.
@@ -148,7 +148,7 @@ golden:
 #   make case ID=g07 REPORT=examples/findyfixy/reports/eval-<timestamp>.json   (a report other than the newest)
 case:
 	@test -n "$(ID)" || { echo "usage: make case ID=g07 [REPORT=$(APP_DIR)/reports/eval-<timestamp>.json]"; exit 2; }
-	$(RUN) python -m findyfixy.evals.answers --show-case $(ID) $(if $(REPORT),--report $(REPORT))
+	$(RUN) findyfixy-eval --show-case $(ID) $(if $(REPORT),--report $(REPORT))
 
 # eval-compare: compare a SAVED report with the newest one (or OTHER), case by
 # case: answers, contexts, labels, every metric score. Exit 1 on any difference.
@@ -157,7 +157,7 @@ case:
 #   make eval-compare REPORT=examples/findyfixy/reports/eval-<a>.json OTHER=examples/findyfixy/reports/eval-<b>.json
 eval-compare:
 	@test -n "$(REPORT)" || { echo "usage: make eval-compare REPORT=$(APP_DIR)/reports/eval-<timestamp>.json [OTHER=$(APP_DIR)/reports/eval-<timestamp>.json]"; exit 2; }
-	$(RUN) python -m findyfixy.evals.answers --compare $(REPORT) $(if $(OTHER),--report $(OTHER))
+	$(RUN) findyfixy-eval --compare $(REPORT) $(if $(OTHER),--report $(OTHER))
 
 # eval-freeze: freeze a SAVED report as the baseline (no run). The baseline is then
 # exactly the numbers you reviewed. Refuses a dirty-tree run, run errors, a high
@@ -165,7 +165,7 @@ eval-compare:
 #   make eval-freeze REPORT=examples/findyfixy/reports/eval-<timestamp>.json
 eval-freeze:
 	@test -n "$(REPORT)" || { echo "usage: make eval-freeze REPORT=$(APP_DIR)/reports/eval-<timestamp>.json"; exit 2; }
-	$(RUN) python -m findyfixy.evals.answers --baseline-from $(REPORT)
+	$(RUN) findyfixy-eval --baseline-from $(REPORT)
 
 # obs-*: the local Langfuse v4 stack that receives traces (infra/langfuse/).
 # It needs Colima at 8 GB: COLIMA_MEMORY=8 make up, or restart Colima with
@@ -190,4 +190,4 @@ obs-down:
 # the running Langfuse, which then prices every model call it receives.
 # Safe to re-run: unchanged prices are left alone.
 obs-prices:
-	$(RUN) python -m findyfixy.observability.prices
+	$(RUN) findyfixy-prices

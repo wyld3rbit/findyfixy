@@ -42,7 +42,7 @@ Known weaknesses (read these before trusting the numbers)
     - No timeout. If Ollama is down, the run raises. Retries cover bad
       output, not infrastructure faults.
 
-Run it:   uv run python -m findyfixy.triage.graph
+Run it:   uv run findyfixy-triage
 Test it:  uv run pytest
 """
 

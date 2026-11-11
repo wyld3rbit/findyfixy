@@ -56,7 +56,7 @@ tracker:
 ui:
 	@echo "Open http://127.0.0.1:8766  (the visualization is embedded; also at :8765).  Ctrl-C stops both."
 	@trap 'kill 0' INT TERM; \
-	(cd code && uv run --all-packages python -m findyfixy.console.server) & \
+	(cd code && uv run --all-packages findyfixy-console) & \
 	uv run --no-project --with markdown python tools/serve.py & \
 	wait
 

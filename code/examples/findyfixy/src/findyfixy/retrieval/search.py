@@ -2,7 +2,7 @@
 
 What: embeds a question and returns the closest chunks by cosine distance.
 
-Run it:  uv run python -m findyfixy.retrieval.search "auth latency spike after certificate rotation"
+Run it:  uv run findyfixy-search "auth latency spike after certificate rotation"
 
 Mechanics worth knowing:
 - The query must be embedded by the same model and revision as the documents.

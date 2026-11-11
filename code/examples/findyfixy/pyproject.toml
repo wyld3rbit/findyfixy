@@ -21,6 +21,20 @@ dependencies = [
     "sentence-transformers>=6.1.0",
 ]
 
+# Commands. `uv run <name>` from code/; the Makefile wraps the common ones.
+[project.scripts]
+findyfixy-console = "findyfixy.console.server:main"
+findyfixy-triage = "findyfixy.triage.graph:main"
+findyfixy-ingest = "findyfixy.retrieval.ingest:main"
+findyfixy-search = "findyfixy.retrieval.search:main"
+findyfixy-eval = "findyfixy.evals.answers:main"
+findyfixy-eval-retrieval = "findyfixy.evals.retrieval:main"
+findyfixy-golden = "findyfixy.evals.golden:main"
+findyfixy-prices = "findyfixy.observability.prices:main"
+findyfixy-mcp-server = "findyfixy.mcp.server:main"
+findyfixy-mcp-run = "findyfixy.mcp.run:main"
+findyfixy-direct-run = "findyfixy.tools.direct_run:main"
+
 [tool.uv.sources]
 wyld3rness = { workspace = true }
 

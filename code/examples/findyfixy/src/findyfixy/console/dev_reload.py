@@ -35,7 +35,7 @@ A broken edit does not crash-loop
 What is not watched
     pyproject.toml and uv.lock. A new dependency needs `uv sync` first, and a
     restart cannot do that. In-flight runs die with the child. For development
-    only: the plain `python -m findyfixy.console.server` is unchanged.
+    only: the plain `findyfixy-console` is unchanged.
 """
 
 import hashlib

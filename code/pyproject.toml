@@ -17,6 +17,11 @@ dependencies = [
     "pydantic>=2.14.1",
 ]
 
+# The CI gate's check, for a local run. CI itself calls the file with plain
+# `python3 -I` and no install, so that nothing it hashes is imported.
+[project.scripts]
+wyld3rness-attest = "wyld3rness.eval.attest:main"
+
 [build-system]
 # uv's own build backend: the same supplier as the installer, no extra one.
 requires = ["uv_build>=0.13.1,<0.14"]

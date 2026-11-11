@@ -662,6 +662,12 @@ The learner's call: the harness is the product and FindyFixy is the agent it is 
 - `test_scan_private.py` moved to `tools/`, next to the tool it tests.
 - Open: the committed attestation is version 1 and predates the moves, so CI fails until a new gate run is committed (commit 5).
 
+### Restructure, commit 2: declared commands (2026-11-10)
+
+- FindyFixy's entry points are declared in `[project.scripts]`: `findyfixy-console`, `findyfixy-triage`, `findyfixy-ingest`, `findyfixy-search`, `findyfixy-eval`, `findyfixy-eval-retrieval`, `findyfixy-golden`, `findyfixy-prices`, `findyfixy-mcp-server`, `findyfixy-mcp-run` and `findyfixy-direct-run`. The Makefile, the usage messages and the page call them by name. The harness declares `wyld3rness-attest`.
+- Changed from the plan: no `wyld3rness-prices`. The price sync is a harness API, but the command reads FindyFixy's settings and table, so it stays the app's `findyfixy-prices`. CI still calls the attestation check as a file with `python3 -I` and no install, so nothing it hashes is imported.
+- The MCP client still starts the server as `python -m findyfixy.mcp.server` with the client's own interpreter, so the server always runs in the same environment.
+
 ### Open items
 
 - Day 7 (decided 2026-11-10): harder incident data, versioned. Corpus v2 and golden v2 next to v1 (v1 frozen as a regression set), with no-precedent alerts, conflicting signals, cascades and raw noisy alert text; escalation gains a computed signal. Reason: 0 of 35 runs escalated on step 7, because the small model never reported a confidence below 0.7.

@@ -11,7 +11,7 @@
   What this is
     One page: the system as a schematic in two lanes, a Run button, and a live
     event log. The top lane is the harness. The bottom lane is
-    FindyFixy, the app the harness tests. Served by `uv run python -m findyfixy.console.server`.
+    FindyFixy, the app the harness tests. Served by `uv run findyfixy-console`.
     Opening the file directly shows the diagram but cannot run anything (it
     needs the server's /run, /eval and /events).
 
@@ -1031,7 +1031,7 @@ async function startRun() {
       body: JSON.stringify(body),
     });
   } catch (err) {
-    say("Could not reach the server. Is `uv run python -m findyfixy.console.server` running?");
+    say("Could not reach the server. Is `uv run findyfixy-console` running?");
     finishRun();
     return;
   }
@@ -1157,7 +1157,7 @@ async function init() {
       say("Live mode is off: set SMALL_MODEL and LARGE_MODEL in .env and restart the console.");
     }
   } catch (err) {
-    say("Open this page through the console server to run it: uv run python -m findyfixy.console.server");
+    say("Open this page through the console server to run it: uv run findyfixy-console");
     $("run").disabled = true;
   }
 }

@@ -32,7 +32,7 @@ What the numbers can and cannot say
     - Ten runs of this model repeated almost exactly on the direct path, so
       expect little spread here too.
 
-Run it:   uv run python -m findyfixy.mcp.run {session|per-call} [runs]
+Run it:   uv run findyfixy-mcp-run {session|per-call} [runs]
 Test it:  uv run pytest
 """
 
@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> None:
     load_dotenv()
     args = sys.argv[1:] if argv is None else argv
     if not args or args[0] not in MODES:
-        sys.exit(f"usage: python -m findyfixy.mcp.run {{{'|'.join(MODES)}}} [runs]")
+        sys.exit(f"usage: findyfixy-mcp-run {{{'|'.join(MODES)}}} [runs]")
     runs = int(args[1]) if len(args) > 1 else DEFAULT_RUNS
     from findyfixy.observability.tracing import command_trace
 
