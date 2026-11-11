@@ -77,7 +77,7 @@ def ollama() -> OllamaEnv:
 
     Session scope: the server check runs once, not once per test.
     Three things must be true, and each gets its own skip reason:
-      1. SMALL_MODEL and LARGE_MODEL are set (code/.env or the environment).
+      1. SMALL_MODEL and LARGE_MODEL are set (examples/findyfixy/.env or the environment).
       2. The server answers.
       3. Both models are pulled. A missing model would otherwise surface as a
          404 deep inside a graph run, which is a confusing place to learn it.
@@ -89,7 +89,7 @@ def ollama() -> OllamaEnv:
 
     small, large = os.environ.get("SMALL_MODEL"), os.environ.get("LARGE_MODEL")
     if not small or not large:
-        pytest.skip("SMALL_MODEL and LARGE_MODEL are not set (see code/.env)")
+        pytest.skip("SMALL_MODEL and LARGE_MODEL are not set (see examples/findyfixy/.env)")
 
     try:
         pulled = _pulled_models()

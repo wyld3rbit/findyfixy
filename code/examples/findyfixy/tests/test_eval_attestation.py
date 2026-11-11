@@ -18,6 +18,7 @@ What a staff+ reader should notice
 
 import ast
 from pathlib import Path
+import tomllib
 
 from findyfixy.evals.answers import ATTEST_ENTRY, ATTEST_EXTRA, ATTEST_SOURCE_ROOTS, ATTESTATION_PATH
 import findyfixy.paths as paths
@@ -60,6 +61,10 @@ ON_THE_EVAL_PATH = tuple(
 ) + tuple(HARNESS + m for m in ("eval/runner.py", "eval/metrics.py", "eval/judge.py", "eval/attest.py"))
 # Paths the gate writes and never reads, so they are not inputs.
 OUTPUTS = {ATTESTATION_PATH.relative_to(WORKSPACE).as_posix()}
+# Read on the eval path but deliberately not attested. `.env` is git-ignored
+# (CI's checkout has none to hash) and holds secrets; what it sets that shapes
+# answers, the model names, is recorded in every report's provenance instead.
+NOT_ATTESTED = {"examples/findyfixy/.env"}
 
 
 def closure() -> list[str]:
@@ -138,7 +143,9 @@ def test_every_path_the_eval_path_builds_is_declared_or_an_output() -> None:
         for found in built_paths(WORKSPACE / rel, constants)
     }
     assert any(found.startswith("examples/findyfixy/data/") for _, found in built)  # the scan sees real reads
-    undeclared = sorted((rel, found) for rel, found in built if not covered(found) and found not in OUTPUTS)
+    undeclared = sorted(
+        (rel, found) for rel, found in built if not covered(found) and found not in OUTPUTS | NOT_ATTESTED
+    )
     assert undeclared == [], f"declare these in ATTEST_EXTRA (findyfixy/evals/answers.py): {undeclared}"
 
 
@@ -159,3 +166,14 @@ def test_make_and_ci_verify_the_file_the_gate_writes() -> None:
     workflow = (WORKSPACE.parent / ".github" / "workflows" / "check.yml").read_text()
     assert f"src/wyld3rness/eval/attest.py verify --root . --attestation {rel}" in makefile
     assert f"code/src/wyld3rness/eval/attest.py verify --root code --attestation {rel}" in workflow
+
+
+def test_every_workspace_package_is_a_source_root() -> None:
+    """A workspace member is an editable install, not pinned by uv.lock.
+
+    Left out of the source roots, its code would be skipped as a locked
+    library, and a change to it would pass CI without a run.
+    """
+    workspace = tomllib.loads((WORKSPACE / "pyproject.toml").read_text())["tool"]["uv"]["workspace"]
+    expected = {"src", *(f"{member}/src" for member in workspace["members"])}
+    assert set(ATTEST_SOURCE_ROOTS) == expected

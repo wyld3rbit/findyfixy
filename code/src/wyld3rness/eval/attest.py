@@ -123,6 +123,10 @@ class AttestationMissing(AttestationInvalid):
     """There is no attestation file. Not attested yet, rather than broken."""
 
 
+class AttestationOutdated(AttestationMissing):
+    """The file is in an older format. Like a missing one, the fix is a new gate run."""
+
+
 class Inputs(NamedTuple):
     """What an app declares as answer-affecting: entry modules, extra files and source roots.
 
@@ -258,6 +262,7 @@ def first_party(root: Path, source_roots: Sequence[str] = (".",)) -> dict[str, P
         base = root.joinpath(*_plain(rel, "source root").parts)
         if not base.is_dir():
             raise FingerprintError(f"source root {rel} is missing")
+        _inside(root, rel, base)  # a linked root must not list names from outside the checkout
         names = {p.parent.name for p in base.glob("*/__init__.py")} | {p.stem for p in base.glob("*.py")}
         for name in names:
             if name in found:
@@ -546,9 +551,11 @@ def load_attestation(path: Path) -> dict[str, Any]:
         raise AttestationInvalid(f"{shown} is not valid JSON: {err}") from err
     if not isinstance(doc, dict):
         raise AttestationInvalid(f"{shown} must hold a JSON object")
-    if type(doc.get("version")) is int and doc["version"] != ATTESTATION_VERSION:
+    version = doc.get("version")
+    if type(version) is int and version != ATTESTATION_VERSION:
         # Checked first: an older format fails on its version, not on a field it never had.
-        raise AttestationInvalid(f"{shown}: version {doc['version']}, expected {ATTESTATION_VERSION}")
+        error = AttestationOutdated if version < ATTESTATION_VERSION else AttestationInvalid
+        raise error(f"{shown}: version {version}, expected {ATTESTATION_VERSION}")
     inputs, report = doc.get("inputs"), doc.get("report")
     checks = (
         ("version", type(doc.get("version")) is int, "an integer"),
@@ -570,6 +577,9 @@ def load_attestation(path: Path) -> dict[str, Any]:
     for field, ok, expected in checks:
         if not ok:
             raise AttestationInvalid(f"{shown}: '{field}' must be {expected}")
+    if not doc["files"]:
+        # The inputs come from the file itself, so an emptied one would "match" an empty fingerprint.
+        raise AttestationInvalid(f"{shown}: attests no files")
     return doc
 
 

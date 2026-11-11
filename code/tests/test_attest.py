@@ -253,13 +253,34 @@ def test_a_name_in_two_source_roots_and_a_bad_source_root_are_errors(root: Path)
             fingerprint(root, ENTRY, EXTRA, (bad,))
 
 
-def test_a_version_1_attestation_is_refused_by_its_version(root: Path) -> None:
-    """It names no source roots; the message says which format was expected, not which field is missing."""
+def test_a_version_1_attestation_is_refused_by_its_version_and_asks_for_a_rerun(root: Path) -> None:
+    """It names no source roots. The message names the format, and the exit code means "rerun", not "broken"."""
     path = attest_now(root)
     doc = json.loads(path.read_text())
     del doc["inputs"]["source_roots"]
     rewrite(path, version=1, inputs=doc["inputs"])
     assert verify(path, current(root)) == [f"{path.as_posix()}: version 1, expected 2"]
+    old = cli_run(root)
+    assert old.returncode == 1 and "version 1, expected 2" in old.stdout and "make eval-gate" in old.stdout
+    rewrite(path, version=3)
+    assert cli_run(root).returncode == 2  # a newer format is not ours to read
+
+
+def test_an_attestation_of_no_files_is_refused(root: Path) -> None:
+    """Inputs come from the file itself: emptied, it would match an empty fingerprint and pass."""
+    path = attest_now(root)
+    rewrite(path, files={}, inputs={"entry_modules": [], "extra_files": [], "source_roots": ["."]})
+    assert verify(path, current(root)) == [f"{path.as_posix()}: attests no files"]
+    assert cli_run(root).returncode == 2
+
+
+def test_a_source_root_linked_out_of_the_root_is_refused(root: Path, tmp_path: Path) -> None:
+    """A fork could link `src` elsewhere on the runner; even its file names must not reach the log."""
+    (tmp_path / "outside" / "secret_pkg").mkdir(parents=True)
+    (tmp_path / "outside" / "secret_pkg" / "__init__.py").write_text("")
+    (root / "linked").symlink_to(tmp_path / "outside")
+    with pytest.raises(FingerprintError, match="outside the root"):
+        fingerprint(root, ENTRY, EXTRA, (".", "linked"))
 
 
 # ---- Writing ----------------------------------------------------------------------

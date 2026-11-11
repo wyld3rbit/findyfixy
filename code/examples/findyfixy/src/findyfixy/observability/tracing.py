@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 def open_tracing(*, export_timeout_s: float = EXPORT_TIMEOUT_S) -> Iterator[Tracing | None]:
     """The process's tracer provider from settings, or None when tracing is off; closed at the end.
 
-    It loads `code/.env` first, so every entry point honours the same tracing
+    It loads `code/examples/findyfixy/.env` first, so every entry point honours the same tracing
     settings. Closing flushes what is still queued, bounded by the export
     timeout: a process that starts and stops often (the MCP server in
     per-call mode) passes a short one.
@@ -42,7 +42,7 @@ def open_tracing(*, export_timeout_s: float = EXPORT_TIMEOUT_S) -> Iterator[Trac
     from findyfixy.settings import load_env, read_tracing
     from wyld3rness.trace.tracing import Tracing as _Tracing
 
-    load_env()  # TRACING, TRACE_USER and the keys may be set in code/.env
+    load_env()  # TRACING, TRACE_USER and the keys may be set in examples/findyfixy/.env
     config = read_tracing()
     if config is None:
         yield None

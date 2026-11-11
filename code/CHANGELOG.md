@@ -681,6 +681,17 @@ The learner's call: the harness is the product and FindyFixy is the agent it is 
 - The root README leads with wyld3rness: what the harness does, how an app plugs in, then FindyFixy as the example app. `code/README.md` maps the workspace; `code/src/wyld3rness/README.md` adds the source roots, the test doubles and the packaging; `code/examples/findyfixy/README.md` maps the app and what sits beside its package; each test suite has its own README.
 - The architecture page's tooltips name the new paths. `CLAUDE.md` and the hooks README list `make lint` and `make test-harness`.
 
+### Restructure: review fixes (2026-11-10)
+
+An independent review of the risky parts (the attestation, paths, mypy-driven edits, build and CI, moved tests) found every behaviour change equivalent and the fingerprint covering what `main` covered, plus the five new subpackage `__init__.py` files. Fixed from its findings:
+
+- `.env` is loaded by exact path (`code/examples/findyfixy/.env`) at every entry point, not found by python-dotenv's walk up the folders, which would quietly use a `.env` in a parent folder when the right one is missing. The read is now visible to the attestation test, and `.env` is named there as read but deliberately not attested: git-ignored, holds secrets, and its model names are in every report.
+- The override guard (`test_dependencies.py`) checks the dependencies of every workspace member, not only the root's. A `pyjwt` added to FindyFixy now fails it (shown by adding it on purpose).
+- A test ties the attestation's source roots to the workspace members, so a new member cannot drop out of the fingerprint unnoticed.
+- The attestation check refuses a source root linked outside the checkout, and an attestation of no files. An older-format attestation exits 1 with the rerun hint, not 2.
+- `make audit` checks that the two allowed `.pth` files hold exactly their one `src/` line.
+- The compose file explains the one-time move from the old project `code`: `docker compose -p code down`, then `make up` and `make ingest`.
+
 ### Open items
 
 - Day 7 (decided 2026-11-10): harder incident data, versioned. Corpus v2 and golden v2 next to v1 (v1 frozen as a regression set), with no-precedent alerts, conflicting signals, cascades and raw noisy alert text; escalation gains a computed signal. Reason: 0 of 35 runs escalated on step 7, because the small model never reported a confidence below 0.7.

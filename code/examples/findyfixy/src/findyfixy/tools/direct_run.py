@@ -194,10 +194,11 @@ def main(argv: list[str] | None = None) -> None:
     The only place that reads `.env` and builds a client. `SMALL_MODEL` must
     be set. A missing name stops the run loudly rather than falling back.
     """
-    from dotenv import load_dotenv
     from langchain_ollama import ChatOllama
 
-    load_dotenv()
+    from findyfixy.settings import load_env
+
+    load_env()
     args = sys.argv[1:] if argv is None else argv
     n = int(args[0]) if args else DEFAULT_RUNS
     tool = make_deploys_tool()

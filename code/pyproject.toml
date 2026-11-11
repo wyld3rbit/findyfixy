@@ -46,7 +46,8 @@ exclude-newer = "2026-11-02T00:00:00Z"
 # ever raises ImportError for one of these, delete its line here.
 # An override also cancels a package you add yourself: `uv add pyjwt` succeeds,
 # then `import jwt` fails. Day 7 needs pyjwt and Day 9 needs a server such as
-# uvicorn, so delete those lines FIRST. tests/test_dependencies.py fails if not.
+# uvicorn, so delete those lines FIRST. examples/findyfixy/tests/test_dependencies.py
+# fails if not, for a package added to any workspace member.
 override-dependencies = [
   "uvicorn ; sys_platform == 'never'",
   "python-multipart ; sys_platform == 'never'",

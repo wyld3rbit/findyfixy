@@ -58,6 +58,12 @@ audit:
 	    echo "UNEXPECTED .pth FILES, show their contents before going on:"; \
 	    echo "$$bad"; exit 1; \
 	fi; \
+	for pair in wyld3rness:src findyfixy:examples/findyfixy/src; do \
+	    f=$$(find .venv -name "$${pair%%:*}.pth"); want="$$(pwd)/$${pair#*:}"; \
+	    if [ -n "$$f" ] && [ "$$(cat "$$f")" != "$$want" ]; then \
+	        echo "UNEXPECTED CONTENT in $$f (expected the single line $$want):"; cat "$$f"; exit 1; \
+	    fi; \
+	done; \
 	echo "none beyond the allowed shims"
 
 # hooks: install the privacy hooks for THIS clone (git hook settings are not

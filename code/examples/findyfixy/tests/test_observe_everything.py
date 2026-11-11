@@ -215,7 +215,7 @@ def test_the_mcp_server_inherits_the_clients_tracing_choice(monkeypatch) -> None
 
 
 def test_command_trace_reads_dot_env_before_deciding(monkeypatch) -> None:
-    """TRACING=off in code/.env must turn a command's tracing off: the file is loaded first."""
+    """TRACING=off in examples/findyfixy/.env must turn a command's tracing off: the file is loaded first."""
     from findyfixy.observability.tracing import command_trace
     import findyfixy.settings as settings
 

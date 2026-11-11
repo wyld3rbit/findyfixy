@@ -33,10 +33,17 @@ class MissingEnvironment(Exception):
 
 
 def load_env() -> None:
-    """Load `code/.env` into the environment, without overriding what is set."""
+    """Load `code/examples/findyfixy/.env` into the environment, without overriding what is set.
+
+    By exact path, never by search: python-dotenv's default walks up from the
+    caller's folder, so a missing file would quietly pick up a `.env` in a
+    parent folder (the old `code/.env`, or one outside the checkout).
+    """
     from dotenv import load_dotenv
 
-    load_dotenv()
+    from findyfixy.paths import ROOT
+
+    load_dotenv(ROOT / ".env")
 
 
 def require_env(name: str) -> str:

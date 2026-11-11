@@ -125,9 +125,9 @@ async def _step(command: "CommandTrace", name: str, investigator: Investigator) 
 
 def main(argv: list[str] | None = None) -> None:
     """Parse `mode [runs]`, read `.env`, run. The only place that reads `.env`."""
-    from dotenv import load_dotenv
+    from findyfixy.settings import load_env
 
-    load_dotenv()
+    load_env()
     args = sys.argv[1:] if argv is None else argv
     if not args or args[0] not in MODES:
         sys.exit(f"usage: findyfixy-mcp-run {{{'|'.join(MODES)}}} [runs]")

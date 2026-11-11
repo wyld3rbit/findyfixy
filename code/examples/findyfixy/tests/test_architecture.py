@@ -3,7 +3,7 @@
 A rule that lives only in a document is forgotten the first time someone is in
 a hurry. These tests read the source and fail when a rule is broken. The
 harness's own rules, including that it never imports an app, are in the
-harness suite (code/tests/test_architecture.py).
+harness suite (code/tests/test_harness_rules.py).
 """
 
 import ast

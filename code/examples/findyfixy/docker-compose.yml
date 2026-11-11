@@ -15,7 +15,10 @@
 # password "dev". Local-only keeps a dev password acceptable.
 
 # The project name is set here, not taken from the folder this file sits in, so
-# moving the file never silently starts a second, empty database.
+# a later move of this file never starts a second, empty database. Setting it
+# was itself such a move: a clone from before 2026-11-10 still runs the old
+# project `code`. Stop it once with `docker compose -p code down`, then
+# `make up` and `make ingest`. Its volume `code_pgdata` can then be removed.
 name: findyfixy
 
 services:

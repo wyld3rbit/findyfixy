@@ -39,7 +39,7 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 
 from findyfixy.paths import ROOT
 
-# code/ : the folder that holds `app/` (see findyfixy/paths.py).
+# The server runs from the app's folder, examples/findyfixy/ (see findyfixy/paths.py).
 PROJECT_ROOT = ROOT
 SERVER_NAME = "deploys"
 
