@@ -33,6 +33,7 @@ make case ID=g07      # one case end to end: the alert, the answer, every judge 
 make test             # the product tests
 make obs-secrets      # once: secrets for the local Langfuse stack
 make obs-up           # then open http://127.0.0.1:3000 to see every run as a trace
+make obs-prices       # once per stack: reference prices, so every model call carries a cost
 make help             # everything else
 ```
 
