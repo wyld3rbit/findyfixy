@@ -2,11 +2,21 @@
 
 ![The visualizer on a live eval run: two golden cases move through FindyFixy while the harness scores them](code/docs/demo.gif)
 
-*A live eval run of 2 golden cases in the visualizer (`make console`, Qwen3 4B-instruct through Ollama, Qwen2.5 7B as the judge). Top lane: the harness. Bottom lane: FindyFixy. Two cases are a subset, so the gate is not applied. The waiting stretches are sped up.*
+*A live eval run of 2 golden cases in the visualizer (`make console`). Qwen3 4B-instruct answers through Ollama and Qwen2.5 7B judges. The top lane is the harness and the bottom lane is FindyFixy. Two cases are a subset, so the gate is not applied. The waiting stretches are sped up.*
 
-FindyFixy is a prototype incident-triage assistant. You paste in an incident report and it returns a severity, the likely component and a first action, along with the most similar past incidents and what fixed them. It runs on one machine with open-source models and synthetic data.
+FindyFixy is a prototype incident-triage assistant, and the test subject for a harness that decides whether a model's answers can be trusted. You paste in an incident report and FindyFixy returns a severity, the likely component and a first action, along with the most similar past incidents and what fixed them. It runs on one machine with open-source models and synthetic data.
 
-FindyFixy is also the test subject for a harness: the controls that wrap a model so its output can be trusted. The first control is an eval gate in `code/harness/`. It scores any app that plugs into its interface and blocks a release that makes answers worse. The second is tracing: every run, eval case and command becomes an OpenTelemetry trace in a local Langfuse. The harness never imports FindyFixy.
+## The harness
+
+A harness is the set of controls around a model that make its output safe to ship. It lives in `code/harness/`, scores any app that plugs into its interface, and never imports FindyFixy. Three controls are built.
+
+The eval gate runs the app on 30 golden cases with known answers and scores each answer for severity, faithfulness to the retrieved incidents, relevance, recall and the quality of the first action. It compares the scores against a frozen baseline in `code/evals/` and blocks a release that makes answers worse.
+
+The CI gate carries that verdict into pull requests. The eval gate needs live models, which CI does not have, so a passing local run on a clean tree writes an attestation: the hash of every file that can change an answer. CI recomputes those hashes and fails any change to an answer-affecting file that no passing run has covered.
+
+Tracing makes every run observable. Each FindyFixy run, eval case and command becomes an OpenTelemetry trace in a self-hosted Langfuse, with a span per step, the eval scores on their case, and a cost on every model call from a committed reference price table in `code/config/`. Tracing never slows a run and never changes an answer or a score.
+
+The dashed boxes in the visualizer are the controls still to come: guardrails, a model gateway and human approval. The architecture page (`code/docs/architecture.html`, served by `make console`) shows how the parts connect, and `code/docs/adr/` holds one decision record per phase with the reasoning behind each choice.
 
 ## Run it
 
@@ -37,7 +47,7 @@ make obs-prices       # once per stack: reference prices, so every model call ca
 make help             # everything else
 ```
 
-To try the two-model route, set `LARGE_MODEL` in `code/.env` to a different model than `SMALL_MODEL` (for example `qwen3:8b`). With the same name on both, there is one model and no escalation. Secrets, if you add any, go in `code/.env`, which is git-ignored.
+FindyFixy answers with the small model first and escalates to a large one when the answer is invalid or its confidence is low. To try that route, set `LARGE_MODEL` in `code/.env` to a different model than `SMALL_MODEL`, for example `qwen3:8b`. With the same name on both, there is one model and no escalation. Secrets, if you add any, go in `code/.env`, which is git-ignored.
 
 ## Disclaimer
 

@@ -164,6 +164,10 @@
     {
       "date": "2026-11-10",
       "entry": "Day 6 step 7 and close: reference price table registered with Langfuse (make obs-prices), so every model call has a cost. Two golden runs identical case by case; local-only run $0.0000431, 0 of 65 runs escalated, slowest node the small model at 3.12 s p95, lowest faithfulness g28 0.17. ADR 0007 written. Decided: harder versioned data and a computed escalation signal on Day 7; models stay on the laptop."
+    },
+    {
+      "date": "2026-11-10",
+      "entry": "Day 6 merged (PR #11). README rewritten in connected prose with a section per built harness control, and the gif re-recorded so CI gate and Tracing show as built."
     }
   ],
   "decisions": [
