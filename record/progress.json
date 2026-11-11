@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-10",
+  "updated": "2026-11-11",
   "plannedStart": "2026-10-17",
   "plannedEnd": "2026-11-17",
   "countdownStart": "2026-10-17T18:51:00",
@@ -176,6 +176,10 @@
     {
       "date": "2026-11-10",
       "entry": "Restructure review fixes and gate: run eval-20261111T043712Z passed, identical case by case to eval-20261111T003655Z; attestation v2 over 51 files. 783 tests; 287 harness tests with no app installed."
+    },
+    {
+      "date": "2026-11-11",
+      "entry": "Tracker rebuilt as a board: Deck, Doing and Done columns from an explicit status on each day and on a new tasks list (15 cards: 10 days, 5 tasks), one date per card, details in a side panel. make check validates statuses and dates (12 new tests, 125 in tools)."
     }
   ],
   "decisions": [
@@ -415,7 +419,10 @@
         0,
         1,
         2
-      ]
+      ],
+      "status": "done",
+      "started": "2026-10-17",
+      "finished": "2026-10-17"
     },
     {
       "n": 2,
@@ -435,7 +442,10 @@
         1,
         2,
         3
-      ]
+      ],
+      "status": "done",
+      "started": "2026-10-20",
+      "finished": "2026-10-20"
     },
     {
       "n": 3,
@@ -455,7 +465,10 @@
         1,
         2,
         3
-      ]
+      ],
+      "status": "done",
+      "started": "2026-10-21",
+      "finished": "2026-10-21"
     },
     {
       "n": 4,
@@ -473,7 +486,10 @@
       "done": [
         0,
         1
-      ]
+      ],
+      "status": "done",
+      "started": "2026-10-25",
+      "finished": "2026-11-08"
     },
     {
       "n": 5,
@@ -490,7 +506,10 @@
         "Hand-checked 3 judge scores",
         "Drill under 90s"
       ],
-      "done": []
+      "done": [],
+      "status": "done",
+      "started": "2026-10-26",
+      "finished": "2026-11-09"
     },
     {
       "n": 6,
@@ -508,7 +527,10 @@
         "Three dashboard questions answered with numbers",
         "Drill under 90s"
       ],
-      "done": []
+      "done": [],
+      "status": "done",
+      "started": "2026-11-09",
+      "finished": "2026-11-10"
     },
     {
       "n": 7,
@@ -523,7 +545,8 @@
         "Injection suite runs in pytest",
         "Drill under 90s"
       ],
-      "done": []
+      "done": [],
+      "status": "deck"
     },
     {
       "n": 8,
@@ -538,7 +561,8 @@
         "Budget refusal works",
         "Drill under 90s"
       ],
-      "done": []
+      "done": [],
+      "status": "deck"
     },
     {
       "n": 9,
@@ -553,7 +577,8 @@
         "One nightly report exists",
         "Shadow runs tagged in Langfuse"
       ],
-      "done": []
+      "done": [],
+      "status": "deck"
     },
     {
       "n": 10,
@@ -568,7 +593,45 @@
         "ADR on one page, every claim has a number",
         "5 drills under 90s each"
       ],
-      "done": []
+      "done": [],
+      "status": "deck"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "restructure",
+      "title": "Restructure into the wyld3rness workspace",
+      "status": "done",
+      "started": "2026-11-10",
+      "finished": "2026-11-10",
+      "note": "Harness at the root, FindyFixy under examples/, Ruff and mypy, attestation v2. PR #13."
+    },
+    {
+      "id": "walkthrough",
+      "title": "Walkthrough of Days 1 to 6",
+      "status": "doing",
+      "due": "2026-11-12",
+      "note": "Step by step through everything built since Day 1, with the reason for each decision. Days 1 to 5 covered; Day 6 next.",
+      "started": "2026-11-11"
+    },
+    {
+      "id": "part05",
+      "title": "Post part 05",
+      "status": "deck",
+      "due": "2026-11-24",
+      "note": "After part 04 publishes on Nov 18: fill its link, update the schedule, run the privacy check."
+    },
+    {
+      "id": "lesson-review",
+      "title": "Final lesson review",
+      "status": "deck",
+      "note": "Walk Days 5 to 10 against what was built: self-checks, drills and evidence lines."
+    },
+    {
+      "id": "bootstrap",
+      "title": "One-command bootstrap",
+      "status": "deck",
+      "note": "Deferred until the course is done. Needs a decision on installing Ollama."
     }
   ]
 }
