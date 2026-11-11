@@ -43,7 +43,7 @@ Trust model
     attestation with a real run in CI.
 
 Why this file stands alone
-    CI runs it as `python3 -I wyld3rness/eval/attest.py` with no `uv sync`, so
+    CI runs it as `python3 -I src/wyld3rness/eval/attest.py` with no `uv sync`, so
     it imports the standard library only and nothing from the harness. It is
     the leaf of the harness: report.py and cli.py import from it, never the
     other way round. `-I` keeps the script's own folder off `sys.path`, so a

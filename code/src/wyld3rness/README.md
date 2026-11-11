@@ -1,4 +1,4 @@
-# Harness
+# wyld3rness
 
 The `code/src/wyld3rness/` package is the harness: evaluation (`code/src/wyld3rness/eval/`) scores an LLM system's answers and gates a release on the scores, and tracing (`code/src/wyld3rness/trace/`) records every run as a trace. It knows nothing about any one application. FindyFixy is its first consumer.
 
@@ -15,7 +15,7 @@ The `code/src/wyld3rness/` package is the harness: evaluation (`code/src/wyld3rn
 - `code/src/wyld3rness/eval/events.py`: the harness's own event vocabulary, which the runner reports to an optional viewer while a run is in flight.
 - `code/src/wyld3rness/eval/runner.py`: runs every case through a system under test and builds the report, in two passes: every case is answered, then every answer is judged, so a machine that holds one model at a time loads each model about once. The report's `timing` has each pass (`answer_s`, `judge_s`) and the wall time.
 - `code/src/wyld3rness/eval/cli.py`: the command line an app's entry point calls with its own wiring. With an `AttestationSpec`, a passing `--gate` run also writes the attestation.
-- `code/src/wyld3rness/eval/attest.py`: the CI gate. It fingerprints every answer-affecting file, writes the attestation after a passing full run on a clean tree, and verifies it in CI. It also holds the traceability rules the baseline shares. It is the harness's leaf: standard library only and no harness imports, so CI runs it alone with plain `python3` and no install.
+- `code/src/wyld3rness/eval/attest.py`: the CI gate. It fingerprints every answer-affecting file, writes the attestation after a passing full run on a clean tree, and verifies it in CI. It also holds the traceability rules the baseline shares. It is the harness's leaf: standard library only and no harness imports, so CI runs it alone with plain `python3` and no install. Apps in a workspace declare their source roots (`code/src/` and `code/examples/findyfixy/src/` for FindyFixy), so the closure follows an app's imports into the harness and a harness change on the eval path needs a new run too.
 
 **The CI gate.** A live run needs a GPU, so it runs on the developer's machine and CI checks its attestation. The answer-affecting files are computed, not listed: the import closure of the app's eval entry modules, read from the source with `ast`, plus the data and lock files the app declares (a declared directory, such as `code/examples/findyfixy/data/` for FindyFixy, counts as every file in it). A file read at runtime is invisible to the closure, which is why the app declares those. State that no file shows, such as a database loaded from an older corpus, is the app's precondition: the gate checks it before the run and again before writing. The attestation is written only when the whole command exits 0. CI recomputes the hashes and fails when a file changed, was added or was removed since the attested run, and names each one. This is a process control, not a security control: CI trusts the local run, and anyone who can push can edit the attestation. Review and branch protection stop a dishonest change; the attestation stops an honest one from merging without a run.
 
@@ -27,4 +27,6 @@ The `code/src/wyld3rness/` package is the harness: evaluation (`code/src/wyld3rn
 
 **Cost on traces.** `code/src/wyld3rness/trace/prices.py` parses a price table (one price per input and output token per model, and the source of each price) and syncs it to Langfuse's model definitions, which then price every generation at ingestion. The backend computes the cost, so the hot path carries no pricing code; the trade-off is that a price change applies to new traces only. Only the project's own definitions are touched, never the backend's built-in ones. FindyFixy's table is `code/examples/findyfixy/config/prices.toml`, registered by `make obs-prices`.
 
-Its tests are `code/tests/`, `code/tests/test_trace.py` and `code/tests/test_eval_tracing.py`, plus `code/tests/test_prices.py` for the price table. They use a fake system that is not FindyFixy.
+**Test doubles.** `code/src/wyld3rness/testing.py` ships a fake judge, embedder and system under test, so an app's own tests can drive the harness without a model. FindyFixy's adapter tests use them.
+
+**Packaging.** The harness is the root project of the workspace, `code/pyproject.toml`, with only the dependencies it imports. `code/tests/test_harness_rules.py` keeps the import allowlist and that list in step. Its tests are in `code/tests/` (`code/tests/README.md`).

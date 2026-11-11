@@ -674,7 +674,12 @@ The learner's call: the harness is the product and FindyFixy is the agent it is 
 - `make lint` runs `ruff check`, `ruff format --check` and `mypy`. The pre-commit hook runs it when `code/` is staged, and CI runs it before the tests.
 - Ruff: pycodestyle, pyflakes, import order, bugbear, pyupgrade, simplify and Ruff's own rules, at 120 columns. The whole tree is formatted once. Findings were fixed, not suppressed, with two exceptions that carry their reason: long sentences in the synthetic corpus and query modules (E501), and one temp file opened outside `with` because the cleanup needs its name.
 - `zip()` calls got `strict=True`. Each already checked that the lengths match, so no behaviour changed: a mismatch now raises instead of silently truncating.
-- mypy: strict on the harness, typed definitions required in FindyFixy. 64 errors fixed. The real ones: a baseline file that is valid JSON but not an object now fails with a message; the deploy tool validates its arguments with `model_validate` instead of passing an unchecked string; the LangGraph graphs are typed by their state (`TriageGraph`, `Investigator`); protocols that a library object must satisfy take positional-only parameters, so a parameter name no longer decides the match.
+- mypy: strict on the harness, typed definitions required in FindyFixy. 59 errors fixed. The real ones: a baseline file that is valid JSON but not an object now fails with a message; the deploy tool validates its arguments with `model_validate` instead of passing an unchecked string; the LangGraph graphs are typed by their state (`TriageGraph`, `Investigator`); protocols that a library object must satisfy take positional-only parameters, so a parameter name no longer decides the match.
+
+### Restructure, commit 4: the docs say what the layout says (2026-11-10)
+
+- The root README leads with wyld3rness: what the harness does, how an app plugs in, then FindyFixy as the example app. `code/README.md` maps the workspace; `code/src/wyld3rness/README.md` adds the source roots, the test doubles and the packaging; `code/examples/findyfixy/README.md` maps the app and what sits beside its package; each test suite has its own README.
+- The architecture page's tooltips name the new paths. `CLAUDE.md` and the hooks README list `make lint` and `make test-harness`.
 
 ### Open items
 

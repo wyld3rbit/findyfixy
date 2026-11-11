@@ -1,6 +1,6 @@
 # infra
 
-Services that support FindyFixy and its harness but are not part of either. Each runs as containers from its own compose file, separate from `code/examples/findyfixy/docker-compose.yml`, so it can be stopped without touching the database.
+Services the harness and FindyFixy talk to, but that are part of neither. Each runs as containers from its own compose file, separate from `code/examples/findyfixy/docker-compose.yml`, so it can be stopped without touching the database.
 
 ## Langfuse: the trace backend
 
