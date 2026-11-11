@@ -56,8 +56,10 @@ override-dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=2.4.1",
     "pytest>=9.1.1",
     "pytest-sugar>=1.1.1",
+    "ruff>=0.17.3",
 ]
 
 [tool.pytest.ini_options]
@@ -79,3 +81,40 @@ markers = [
     "integration: needs a live service, Ollama or Postgres (run with `pytest -m integration`)",
     "quality: the answer-quality release gate, live models, minutes long (run with `pytest -m quality`)",
 ]
+
+[tool.ruff]
+# The code is written to 120 columns; wrapping it at 88 would add noise, not clarity.
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, import order, bugbear, pyupgrade, simplify and Ruff's own.
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Synthetic incident text, one sentence per string: splitting them adds noise, not clarity.
+"examples/findyfixy/src/findyfixy/retrieval/corpus.py" = ["E501"]
+"examples/findyfixy/src/findyfixy/evals/queries.py" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["wyld3rness", "findyfixy"]
+# `import x` and `from x import y` sorted together by module name, as the code already is.
+force-sort-within-sections = true
+
+[tool.mypy]
+python_version = "3.13"
+files = ["src", "examples/findyfixy/src"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+
+# The harness is the product: strict.
+[[tool.mypy.overrides]]
+module = "wyld3rness.*"
+strict = true
+
+# Libraries that ship no type information.
+[[tool.mypy.overrides]]
+module = ["rank_bm25", "pgvector.*", "sentence_transformers.*"]
+ignore_missing_imports = true

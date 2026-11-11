@@ -27,8 +27,8 @@ def unpriced(configured: Iterable[str], priced: Iterable[str]) -> list[str]:
 
 def main() -> None:
     """Parse `config/prices.toml`, sync it to Langfuse, print one line per model."""
-    from findyfixy.settings import load_env, optional_models, read_tracing
     from findyfixy.observability.tracing import command_trace
+    from findyfixy.settings import load_env, optional_models, read_tracing
     from wyld3rness.trace.prices import LangfuseModels, PriceConflict, parse_prices, sync
 
     prices = parse_prices(PRICES.read_text(encoding="utf-8"))  # fails before anything is sent
@@ -45,11 +45,16 @@ def main() -> None:
         try:
             plan = sync(prices, LangfuseModels(config))
         except PriceConflict as conflict:
-            raise SystemExit(f"nothing changed: {conflict}. Remove or rename that definition in Langfuse "
-                             "(Settings, Models), then re-run.") from None
-        lines = [f"{'registered' if p in plan.create else 'unchanged '} {p.name}: "
-                 f"${p.input_per_token * 1e6:.2f} in, ${p.output_per_token * 1e6:.2f} out per 1M tokens "
-                 f"(reference {p.reference})" for p in prices]
+            raise SystemExit(
+                f"nothing changed: {conflict}. Remove or rename that definition in Langfuse "
+                "(Settings, Models), then re-run."
+            ) from None
+        lines = [
+            f"{'registered' if p in plan.create else 'unchanged '} {p.name}: "
+            f"${p.input_per_token * 1e6:.2f} in, ${p.output_per_token * 1e6:.2f} out per 1M tokens "
+            f"(reference {p.reference})"
+            for p in prices
+        ]
         command.output("\n".join(lines))
     print("\n".join(lines))
     if plan.delete:

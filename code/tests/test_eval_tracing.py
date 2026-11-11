@@ -20,18 +20,18 @@ from __future__ import annotations
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import threading
-from typing import Any
+from typing import Any, ClassVar
 
-import pytest
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
+import pytest
 
 from wyld3rness.eval.case import Case
 from wyld3rness.eval.sut import Answer
+from wyld3rness.testing import FakeJudge, FakeSUT, case, run
 from wyld3rness.trace.scores import LangfuseScores
 from wyld3rness.trace.tracing import TraceConfig, Tracing
-from wyld3rness.testing import FakeJudge, FakeSUT, case, run
 
 CONFIG = TraceConfig(host="http://127.0.0.1:1", public_key="pk-lf-t", secret_key="sk-lf-t", service_name="t")
 
@@ -94,8 +94,17 @@ def test_each_case_is_one_trace_with_the_apps_spans_and_the_judge_inside(traced)
     for record in report["cases"]:
         mine = [s for s in spans if format(s.context.trace_id, "032x") == record["trace_id"]]
         names = sorted(s.name for s in mine)
-        assert names == sorted([f"eval case {record['id']}", "app run", "judge", "faithfulness",
-                                "response_relevancy", "context_recall", "action_quality"])
+        assert names == sorted(
+            [
+                f"eval case {record['id']}",
+                "app run",
+                "judge",
+                "faithfulness",
+                "response_relevancy",
+                "context_recall",
+                "action_quality",
+            ]
+        )
         by = {s.name: s for s in mine}
         assert parent(mine, by["app run"]) == f"eval case {record['id']}"
         assert parent(mine, by["judge"]) == f"eval case {record['id']}"
@@ -114,8 +123,13 @@ def test_label_matches_and_metric_scores_go_to_their_trace(traced) -> None:
     assert by_trace[ids["g1"]]["kind_match"] == (1.0, "BOOLEAN")
     assert by_trace[ids["g2"]]["kind_match"] == (0.0, "BOOLEAN")
     assert by_trace[ids["g1"]]["faithfulness"] == (1.0, "NUMERIC")
-    assert set(by_trace[ids["g1"]]) == {"kind_match", "faithfulness", "response_relevancy",
-                                        "context_recall", "action_quality"}
+    assert set(by_trace[ids["g1"]]) == {
+        "kind_match",
+        "faithfulness",
+        "response_relevancy",
+        "context_recall",
+        "action_quality",
+    }
 
 
 def test_a_failed_metric_is_an_error_span_and_never_a_score(traced) -> None:
@@ -153,8 +167,9 @@ def test_tracing_changes_no_number_in_the_report(traced) -> None:
 def test_parallel_workers_keep_each_cases_spans_in_its_own_trace(traced) -> None:
     """Four threads at once: every app span sits in the trace of the case it answered."""
     tracing, exporter = traced
-    report = run([case(f"g{i}") for i in range(8)], sut=SpanMakingSUT(tracing), tracing=tracing,
-                 scores=FakeScores(), workers=4)
+    report = run(
+        [case(f"g{i}") for i in range(8)], sut=SpanMakingSUT(tracing), tracing=tracing, scores=FakeScores(), workers=4
+    )
     spans = spans_of(tracing, exporter)
     for record in report["cases"]:
         mine = [s for s in spans if format(s.context.trace_id, "032x") == record["trace_id"]]
@@ -167,9 +182,9 @@ def test_parallel_workers_keep_each_cases_spans_in_its_own_trace(traced) -> None
 class Capture(BaseHTTPRequestHandler):
     """A stand-in for Langfuse's score endpoint: keeps each request."""
 
-    got: list[tuple[str, dict[str, Any], str]] = []
+    got: ClassVar[list[tuple[str, dict[str, Any], str]]] = []
 
-    def do_POST(self) -> None:  # noqa: N802 - stdlib naming
+    def do_POST(self) -> None:
         """Keep the path, the JSON body and the auth header; answer like Langfuse."""
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         Capture.got.append((self.path, body, self.headers["Authorization"]))
@@ -186,8 +201,12 @@ def test_scores_are_posted_with_a_deterministic_id_and_the_key_pair() -> None:
     Capture.got = []
     server = ThreadingHTTPServer(("127.0.0.1", 0), Capture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    config = TraceConfig(host=f"http://127.0.0.1:{server.server_address[1]}", public_key="pk-lf-a",
-                         secret_key="sk-lf-b", service_name="t")
+    config = TraceConfig(
+        host=f"http://127.0.0.1:{server.server_address[1]}",
+        public_key="pk-lf-a",
+        secret_key="sk-lf-b",
+        service_name="t",
+    )
     sink = LangfuseScores(config)
     sink.score("t1", "faithfulness", 0.75, "NUMERIC")
     sink.score("t1", "faithfulness", 0.75, "NUMERIC")
@@ -196,8 +215,13 @@ def test_scores_are_posted_with_a_deterministic_id_and_the_key_pair() -> None:
     assert sink.sent == 2 and sink.dropped == 0
     path, body, auth = Capture.got[0]
     assert path == "/api/public/scores" and auth == config.headers["Authorization"]
-    assert body == {"id": "t1-faithfulness", "traceId": "t1", "name": "faithfulness",
-                    "value": 0.75, "dataType": "NUMERIC"}
+    assert body == {
+        "id": "t1-faithfulness",
+        "traceId": "t1",
+        "name": "faithfulness",
+        "value": 0.75,
+        "dataType": "NUMERIC",
+    }
     assert Capture.got[1][1]["id"] == body["id"]
 
 
@@ -238,8 +262,12 @@ def test_an_app_meta_key_named_trace_id_is_a_run_error_not_overwritten(traced) -
     """The record's trace_id goes through the same clash check as every other key."""
     tracing, _ = traced
     events: list[tuple[str, dict]] = []
-    report = run([case("g1")], sut=FakeSUT(meta={"model_used": "small", "trace_id": "the apps own"}),
-                 tracing=tracing, on_event=lambda kind, **data: events.append((kind, data)))
+    report = run(
+        [case("g1")],
+        sut=FakeSUT(meta={"model_used": "small", "trace_id": "the apps own"}),
+        tracing=tracing,
+        on_event=lambda kind, **data: events.append((kind, data)),
+    )
     record = report["cases"][0]
     assert "trace_id" in record["run_error"]
     # Closed like any run error: unlabelled, answered with the error, then scored.
@@ -263,7 +291,7 @@ def test_a_case_meta_key_named_trace_id_stops_the_run_like_any_case_meta_clash()
 class BadStatus(BaseHTTPRequestHandler):
     """A backend that answers with a broken status line: http.client raises a non-OSError."""
 
-    def do_POST(self) -> None:  # noqa: N802 - stdlib naming
+    def do_POST(self) -> None:
         """Write garbage instead of an HTTP response."""
         self.rfile.read(int(self.headers["Content-Length"]))
         self.wfile.write(b"garbage\r\n\r\n")
@@ -276,8 +304,12 @@ def test_the_sender_survives_a_malformed_response_and_counts_it() -> None:
     """Any failure drops that score; the thread lives on and sends the next one."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), BadStatus)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    config = TraceConfig(host=f"http://127.0.0.1:{server.server_address[1]}", public_key="pk-lf-a",
-                         secret_key="sk-lf-b", service_name="t")
+    config = TraceConfig(
+        host=f"http://127.0.0.1:{server.server_address[1]}",
+        public_key="pk-lf-a",
+        secret_key="sk-lf-b",
+        service_name="t",
+    )
     sink = LangfuseScores(config, timeout_s=2.0)
     sink.score("t1", "a", 1.0, "NUMERIC")
     sink.score("t1", "b", 1.0, "NUMERIC")
@@ -293,7 +325,7 @@ def test_scores_left_when_close_times_out_are_counted_as_dropped() -> None:
     class Hang(BaseHTTPRequestHandler):
         """Holds every request until the test ends."""
 
-        def do_POST(self) -> None:  # noqa: N802 - stdlib naming
+        def do_POST(self) -> None:
             """Wait, then answer."""
             gate.wait(10)
             self.send_response(200)
@@ -304,8 +336,12 @@ def test_scores_left_when_close_times_out_are_counted_as_dropped() -> None:
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Hang)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    config = TraceConfig(host=f"http://127.0.0.1:{server.server_address[1]}", public_key="pk-lf-a",
-                         secret_key="sk-lf-b", service_name="t")
+    config = TraceConfig(
+        host=f"http://127.0.0.1:{server.server_address[1]}",
+        public_key="pk-lf-a",
+        secret_key="sk-lf-b",
+        service_name="t",
+    )
     sink = LangfuseScores(config, timeout_s=5.0)
     for i in range(5):
         sink.score("t1", f"s{i}", 1.0, "NUMERIC")

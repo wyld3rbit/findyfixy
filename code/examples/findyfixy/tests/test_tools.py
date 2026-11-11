@@ -14,10 +14,10 @@ Why no model is used
 import json
 from pathlib import Path
 
-import pytest
 from langchain_core.messages import AIMessage
 from langgraph.graph import START, MessagesState, StateGraph
 from pydantic import ValidationError
+import pytest
 
 from findyfixy.tools.deploys import (
     DEFAULT_DEPLOYS_PATH,

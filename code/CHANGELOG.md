@@ -668,6 +668,14 @@ The learner's call: the harness is the product and FindyFixy is the agent it is 
 - Changed from the plan: no `wyld3rness-prices`. The price sync is a harness API, but the command reads FindyFixy's settings and table, so it stays the app's `findyfixy-prices`. CI still calls the attestation check as a file with `python3 -I` and no install, so nothing it hashes is imported.
 - The MCP client still starts the server as `python -m findyfixy.mcp.server` with the client's own interpreter, so the server always runs in the same environment.
 
+### Restructure, commit 3: Ruff and mypy (2026-11-10)
+
+- Dev dependencies: `ruff` 0.17.3 and `mypy` 2.4.1, both MIT, pinned under the release cooldown. mypy brings `librt`, `ast-serialize`, `mypy-extensions` and `pathspec`. `make audit` found no known vulnerabilities. The startup-hook check now allows the workspace's own editable installs, `wyld3rness.pth` and `findyfixy.pth`, each one line naming a `src/` folder.
+- `make lint` runs `ruff check`, `ruff format --check` and `mypy`. The pre-commit hook runs it when `code/` is staged, and CI runs it before the tests.
+- Ruff: pycodestyle, pyflakes, import order, bugbear, pyupgrade, simplify and Ruff's own rules, at 120 columns. The whole tree is formatted once. Findings were fixed, not suppressed, with two exceptions that carry their reason: long sentences in the synthetic corpus and query modules (E501), and one temp file opened outside `with` because the cleanup needs its name.
+- `zip()` calls got `strict=True`. Each already checked that the lengths match, so no behaviour changed: a mismatch now raises instead of silently truncating.
+- mypy: strict on the harness, typed definitions required in FindyFixy. 64 errors fixed. The real ones: a baseline file that is valid JSON but not an object now fails with a message; the deploy tool validates its arguments with `model_validate` instead of passing an unchecked string; the LangGraph graphs are typed by their state (`TriageGraph`, `Investigator`); protocols that a library object must satisfy take positional-only parameters, so a parameter name no longer decides the match.
+
 ### Open items
 
 - Day 7 (decided 2026-11-10): harder incident data, versioned. Corpus v2 and golden v2 next to v1 (v1 frozen as a regression set), with no-precedent alerts, conflicting signals, cascades and raw noisy alert text; escalation gains a computed signal. Reason: 0 of 35 runs escalated on step 7, because the small model never reported a confidence below 0.7.

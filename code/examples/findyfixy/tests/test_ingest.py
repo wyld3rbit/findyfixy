@@ -8,11 +8,10 @@ The database part is covered by tests/integration/test_ingest_db.py.
 import json
 from pathlib import Path
 
+import psycopg
 import pytest
 
 from findyfixy.retrieval.corpus import build_corpus, write_jsonl
-import psycopg
-
 from findyfixy.retrieval.ingest import (
     DIMENSIONS,
     MODEL_NAME,
@@ -49,7 +48,7 @@ def test_one_chunk_per_section_with_metadata() -> None:
     """Four chunks per incident, each carrying the filter fields."""
     chunks = chunk_incident(ROW)
     assert [c.section for c in chunks] == list(SECTIONS)
-    assert [c.id for c in chunks][0] == "INC-0001:summary"
+    assert chunks[0].id == "INC-0001:summary"
     for chunk in chunks:
         assert (chunk.service, chunk.severity, chunk.incident_date) == ("auth", "sev1", "2026-01-02")
         assert chunk.body in chunk.embed_text

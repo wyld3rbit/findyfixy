@@ -30,14 +30,15 @@ Failure modes
       something the model can fix, so it is not caught.
 """
 
-import json
 from collections.abc import Sequence
+import json
 from pathlib import Path
 from typing import Literal
 
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
+
 from findyfixy.paths import DATA
 
 # Resolved from this file, so it works from any working directory.
@@ -54,9 +55,7 @@ class DeploysArgs(BaseModel):
     """The tool's argument contract. Also the schema the model sees."""
 
     service: Service = Field(description="service whose deploys to list")
-    hours: int = Field(
-        ge=1, le=MAX_HOURS, description="look-back window in hours (1 to 168)"
-    )
+    hours: int = Field(ge=1, le=MAX_HOURS, description="look-back window in hours (1 to 168)")
 
 
 def get_recent_deploys(service: str, hours: int, *, path: Path) -> str:
@@ -66,13 +65,9 @@ def get_recent_deploys(service: str, hours: int, *, path: Path) -> str:
     direct call is just as safe as one from a model. Returns a JSON string
     because that is what goes back into the model's context.
     """
-    args = DeploysArgs(service=service, hours=hours)
+    args = DeploysArgs.model_validate({"service": service, "hours": hours})
     records = json.loads(path.read_text())
-    hits = [
-        r
-        for r in records
-        if r["service"] == args.service and r["hours_ago"] <= args.hours
-    ]
+    hits = [r for r in records if r["service"] == args.service and r["hours_ago"] <= args.hours]
     hits.sort(key=lambda r: r["hours_ago"])
     return json.dumps(hits)
 

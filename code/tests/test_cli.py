@@ -11,8 +11,8 @@ What a staff+ reader should notice
     what stops a regression from quietly becoming the new standard.
 """
 
-import copy
 from contextlib import contextmanager
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -26,8 +26,11 @@ from wyld3rness.testing import NOW, PROV, FakeJudge, FakeSUT, case, embed, run
 
 def report_with_errors(errors: int) -> dict[str, Any]:
     """A real two-case report from the fakes; with `errors`, the second case raises."""
-    return run([case("g1"), case("g2")], provenance={**PROV, "git_dirty": False},
-               sut=FakeSUT(raise_on=["g2"] if errors else []))
+    return run(
+        [case("g1"), case("g2")],
+        provenance={**PROV, "git_dirty": False},
+        sut=FakeSUT(raise_on=["g2"] if errors else []),
+    )
 
 
 def fixed(report: dict[str, Any]):
@@ -45,9 +48,15 @@ def fixed(report: dict[str, Any]):
 
 def cli(argv, tmp_path: Path, run_fn=None, **kw) -> int:
     """`main` with the fixed test paths, clock and program name."""
-    return main(argv, prog="python -m some.app", run=run_fn or fixed(report_with_errors(0)),
-                reports_dir=tmp_path / "r", baseline_path=tmp_path / "evals" / "baseline.json",
-                now=lambda: NOW, **kw)
+    return main(
+        argv,
+        prog="python -m some.app",
+        run=run_fn or fixed(report_with_errors(0)),
+        reports_dir=tmp_path / "r",
+        baseline_path=tmp_path / "evals" / "baseline.json",
+        now=lambda: NOW,
+        **kw,
+    )
 
 
 def test_write_baseline_then_gate_passes(tmp_path: Path, capsys) -> None:
@@ -93,8 +102,11 @@ def test_the_control_flag_and_workers_reach_the_run(tmp_path: Path) -> None:
     cli([], tmp_path, go)
     cli(["--negative-control"], tmp_path, go)
     cli(["--no-recall", "--workers", "3"], tmp_path, go, control_flag="--no-recall")
-    assert go.seen == [{"negative_control": False, "workers": 1}, {"negative_control": True, "workers": 1},
-                       {"negative_control": True, "workers": 3}]
+    assert go.seen == [
+        {"negative_control": False, "workers": 1},
+        {"negative_control": True, "workers": 1},
+        {"negative_control": True, "workers": 3},
+    ]
     with pytest.raises(SystemExit):
         cli(["--workers", "9"], tmp_path, go)
     with pytest.raises(SystemExit):  # the app renamed the flag, so the default name is gone
@@ -103,6 +115,7 @@ def test_the_control_flag_and_workers_reach_the_run(tmp_path: Path) -> None:
 
 def test_a_missing_setting_exits_2_and_a_bug_keeps_its_traceback(tmp_path: Path, capsys) -> None:
     """Only `ConfigError` is turned into a message; anything else propagates."""
+
     def missing(progress, **kwargs):
         """A run whose app setting is missing."""
         raise ConfigError("set the environment variable SMALL_MODEL")
@@ -128,6 +141,7 @@ def test_the_report_path_is_printed_relative_to_the_display_root(tmp_path: Path,
 
 def test_show_case_and_baseline_from_run_nothing(tmp_path: Path, capsys) -> None:
     """Viewing and freezing a saved report never start a run."""
+
     def never(progress, **kwargs):
         """A run that must not be called."""
         raise AssertionError("viewing or freezing a saved report must not run the evaluation")
@@ -183,9 +197,16 @@ def live(log: list[str], tmp_path: Path, judges: list[str] | None = None, **kw):
             judges.append(model)
         return FakeJudge()
 
-    return live_runner(session_factory(log), golden_path=golden, repo_dir=tmp_path, make_judge=make_judge,
-                       digest=lambda m: "dig-" + m, git=lambda repo: (f"sha-of-{repo.name}", False),
-                       now=lambda: NOW, **kw)
+    return live_runner(
+        session_factory(log),
+        golden_path=golden,
+        repo_dir=tmp_path,
+        make_judge=make_judge,
+        digest=lambda m: "dig-" + m,
+        git=lambda repo: (f"sha-of-{repo.name}", False),
+        now=lambda: NOW,
+        **kw,
+    )
 
 
 def test_live_runner_stamps_the_apps_settings_and_closes_the_session(tmp_path: Path) -> None:

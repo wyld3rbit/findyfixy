@@ -50,7 +50,7 @@ Failure modes
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 import uuid
@@ -71,9 +71,11 @@ from wyld3rness.trace.spans import (
 if TYPE_CHECKING:
     from opentelemetry.trace import Tracer
 
+    from wyld3rness.trace.spans import SpanKind
+
 TRACE_NAME = "findyfixy run"
 # The recall node is a lookup; Langfuse shows a retriever span differently.
-_NODE_KIND = {"recall": "retriever"}
+_NODE_KIND: dict[str, SpanKind] = {"recall": "retriever"}
 
 
 class EventSpans:
@@ -100,14 +102,12 @@ class EventSpans:
         """Map one event. Never raises: see "Failure modes" above."""
         try:
             self._handle(event)
-        except Exception as err:  # noqa: BLE001 - tracing must never fail a run
+        except Exception as err:
             self.errors += 1
             tree, self._tree = self._tree, None
             if tree is not None:
-                try:
+                with suppress(Exception):
                     tree.finish(error=f"tracing adapter error: {type(err).__name__}")
-                except Exception:  # noqa: BLE001 - the trace is lost; the run is not
-                    pass
 
     def _handle(self, event: Event) -> None:
         """The mapping table in the module docstring, one branch per event kind."""
@@ -119,15 +119,18 @@ class EventSpans:
             self._session = None
             return
         if event.kind == "run_started":
-            self.start_run(d.get("question"), {
-                "findyfixy.run": d.get("run"),
-                "findyfixy.mode": d.get("mode"),
-                "findyfixy.small_model": d.get("small_model"),
-                "findyfixy.large_model": d.get("large_model"),
-                "findyfixy.threshold": d.get("threshold"),
-                "findyfixy.tools": d.get("tools"),
-                "findyfixy.recall": d.get("recall"),
-            })
+            self.start_run(
+                d.get("question"),
+                {
+                    "findyfixy.run": d.get("run"),
+                    "findyfixy.mode": d.get("mode"),
+                    "findyfixy.small_model": d.get("small_model"),
+                    "findyfixy.large_model": d.get("large_model"),
+                    "findyfixy.threshold": d.get("threshold"),
+                    "findyfixy.tools": d.get("tools"),
+                    "findyfixy.recall": d.get("recall"),
+                },
+            )
             return
         tree = self._tree
         if tree is None:  # an event outside a run (a hunt's own events)
@@ -137,8 +140,13 @@ class EventSpans:
             node = d["node"]
             # Current while the node runs, so spans made inside it (recall's
             # stages) nest under it. Nodes open and close strictly nested.
-            tree.open("node", f"node {node}", kind=_NODE_KIND.get(node, "span"), current=True,
-                      attributes={"findyfixy.node": node, GEN_AI_REQUEST_MODEL: d.get("model")})
+            tree.open(
+                "node",
+                f"node {node}",
+                kind=_NODE_KIND.get(node, "span"),
+                current=True,
+                attributes={"findyfixy.node": node, GEN_AI_REQUEST_MODEL: d.get("model")},
+            )
         elif kind == "node_exited":
             # Tool calls the model asked for but the loop never ran (it stopped
             # at its turn cap) must not look like lookups that happened.
@@ -150,26 +158,48 @@ class EventSpans:
         elif kind == "model_request":
             # Scripted (fake) investigate calls have no model name.
             name = f"model {d['model']}" if d.get("model") else "model (scripted)"
-            tree.open("model", name, kind="generation", input=d.get("prompt"),
-                      attributes={GEN_AI_OPERATION: "chat", GEN_AI_PROVIDER: "ollama",
-                                  GEN_AI_REQUEST_MODEL: d.get("model"), "findyfixy.attempt": d.get("attempt")})
+            tree.open(
+                "model",
+                name,
+                kind="generation",
+                input=d.get("prompt"),
+                attributes={
+                    GEN_AI_OPERATION: "chat",
+                    GEN_AI_PROVIDER: "ollama",
+                    GEN_AI_REQUEST_MODEL: d.get("model"),
+                    "findyfixy.attempt": d.get("attempt"),
+                },
+            )
         elif kind == "model_reply":
-            tree.close("model", output=d.get("reply"), attributes={
-                GEN_AI_RESPONSE_MODEL: d.get("served_by"),
-                GEN_AI_INPUT_TOKENS: d.get("input_tokens"),
-                GEN_AI_OUTPUT_TOKENS: d.get("output_tokens"),
-                "findyfixy.model_mismatch": d.get("mismatch"),
-            })
+            tree.close(
+                "model",
+                output=d.get("reply"),
+                attributes={
+                    GEN_AI_RESPONSE_MODEL: d.get("served_by"),
+                    GEN_AI_INPUT_TOKENS: d.get("input_tokens"),
+                    GEN_AI_OUTPUT_TOKENS: d.get("output_tokens"),
+                    "findyfixy.model_mismatch": d.get("mismatch"),
+                },
+            )
         elif kind == "tool_call":
             self._tool_seq += 1
             key = f"tool {self._tool_seq}"
-            tree.open(key, f"tool {d.get('name')}", kind="tool", input=d.get("args"), under="node",
-                      attributes={GEN_AI_TOOL_NAME: d.get("name")})
+            tree.open(
+                key,
+                f"tool {d.get('name')}",
+                kind="tool",
+                input=d.get("args"),
+                under="node",
+                attributes={GEN_AI_TOOL_NAME: d.get("name")},
+            )
             self._pending_tools.append(key)
         elif kind == "tool_result":
             if self._pending_tools:
-                tree.close(self._pending_tools.pop(0), output=d.get("result"),
-                           error="tool returned an error" if d.get("error") else None)
+                tree.close(
+                    self._pending_tools.pop(0),
+                    output=d.get("result"),
+                    error="tool returned an error" if d.get("error") else None,
+                )
         elif kind in ("validation", "retry", "fault_injected", "route"):
             tree.event(kind, {k: attribute_value(v) for k, v in d.items()})
             if kind == "route":
@@ -247,8 +277,9 @@ class RunTracer:
         return traced
 
 
-def traced_sink(spans: EventSpans, sink: Callable[[Event], None],
-                link: Callable[[str], str | None]) -> Callable[[Event], None]:
+def traced_sink(
+    spans: EventSpans, sink: Callable[[Event], None], link: Callable[[str], str | None]
+) -> Callable[[Event], None]:
     """One sink for a traced console run: tracing first, then the viewer, plus each run's trace link.
 
     Tracing sees each event first, so a trace is complete before any viewer

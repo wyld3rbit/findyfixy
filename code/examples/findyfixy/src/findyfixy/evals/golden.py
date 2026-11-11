@@ -46,17 +46,17 @@ Separation
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import json
+from pathlib import Path
 import random
 import sys
-from collections.abc import Sequence
-from pathlib import Path
 from typing import Literal, get_args
 
 from pydantic import BaseModel
 
-from findyfixy.retrieval.corpus import Incident
 from findyfixy.paths import DATA
+from findyfixy.retrieval.corpus import Incident
 from findyfixy.triage.record import Severity
 
 INCIDENTS_PATH = DATA / "incidents.jsonl"

@@ -19,13 +19,13 @@ What a staff+ reader should notice
 """
 
 import json
+from pathlib import Path
 import subprocess
 import threading
-from pathlib import Path
 
 import pytest
+from test_console import call
 
-from findyfixy.console.server import RunHub, serve
 from findyfixy.console.dev_reload import (
     RESTART_PATTERNS,
     WATCH_PATTERNS,
@@ -35,10 +35,8 @@ from findyfixy.console.dev_reload import (
     supervise,
     wait_until_settled,
 )
-
-from findyfixy.paths import PAGE as PAGE_FILE  # noqa: E402
-from test_console import call  # noqa: E402  (helper shared with the console tests)
-
+from findyfixy.console.server import RunHub, serve
+from findyfixy.paths import PAGE as PAGE_FILE
 
 # ---- pure parts -------------------------------------------------------------
 
@@ -89,9 +87,10 @@ def test_diff_reports_added_removed_and_modified(tmp_path):
     before = snapshot(tmp_path)
     (tmp_path / APP / "a.py").write_text("a = 2\n")
     import os
-    os.utime(tmp_path / APP / "a.py", ns=(1, 1))        # modified
-    (tmp_path / APP / "new.py").write_text("")           # added
-    (tmp_path / DATA / "d.json").unlink()                   # removed
+
+    os.utime(tmp_path / APP / "a.py", ns=(1, 1))  # modified
+    (tmp_path / APP / "new.py").write_text("")  # added
+    (tmp_path / DATA / "d.json").unlink()  # removed
     assert diff(before, snapshot(tmp_path)) == sorted([str(APP / "a.py"), str(APP / "new.py"), str(DATA / "d.json")])
 
 
@@ -108,8 +107,7 @@ def test_fingerprint_is_stable_and_changes_with_any_file():
 def test_wait_until_settled_returns_only_when_readings_stop_changing():
     readings = iter([{"a": 2}, {"a": 3}, {"a": 3}])
     sleeps: list[float] = []
-    out = wait_until_settled(lambda: next(readings), {"a": 1},
-                             interval=0.4, sleep=sleeps.append)
+    out = wait_until_settled(lambda: next(readings), {"a": 1}, interval=0.4, sleep=sleeps.append)
     assert out == {"a": 3} and sleeps == [0.4, 0.4, 0.4]
 
 
@@ -165,8 +163,7 @@ class Harness:
             raise KeyboardInterrupt
 
     def run(self):
-        supervise(["x"], Path("."), spawn=self.spawn, sleep=self.sleep,
-                  read=self.read, out=self.out.append)
+        supervise(["x"], Path("."), spawn=self.spawn, sleep=self.sleep, read=self.read, out=self.out.append)
 
 
 A, B, C = {"f.py": 1}, {"f.py": 2}, {"f.py": 3}
@@ -176,7 +173,7 @@ def test_a_burst_of_saves_causes_exactly_one_restart():
     # initial A; then B (changed), C (still changing), C, C (settled).
     h = Harness(reads=[A, A, B, C, C, C], children=[FakeChild(), FakeChild()], polls=8)
     h.run()
-    assert len(h.children) == 2                    # the original, and ONE restart
+    assert len(h.children) == 2  # the original, and ONE restart
     assert h.children[0].terminated
     changes = [m for m in h.out if "changed" in m]
     assert len(changes) == 1 and "f.py" in changes[0]
@@ -192,8 +189,8 @@ def test_no_change_means_no_restart():
 def test_a_child_that_exits_on_its_own_is_not_respawned():
     h = Harness(reads=[A], children=[FakeChild(exit_code=1)], polls=6)
     h.run()
-    assert len(h.children) == 1                    # no crash loop
-    assert sum("exited with code 1" in m for m in h.out) == 1   # said once only
+    assert len(h.children) == 1  # no crash loop
+    assert sum("exited with code 1" in m for m in h.out) == 1  # said once only
 
 
 def test_after_a_crash_the_next_change_starts_a_fresh_child():
@@ -233,7 +230,8 @@ def test_version_is_not_exposed_unless_dev_mode_is_on():
         assert call(port, "GET", "/version")[0] == 404
         assert json.loads(call(port, "GET", "/config")[1])["dev_reload"] is False
     finally:
-        srv.shutdown(); srv.server_close()
+        srv.shutdown()
+        srv.server_close()
 
 
 def test_version_changes_when_a_watched_file_changes(tmp_path):
@@ -245,11 +243,13 @@ def test_version_changes_when_a_watched_file_changes(tmp_path):
         v1 = json.loads(call(port, "GET", "/version")[1])["version"]
         assert json.loads(call(port, "GET", "/version")[1])["version"] == v1  # stable
         import os
+
         os.utime(tmp_path / PAGE, ns=(5, 5))
         v2 = json.loads(call(port, "GET", "/version")[1])["version"]
         assert v2 != v1
     finally:
-        srv.shutdown(); srv.server_close()
+        srv.shutdown()
+        srv.server_close()
 
 
 def test_the_version_differs_after_a_restart_even_with_no_file_change(tmp_path):
@@ -257,11 +257,15 @@ def test_the_version_differs_after_a_restart_even_with_no_file_change(tmp_path):
     make_tree(tmp_path)
     first, second = start(tmp_path), start(tmp_path)
     try:
-        v = lambda s: json.loads(call(s.server_address[1], "GET", "/version")[1])["version"]
-        assert v(first) != v(second)
+
+        def version(srv):
+            return json.loads(call(srv.server_address[1], "GET", "/version")[1])["version"]
+
+        assert version(first) != version(second)
     finally:
         for s in (first, second):
-            s.shutdown(); s.server_close()
+            s.shutdown()
+            s.server_close()
 
 
 def test_the_page_waits_for_a_run_to_end_before_reloading():
@@ -295,4 +299,5 @@ def test_the_version_poll_is_not_logged_but_other_requests_still_are(tmp_path, c
         assert "/config" in err
         assert "/version" not in err
     finally:
-        srv.shutdown(); srv.server_close()
+        srv.shutdown()
+        srv.server_close()

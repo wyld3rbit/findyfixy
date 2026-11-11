@@ -14,20 +14,20 @@ Heavy imports (psycopg, the embedding model, the reranker) happen inside the
 functions, so importing this module costs nothing.
 """
 
-import threading
 from collections.abc import Callable, Sequence
+import threading
 from typing import TYPE_CHECKING
 
 from findyfixy.triage.record import RECALL_K, Prior
 
 if TYPE_CHECKING:
-    from psycopg import Connection
-
-    from findyfixy.triage.graph import Recall
-    from findyfixy.retrieval.ingest import Embedder
     from contextlib import AbstractContextManager
 
+    from psycopg import Connection
+
+    from findyfixy.retrieval.ingest import Embedder
     from findyfixy.retrieval.retrieve import Retriever, Stage
+    from findyfixy.triage.graph import Recall
     from wyld3rness.trace.tracing import Tracing
 
 
@@ -37,8 +37,8 @@ def connect() -> "Connection":
     Autocommit, because the app only reads here. The caller closes it (use it as
     a context manager).
     """
-    import psycopg
     from pgvector.psycopg import register_vector
+    import psycopg
 
     from findyfixy.retrieval.ingest import database_url
 
@@ -60,8 +60,9 @@ def build_retriever(
     from findyfixy.retrieval.retrieve import Retriever, load_passages, make_reranker, no_stages, postgres_vector_search
 
     embedder = embedder or make_embedder()
-    return Retriever(load_passages(conn), postgres_vector_search(conn, embedder), make_reranker(),
-                     stage=stage or no_stages)
+    return Retriever(
+        load_passages(conn), postgres_vector_search(conn, embedder), make_reranker(), stage=stage or no_stages
+    )
 
 
 def stage_spans(tracing: "Tracing | None") -> "Stage | None":
@@ -105,16 +106,14 @@ class SharedRetrieval:
     and embedding (well under a second), never across a model call.
     """
 
-    def __init__(
-        self, *, make_embedder: "Callable[[], Embedder] | None" = None, stage: "Stage | None" = None
-    ) -> None:
+    def __init__(self, *, make_embedder: "Callable[[], Embedder] | None" = None, stage: "Stage | None" = None) -> None:
         """Hold nothing yet. `make_embedder` is for tests; `stage` traces the retrieval stages."""
         self._make_embedder = make_embedder
         self._stage = stage
         self._lock = threading.Lock()
-        self._embedder: "Embedder | None" = None
-        self._conn: "Connection | None" = None
-        self._retriever: "Retriever | None" = None
+        self._embedder: Embedder | None = None
+        self._conn: Connection | None = None
+        self._retriever: Retriever | None = None
 
     def _load_embedder(self) -> "Embedder":
         """The embedder, loaded once. The caller holds the lock."""

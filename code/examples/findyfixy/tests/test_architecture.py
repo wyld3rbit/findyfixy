@@ -106,9 +106,21 @@ def test_no_relative_imports() -> None:
 # arguments and must not reach for the composition root or for configuration.
 # Every module with a command `main`. ingest, search and the MCP server joined
 # on Day 6: each traces its command, so each reads tracing settings.
-ENTRY_POINTS = {f"findyfixy.{m}" for m in (
-    "console.server", "evals.answers", "evals.retrieval", "triage.graph", "tools.direct_run", "mcp.run",
-    "retrieval.ingest", "retrieval.search", "mcp.server", "observability.prices")}
+ENTRY_POINTS = {
+    f"findyfixy.{m}"
+    for m in (
+        "console.server",
+        "evals.answers",
+        "evals.retrieval",
+        "triage.graph",
+        "tools.direct_run",
+        "mcp.run",
+        "retrieval.ingest",
+        "retrieval.search",
+        "mcp.server",
+        "observability.prices",
+    )
+}
 # The composition root and the configuration it reads.
 COMPOSITION = {"findyfixy.wiring", "findyfixy.settings", "findyfixy.observability.tracing"}
 
@@ -156,4 +168,3 @@ def test_pure_modules_import_no_vendor_client() -> None:
 def test_the_console_fakes_are_used_only_by_the_console() -> None:
     """Demo and test data must never become a dependency of real code."""
     assert _importers("findyfixy.console.fakes") <= {"findyfixy.console.server"}
-

@@ -27,14 +27,16 @@ Environment
     and nothing depends on the caller's working directory.
 """
 
-import os
-import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+import os
+import sys
 
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.sessions import StdioConnection
 from langchain_mcp_adapters.tools import load_mcp_tools
+
 from findyfixy.paths import ROOT
 
 # code/ : the folder that holds `app/` (see findyfixy/paths.py).
@@ -50,7 +52,7 @@ SERVER_NAME = "deploys"
 TRACING_SETTINGS = ("TRACING", "LANGFUSE_HOST", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "TRACE_USER")
 
 
-def server_connection() -> dict:
+def server_connection() -> StdioConnection:
     """The stdio connection config for the deploy server, with the client's tracing settings."""
     return {
         "transport": "stdio",

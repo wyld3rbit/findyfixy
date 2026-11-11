@@ -43,22 +43,60 @@ def timeline(mode: str) -> list[dict]:
         return {"kind": kind, "t": t, "data": data}
 
     return [
-        ev(0.00, "run_started", mode=mode, tools=True, forced=True, question="q",
-           small_model="s", large_model="l", threshold=1.01, recall=True),
+        ev(
+            0.00,
+            "run_started",
+            mode=mode,
+            tools=True,
+            forced=True,
+            question="q",
+            small_model="s",
+            large_model="l",
+            threshold=1.01,
+            recall=True,
+        ),
         # The recall step: a lookup that takes real time, then the rest shifts.
         ev(0.00, "node_entered", node="recall", model=None),
         ev(0.40, "node_exited", node="recall", model=None, incidents=["INC-0073", "INC-0074"]),
         ev(0.40, "node_entered", node="investigate", model="s"),
         ev(0.40, "model_request", model="s", attempt=1),
-        ev(0.90, "model_reply", model="s", attempt=1, reply="", served_by="s", mismatch=False,
-           input_tokens=900, output_tokens=30),
+        ev(
+            0.90,
+            "model_reply",
+            model="s",
+            attempt=1,
+            reply="",
+            served_by="s",
+            mismatch=False,
+            input_tokens=900,
+            output_tokens=30,
+        ),
         ev(0.90, "tool_call", name="get_recent_deploys", args={"service": "billing", "hours": 24}),
         ev(0.92, "tool_result", name="get_recent_deploys", result="[]", error=False),
         ev(0.92, "model_request", model="s", attempt=2),
-        ev(1.60, "model_reply", model="s", attempt=2, reply="no lookup needed", served_by="s",
-           mismatch=False, input_tokens=950, output_tokens=8),
-        ev(1.60, "node_exited", node="investigate", model="s", calls=1, turns=2,
-           input_tokens=1850, output_tokens=38, hit_turn_cap=False, served_by=["s"]),
+        ev(
+            1.60,
+            "model_reply",
+            model="s",
+            attempt=2,
+            reply="no lookup needed",
+            served_by="s",
+            mismatch=False,
+            input_tokens=950,
+            output_tokens=8,
+        ),
+        ev(
+            1.60,
+            "node_exited",
+            node="investigate",
+            model="s",
+            calls=1,
+            turns=2,
+            input_tokens=1850,
+            output_tokens=38,
+            hit_turn_cap=False,
+            served_by=["s"],
+        ),
         ev(1.60, "node_entered", node="small", model="s"),
         ev(1.60, "model_request", model="s", attempt=1),
         ev(2.30, "model_reply", model="s", attempt=1, reply="{}", served_by="s", mismatch=False),
@@ -70,8 +108,12 @@ def timeline(mode: str) -> list[dict]:
         ev(4.60, "model_reply", model="l", attempt=1, reply="{}", served_by="l", mismatch=False),
         ev(4.60, "validation", model="l", attempt=1, ok=True, error=None),
         ev(4.60, "node_exited", node="large", model="l", triage={"severity": "sev3"}),
-        ev(4.60, "run_finished", model_used="l",
-           triage={"severity": "sev3", "component": "c", "next_action": "n", "confidence": 0.9}),
+        ev(
+            4.60,
+            "run_finished",
+            model_used="l",
+            triage={"severity": "sev3", "component": "c", "next_action": "n", "confidence": 0.9},
+        ),
     ]
 
 
@@ -86,16 +128,35 @@ def burst_timeline() -> list[dict]:
         return {"kind": kind, "t": t, "data": data}
 
     out = [
-        ev(0.0, "run_started", mode="live", tools=True, forced=False, question="q",
-           small_model="s", large_model="l", threshold=0.7),
+        ev(
+            0.0,
+            "run_started",
+            mode="live",
+            tools=True,
+            forced=False,
+            question="q",
+            small_model="s",
+            large_model="l",
+            threshold=0.7,
+        ),
         ev(0.0, "node_entered", node="investigate", model="s"),
     ]
     for i in range(8):
         out.append(ev(1.0, "tool_call", name="get_recent_deploys", args={"service": "auth", "hours": i + 1}))
         out.append(ev(1.0, "tool_result", name="get_recent_deploys", result="[]", error=False))
     out += [
-        ev(1.0, "node_exited", node="investigate", model="s", calls=8, turns=2,
-           input_tokens=None, output_tokens=None, hit_turn_cap=False, served_by=[]),
+        ev(
+            1.0,
+            "node_exited",
+            node="investigate",
+            model="s",
+            calls=8,
+            turns=2,
+            input_tokens=None,
+            output_tokens=None,
+            hit_turn_cap=False,
+            served_by=[],
+        ),
         ev(1.0, "node_entered", node="small", model="s"),
         ev(1.0, "model_request", model="s", attempt=1),
     ]
@@ -107,15 +168,17 @@ def replay(tmp_path, events: list[dict], tail: float = 1.0) -> list[dict]:
     path = tmp_path / "events.json"
     path.write_text(json.dumps(events))
     env = {k: v for k, v in os.environ.items() if k != "NODE_OPTIONS"}
-    out = subprocess.run(["node", str(REPLAY), str(PAGE), str(path), str(tail)],
-                         capture_output=True, text=True, timeout=40, env=env)
+    out = subprocess.run(
+        ["node", str(REPLAY), str(PAGE), str(path), str(tail)], capture_output=True, text=True, timeout=40, env=env
+    )
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
 
 
 def late(rows: list[dict]) -> list[tuple]:
-    return [(r["kind"], r["node"], round(r["started"] - r["real"], 2))
-            for r in rows if r["started"] - r["real"] > MAX_LAG]
+    return [
+        (r["kind"], r["node"], round(r["started"] - r["real"], 2)) for r in rows if r["started"] - r["real"] > MAX_LAG
+    ]
 
 
 @pytest.fixture(scope="module")

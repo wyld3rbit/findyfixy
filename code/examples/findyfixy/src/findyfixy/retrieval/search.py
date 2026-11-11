@@ -28,19 +28,19 @@ answer key would make the Day 4 recall number meaningless.
 
 from __future__ import annotations
 
-import json
-import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+import json
 from pathlib import Path
+import sys
 from typing import TYPE_CHECKING
 
-import psycopg
 from pgvector import Vector
 from pgvector.psycopg import register_vector
+import psycopg
 
-from findyfixy.retrieval.ingest import Embedder, database_url, make_embedder
 from findyfixy.paths import DATA
+from findyfixy.retrieval.ingest import Embedder, database_url, make_embedder
 
 if TYPE_CHECKING:
     from psycopg import Connection
@@ -124,15 +124,11 @@ def format_hits(hits: Sequence[Hit], pairs: Mapping[str, str]) -> str:
         if partner:
             note = f"pair {partner}" + (" (both here)" if partner in present else "")
         body = hit.body if len(hit.body) <= 60 else hit.body[:57] + "..."
-        lines.append(
-            f"{rank}. {hit.distance:.3f}  {hit.id:<22} {hit.service:<18} "
-            f"{hit.section:<11} {note:<26} {body}"
-        )
+        lines.append(f"{rank}. {hit.distance:.3f}  {hit.id:<22} {hit.service:<18} {hit.section:<11} {note:<26} {body}")
     in_pair = sum(1 for h in hits if h.incident_id in pairs)
     both = sum(1 for i in present if pairs.get(i) in present) // 2
     lines.append(
-        f"hits that belong to a seeded pair: {in_pair} of {len(hits)}; "
-        f"pairs with both members in the results: {both}"
+        f"hits that belong to a seeded pair: {in_pair} of {len(hits)}; pairs with both members in the results: {both}"
     )
     return "\n".join(lines)
 
@@ -145,8 +141,7 @@ def main(argv: list[str] | None = None) -> None:
     from findyfixy.observability.tracing import command_trace
 
     print(f"query: {query}\n")
-    with command_trace("search", input=query) as command, \
-            psycopg.connect(database_url(), autocommit=True) as conn:
+    with command_trace("search", input=query) as command, psycopg.connect(database_url(), autocommit=True) as conn:
         register_vector(conn)
         with command.step("load embedder"):
             embedder = make_embedder()

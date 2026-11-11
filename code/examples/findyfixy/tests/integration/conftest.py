@@ -21,18 +21,18 @@ Skip, do not fail, when the environment is missing
     result always means "the code is wrong", not "the server is down".
 """
 
-import os
-import signal
-import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+import os
 from pathlib import Path
+import signal
+import urllib.request
 
-import psycopg
-import pytest
 from dotenv import load_dotenv
 from pgvector.psycopg import register_vector
+import psycopg
+import pytest
 
 from findyfixy.retrieval.ingest import database_url
 

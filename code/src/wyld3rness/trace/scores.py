@@ -31,6 +31,7 @@ Credentials
 
 from __future__ import annotations
 
+from contextlib import suppress
 import queue
 import threading
 import time
@@ -95,7 +96,7 @@ class LangfuseScores:
             try:
                 self._config.request("POST", SCORES_PATH, body, timeout_s=self._timeout_s)
                 self.sent += 1
-            except Exception:  # noqa: BLE001 - any failure drops this score; the thread must live on
+            except Exception:
                 with self._count_lock:
                     self.dropped += 1
 
@@ -106,10 +107,8 @@ class LangfuseScores:
         the caller's warning then says how many scores are missing.
         """
         deadline = time.monotonic() + timeout_s
-        try:
+        with suppress(queue.Full):
             self._queue.put(None, timeout=timeout_s)
-        except queue.Full:
-            pass
         self._thread.join(max(0.0, deadline - time.monotonic()))
         if self._thread.is_alive() or not self._queue.empty():
             left = sum(1 for item in list(self._queue.queue) if item is not None)

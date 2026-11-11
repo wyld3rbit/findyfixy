@@ -5,10 +5,12 @@
 # uv.lock and before any commit that touches dependencies.
 #   1. Known vulnerabilities in the locked set, without installing anything.
 #   2. Startup hooks: a .pth file runs code every time Python starts, which is
-#      how a hijacked package can persist. Only the known shims are allowed.
+#      how a hijacked package can persist. Only the known shims are allowed,
+#      and this workspace's own editable installs (wyld3rness.pth and
+#      findyfixy.pth), each a single line naming its src/ folder.
 # On any finding, stop and read it. Do not upgrade or remove to make it pass.
 
-.PHONY: audit hooks scan up down setup ingest console triage test test-harness eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative case golden verify-attestation obs-secrets obs-up obs-down obs-prices
+.PHONY: audit hooks scan up down setup ingest console triage test test-harness lint eval-retrieval eval eval-gate eval-baseline eval-freeze eval-compare eval-negative case golden verify-attestation obs-secrets obs-up obs-down obs-prices
 
 # Memory for the Colima VM, in GB. 6 on most days, 8 on Langfuse days:
 #   make up COLIMA_MEMORY=8
@@ -49,7 +51,9 @@ audit:
 	@bad=$$(find .venv -name '*.pth' \
 	    ! -name '_virtualenv.pth' \
 	    ! -name 'distutils-precedence.pth' \
-	    ! -name '__editable__*.pth'); \
+	    ! -name '__editable__*.pth' \
+	    ! -name 'wyld3rness.pth' \
+	    ! -name 'findyfixy.pth'); \
 	if [ -n "$$bad" ]; then \
 	    echo "UNEXPECTED .pth FILES, show their contents before going on:"; \
 	    echo "$$bad"; exit 1; \
@@ -96,6 +100,14 @@ triage:
 
 test:
 	$(RUN) pytest
+
+# lint: Ruff (lint rules and formatting) and mypy (strict on the harness,
+# typed definitions required in FindyFixy). Runs in the pre-commit hook when
+# code/ is staged, and in CI. `uv run ruff format .` applies the formatting.
+lint:
+	uv run --all-packages ruff check .
+	uv run --all-packages ruff format --check .
+	uv run --all-packages mypy
 
 # test-harness: the harness's own suite in a throwaway environment that holds
 # the harness and its dev tools only, no app. It proves the harness stands

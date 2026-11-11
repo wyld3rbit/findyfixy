@@ -96,7 +96,11 @@ def test_a_case_without_labels_scores_only_the_metrics() -> None:
     report = run([case("g1", kind=None)])
     assert "kind_match" not in report["cases"][0] and report["cases"][0]["labels"] == []
     assert list(report["aggregates"]["overall"]["scores"]) == [
-        "faithfulness", "response_relevancy", "context_recall", "action_quality"]
+        "faithfulness",
+        "response_relevancy",
+        "context_recall",
+        "action_quality",
+    ]
 
 
 # ---- Run errors -------------------------------------------------------------
@@ -125,18 +129,24 @@ def test_an_exception_from_the_system_is_a_run_error_and_the_run_continues() -> 
 
 def test_a_metric_that_raises_is_a_failed_metric_not_an_abort() -> None:
     """An embedder fault fails one metric with its reason; the case is not a run error."""
+
     def bad_embed(texts: Any) -> list[list[float]]:
         """An embedder that is down."""
         raise OSError("embedder down")
 
     report = run([case("g1")], embed=bad_embed)
     assert report["cases"][0]["metrics"]["response_relevancy"] == {
-        "score": None, "failed": True, "error": "OSError: embedder down", "trace": []}
+        "score": None,
+        "failed": True,
+        "error": "OSError: embedder down",
+        "trace": [],
+    }
     assert report["cases"][0]["run_error"] is None
 
 
 def test_a_bug_in_a_metric_is_not_hidden_as_a_judge_failure() -> None:
     """Expected faults become failed results; a KeyError is our bug and must stop the run."""
+
     def buggy_embed(texts: Any) -> list[list[float]]:
         """An embedder with a bug."""
         raise KeyError("oops")
@@ -201,6 +211,7 @@ def test_a_group_named_overall_stops_the_run_before_any_case_runs() -> None:
 
 def test_summarise_keys_that_clash_are_refused_before_any_case_runs() -> None:
     """`summarise([])` is probed up front, so a clash costs no judge call."""
+
     class Bad(CountingSUT):
         """Claims a harness aggregate key."""
 
@@ -216,6 +227,7 @@ def test_summarise_keys_that_clash_are_refused_before_any_case_runs() -> None:
 
 def test_a_summarise_clash_seen_only_on_real_records_is_dropped_with_a_warning() -> None:
     """Raising after scoring would lose the run, so the harness count wins and a warning is printed."""
+
     class Late(FakeSUT):
         """Clashes only when given records."""
 
@@ -568,8 +580,7 @@ def test_a_stop_ends_the_run_before_the_next_case_with_no_report() -> None:
     seen, on_event = recorder()
     sut = CountingSUT()
     with pytest.raises(EvalStopped, match="stopped after 1 of 3 cases"):
-        run([case("g1"), case("g2"), case("g3")], sut=sut, on_event=on_event,
-            should_stop=lambda: sut.answered >= 1)
+        run([case("g1"), case("g2"), case("g3")], sut=sut, on_event=on_event, should_stop=lambda: sut.answered >= 1)
     assert sut.answered == 1
     assert [d["id"] for k, d in seen if k == "case_started"] == ["g1"]
 
@@ -581,8 +592,12 @@ def test_a_stop_in_the_judge_pass_ends_the_run_with_no_report() -> None:
     seen, on_event = recorder()
     sut = CountingSUT()
     with pytest.raises(EvalStopped, match="stopped after judging 1 of 3 answered cases"):
-        run([case("g1"), case("g2"), case("g3")], sut=sut, on_event=on_event,
-            should_stop=lambda: sum(k == "case_scored" for k, _ in seen) >= 1)
+        run(
+            [case("g1"), case("g2"), case("g3")],
+            sut=sut,
+            on_event=on_event,
+            should_stop=lambda: sum(k == "case_scored" for k, _ in seen) >= 1,
+        )
     assert sut.answered == 3
     assert [d["id"] for k, d in seen if k == "case_scored"] == ["g1"]
 
@@ -593,8 +608,13 @@ def test_a_run_error_case_is_scored_in_the_answer_pass_and_never_judged() -> Non
     judge = FakeJudge()
     run([case("g1"), case("g2")], sut=FakeSUT(raise_on=["g1"]), judge=judge, on_event=on_event)
     kinds = [(k, d.get("id")) for k, d in seen]
-    assert kinds[:5] == [("eval_started", None), ("case_started", "g1"), ("case_answered", "g1"),
-                         ("case_scored", "g1"), ("case_started", "g2")]
+    assert kinds[:5] == [
+        ("eval_started", None),
+        ("case_started", "g1"),
+        ("case_answered", "g1"),
+        ("case_scored", "g1"),
+        ("case_started", "g2"),
+    ]
     alone = FakeJudge()
     run([case("g2")], judge=alone)
     assert judge.prompts == alone.prompts

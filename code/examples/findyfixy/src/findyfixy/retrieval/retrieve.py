@@ -61,10 +61,10 @@ Separation
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
+import re
 from typing import TYPE_CHECKING, get_args
 
 from pgvector import Vector
@@ -105,6 +105,7 @@ Stage = Callable[[str], AbstractContextManager[object]]
 def no_stages(name: str) -> AbstractContextManager[object]:
     """The default `Stage`: nothing around a stage."""
     return nullcontext()
+
 
 # A hostname-like token with parts: `scheduler-3de`. Matched whole, and its
 # parts are added too, so `scheduler-3de` finds the exact host (rare, high
@@ -214,9 +215,7 @@ class Retriever:
         _check(query, k)
         return self._collapse(self._fused(query, service), k)
 
-    def hybrid_rerank(
-        self, query: str, k: int = 5, service: str | None = None
-    ) -> list[Found]:
+    def hybrid_rerank(self, query: str, k: int = 5, service: str | None = None) -> list[Found]:
         """Hybrid's best 30 chunks, re-scored by the cross-encoder."""
         _check(query, k)
         if self._rerank is None:
@@ -229,7 +228,7 @@ class Retriever:
         if len(scores) != len(pool):
             raise ValueError("the reranker returned a different number of scores")
         # sorted() is stable: equal scores keep the fused order.
-        ranked = sorted(zip(pool, scores), key=lambda pair: -pair[1])
+        ranked = sorted(zip(pool, scores, strict=True), key=lambda pair: -pair[1])
         return self._collapse([(cid, float(score)) for (cid, _), score in ranked], k)
 
     # -- what the graph needs -------------------------------------------------
@@ -338,9 +337,9 @@ def make_reranker() -> Rerank:
 
     from findyfixy.model_cache import cache_first
 
-    model = cache_first(lambda **hub: CrossEncoder(
-        RERANKER_NAME, revision=RERANKER_REVISION, device="cpu", max_length=512, **hub
-    ))
+    model = cache_first(
+        lambda **hub: CrossEncoder(RERANKER_NAME, revision=RERANKER_REVISION, device="cpu", max_length=512, **hub)
+    )
 
     def rerank(query: str, texts: Sequence[str]) -> list[float]:
         pairs = [(query, text) for text in texts]

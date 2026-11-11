@@ -27,8 +27,8 @@ import math
 
 import pytest
 
-from findyfixy.triage.graph import QUESTIONS, build_graph
 from findyfixy.llm import ollama_ask
+from findyfixy.triage.graph import QUESTIONS, build_graph
 from findyfixy.triage.record import Ask, Triage, ask_validated
 
 # Marks every test in this module. The default run deselects the marker.
@@ -98,9 +98,7 @@ def test_full_run_completes_on_the_lesson_questions(ollama, deadline):
     which is the weakest part of the design (see findyfixy/triage/graph.py). The test guards
     against crashes: a validation error, a parse failure, a dead server.
     """
-    graph = build_graph(
-        ollama_ask, small_model=ollama.small, large_model=ollama.large
-    )
+    graph = build_graph(ollama_ask, small_model=ollama.small, large_model=ollama.large)
     with deadline(FULL_RUN_DEADLINE_S):
         states = [graph.invoke({"question": q}) for q in QUESTIONS]
 

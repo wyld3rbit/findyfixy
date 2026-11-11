@@ -20,6 +20,7 @@ uv run --no-project python "$root/tools/scan_private.py" --staged
 if [ -f "$root/Makefile" ]; then
     make -C "$root" --no-print-directory check
     if git diff --cached --name-only | grep -q '^code/'; then
+        make -C "$root" --no-print-directory lint
         make -C "$root" --no-print-directory test
     fi
 fi

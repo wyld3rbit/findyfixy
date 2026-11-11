@@ -27,17 +27,17 @@ import asyncio
 import os
 import subprocess
 
-import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+import pytest
 
+from findyfixy.mcp.client import persistent_tools
+from findyfixy.tools.deploys import DEFAULT_DEPLOYS_PATH, get_recent_deploys, make_deploys_tool
 from findyfixy.tools.investigate import (
     analyse,
     build_investigator,
     content_text,
     format_evidence,
 )
-from findyfixy.mcp.client import persistent_tools
-from findyfixy.tools.deploys import DEFAULT_DEPLOYS_PATH, get_recent_deploys, make_deploys_tool
 
 
 def call(args: dict, id: str = "c1") -> dict:
@@ -59,8 +59,9 @@ def server_count() -> int:
     another test run or session at the same moment, and the test then fails
     for a process it never started.
     """
-    out = subprocess.run(["pgrep", "-P", str(os.getpid()), "-f", "python.* -m findyfixy.mcp.server"],
-                         capture_output=True, text=True)
+    out = subprocess.run(
+        ["pgrep", "-P", str(os.getpid()), "-f", "python.* -m findyfixy.mcp.server"], capture_output=True, text=True
+    )
     return len(out.stdout.split())
 
 
@@ -88,9 +89,7 @@ def test_analyse_reports_clean_text_for_block_content():
     msgs = [
         HumanMessage("q"),
         AIMessage(content="", tool_calls=[call({"service": "auth", "hours": 24})]),
-        ToolMessage(
-            content=[{"type": "text", "text": "[]", "id": "lc_1"}], tool_call_id="c1"
-        ),
+        ToolMessage(content=[{"type": "text", "text": "[]", "id": "lc_1"}], tool_call_id="c1"),
         AIMessage(content="done"),
     ]
     inv = analyse(msgs)
@@ -119,8 +118,7 @@ def test_the_mcp_tool_shows_the_model_the_same_schema_as_the_direct_tool():
     def comparable(schema: dict) -> dict:
         """The parts the model reads. Titles are generated names, not content."""
         return {
-            name: {k: v for k, v in prop.items() if k != "title"}
-            for name, prop in schema["properties"].items()
+            name: {k: v for k, v in prop.items() if k != "title"} for name, prop in schema["properties"].items()
         } | {"required": sorted(schema["required"])}
 
     assert comparable(mcp_schema) == comparable(direct)
@@ -148,11 +146,10 @@ def test_a_stdio_round_trip_returns_what_the_direct_function_returns():
 def test_invalid_arguments_come_back_as_an_error_message_not_a_crash(bad_args):
     async def go():
         async with persistent_tools() as tools:
-            model = ScriptedModel(AIMessage(content="", tool_calls=[call(bad_args)]),
-                                  AIMessage(content="could not look it up"))
-            final = await build_investigator(model, tools).ainvoke(
-                {"messages": [HumanMessage("q")]}
+            model = ScriptedModel(
+                AIMessage(content="", tool_calls=[call(bad_args)]), AIMessage(content="could not look it up")
             )
+            final = await build_investigator(model, tools).ainvoke({"messages": [HumanMessage("q")]})
             return final["messages"]
 
     inv = analyse(run(go()))
@@ -167,9 +164,7 @@ def test_the_investigator_runs_with_mcp_tools_through_ainvoke():
                 AIMessage(content="", tool_calls=[call({"service": "auth", "hours": 24})]),
                 AIMessage(content="Only auth 2.14.1."),
             )
-            final = await build_investigator(model, tools).ainvoke(
-                {"messages": [HumanMessage("q")]}
-            )
+            final = await build_investigator(model, tools).ainvoke({"messages": [HumanMessage("q")]})
             return final["messages"]
 
     inv = analyse(run(go()))
@@ -197,8 +192,9 @@ def test_the_server_stops_even_when_the_caller_raises():
         async with persistent_tools():
             raise RuntimeError("caller failed")
 
-    with pytest.raises(BaseException):
+    with pytest.raises(ExceptionGroup) as raised:  # anyio's task group wraps the caller's error
         run(go())
+    assert raised.group_contains(RuntimeError, match="caller failed", depth=None)
     assert server_count() == before
 
 
@@ -216,9 +212,7 @@ def test_per_call_tools_work_and_give_the_same_answer_as_a_persistent_session():
         async with per_call_tools() as tools:
             return content_text(await tools[0].ainvoke({"service": "auth", "hours": 24}))
 
-    assert run(per_call()) == run(persistent()) == get_recent_deploys(
-        "auth", 24, path=DEFAULT_DEPLOYS_PATH
-    )
+    assert run(per_call()) == run(persistent()) == get_recent_deploys("auth", 24, path=DEFAULT_DEPLOYS_PATH)
 
 
 def test_per_call_tools_leave_no_server_process_behind():
@@ -228,9 +222,9 @@ def test_per_call_tools_leave_no_server_process_behind():
 
     async def go():
         async with per_call_tools() as tools:
-            for hours in (1, 24, 48):                       # three calls, three sessions
+            for hours in (1, 24, 48):  # three calls, three sessions
                 await tools[0].ainvoke({"service": "auth", "hours": hours})
-            assert server_count() == before                  # nothing is held between calls
+            assert server_count() == before  # nothing is held between calls
 
     run(go())
     assert server_count() == before
@@ -245,9 +239,7 @@ def test_per_call_errors_still_come_back_as_a_message(tmp_path):
                 AIMessage(content="", tool_calls=[call({"service": "auth", "hours": 0})]),
                 AIMessage(content="could not look it up"),
             )
-            final = await build_investigator(model, tools).ainvoke(
-                {"messages": [HumanMessage("q")]}
-            )
+            final = await build_investigator(model, tools).ainvoke({"messages": [HumanMessage("q")]})
             return final["messages"]
 
     inv = analyse(run(go()))

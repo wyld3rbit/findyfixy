@@ -18,9 +18,13 @@ from findyfixy.retrieval.ingest import DIMENSIONS, chunk_incident, ingest
 pytestmark = pytest.mark.integration
 
 BASE = {
-    "service": "auth", "severity": "sev1", "date": "2026-01-02",
-    "summary": "Auth was slow.", "timeline": "09:00 Alert.",
-    "root_cause": "Bad certificate.", "remediation": "Test before cutover.",
+    "service": "auth",
+    "severity": "sev1",
+    "date": "2026-01-02",
+    "summary": "Auth was slow.",
+    "timeline": "09:00 Alert.",
+    "root_cause": "Bad certificate.",
+    "remediation": "Test before cutover.",
 }
 
 
@@ -71,9 +75,7 @@ def test_edit_rewrites_one_chunk_and_retraction_deletes(conn: psycopg.Connection
 def test_stored_rows_carry_model_and_dimension(conn: psycopg.Connection) -> None:
     """Every row records its model, and the vector has the column's size."""
     ingest(conn, chunk_incident({"id": "INC-1", **BASE}), SpyEmbedder())
-    model, dims = conn.execute(
-        "SELECT embedding_model, vector_dims(embedding) FROM chunks LIMIT 1"
-    ).fetchone()
+    model, dims = conn.execute("SELECT embedding_model, vector_dims(embedding) FROM chunks LIMIT 1").fetchone()
     assert model == "BAAI/bge-small-en-v1.5"
     assert dims == DIMENSIONS
 
@@ -81,7 +83,5 @@ def test_stored_rows_carry_model_and_dimension(conn: psycopg.Connection) -> None
 def test_hnsw_index_exists(conn: psycopg.Connection) -> None:
     """The index is part of the schema, not an afterthought."""
     ingest(conn, chunk_incident({"id": "INC-1", **BASE}), SpyEmbedder())
-    definition = conn.execute(
-        "SELECT indexdef FROM pg_indexes WHERE indexname = 'chunks_embedding_hnsw'"
-    ).fetchone()[0]
+    definition = conn.execute("SELECT indexdef FROM pg_indexes WHERE indexname = 'chunks_embedding_hnsw'").fetchone()[0]
     assert "hnsw" in definition and "vector_cosine_ops" in definition

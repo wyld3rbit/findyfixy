@@ -10,7 +10,7 @@ app that is not FindyFixy. Nothing on an eval path imports this module.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import threading
 from typing import Any
 
@@ -22,9 +22,15 @@ from wyld3rness.eval.metrics import ActionRating, Claims, Questions, Verdict
 from wyld3rness.eval.runner import run_eval
 from wyld3rness.eval.sut import Answer
 
-NOW = datetime(2026, 10, 26, 12, 30, 5, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 26, 12, 30, 5, tzinfo=UTC)
 # A clean tree: the traceability rules refuse an unknown git state (None).
-PROV = {"judge_digest": "d1", "prompt_versions": {"m": "h"}, "golden_sha256": "g1", "git_sha": "abc1234", "git_dirty": False}
+PROV = {
+    "judge_digest": "d1",
+    "prompt_versions": {"m": "h"},
+    "golden_sha256": "g1",
+    "git_sha": "abc1234",
+    "git_dirty": False,
+}
 
 
 def case(cid: str, group: str = "a", kind: str | None = "x", **meta: Any) -> Case:
@@ -44,7 +50,8 @@ class FakeJudge:
 
     def __init__(self, supported: bool = True, fail: bool = False) -> None:
         """`supported` sets every verdict; `fail` makes every call raise `JudgeError`."""
-        self.supported, self.fail, self.prompts = supported, fail, []
+        self.supported, self.fail = supported, fail
+        self.prompts: list[str] = []
 
     def ask(self, prompt: str, schema: type[BaseModel]) -> Any:
         """A canned reply of the right schema."""

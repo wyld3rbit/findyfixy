@@ -14,6 +14,7 @@ Why this exists
 
 import re
 import tomllib
+
 from findyfixy.paths import WORKSPACE
 
 PYPROJECT = WORKSPACE / "pyproject.toml"  # the workspace root holds [tool.uv]
@@ -21,10 +22,7 @@ PYPROJECT = WORKSPACE / "pyproject.toml"  # the workspace root holds [tool.uv]
 
 def package_names(requirements: list[str]) -> set[str]:
     """Normalised distribution names from requirement strings. Pure."""
-    return {
-        re.split(r"[\s;<>=!~\[(]", r.strip(), maxsplit=1)[0].lower().replace("_", "-")
-        for r in requirements
-    }
+    return {re.split(r"[\s;<>=!~\[(]", r.strip(), maxsplit=1)[0].lower().replace("_", "-") for r in requirements}
 
 
 def test_no_direct_dependency_is_cancelled_by_an_override():
@@ -43,6 +41,5 @@ def test_no_direct_dependency_is_cancelled_by_an_override():
 
 def test_package_names_handles_the_forms_that_appear_in_pyproject():
     assert package_names(
-        ["PyJWT>=2.10", "uvicorn ; sys_platform == 'never'", "langchain_ollama[x]>=1",
-         "mcp>=1.30.0,<2"]
+        ["PyJWT>=2.10", "uvicorn ; sys_platform == 'never'", "langchain_ollama[x]>=1", "mcp>=1.30.0,<2"]
     ) == {"pyjwt", "uvicorn", "langchain-ollama", "mcp"}

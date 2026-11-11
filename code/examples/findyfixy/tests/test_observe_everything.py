@@ -20,17 +20,18 @@ import asyncio
 import http.client
 import threading
 
-import pytest
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
+import pytest
 
 from findyfixy.events import Event
 from findyfixy.observability.adapter import EventSpans
 from wyld3rness.trace.command import CommandTrace
 from wyld3rness.trace.tracing import TraceConfig, Tracing
 
-CONFIG = TraceConfig(host="http://127.0.0.1:1", public_key="pk-lf-t", secret_key="sk-lf-t",
-                     service_name="t", user_id="oncall-7")
+CONFIG = TraceConfig(
+    host="http://127.0.0.1:1", public_key="pk-lf-t", secret_key="sk-lf-t", service_name="t", user_id="oncall-7"
+)
 
 
 @pytest.fixture
@@ -113,9 +114,16 @@ def test_a_hunts_runs_share_one_session_and_a_later_run_has_none(traced) -> None
     """hunt_started to hunt_finished: every run in between carries the same session.id."""
     tracing, exporter = traced
     adapter = EventSpans(tracing.tracer())
-    events = [("hunt_started", {"max": 2}), ("run_started", {"question": "a"}), ("run_finished", {"triage": {}}),
-              ("run_started", {"question": "b"}), ("run_finished", {"triage": {}}), ("hunt_finished", {}),
-              ("run_started", {"question": "c"}), ("run_finished", {"triage": {}})]
+    events = [
+        ("hunt_started", {"max": 2}),
+        ("run_started", {"question": "a"}),
+        ("run_finished", {"triage": {}}),
+        ("run_started", {"question": "b"}),
+        ("run_finished", {"triage": {}}),
+        ("hunt_finished", {}),
+        ("run_started", {"question": "c"}),
+        ("run_finished", {"triage": {}}),
+    ]
     for kind, data in events:
         adapter(Event(kind, 0.0, data))
     tracing.flush()
@@ -154,8 +162,18 @@ def test_a_tool_path_run_is_a_step_with_what_it_cost(traced) -> None:
     from findyfixy.tools.direct_run import RunStats, traced_run
 
     tracing, exporter = traced
-    stats = RunStats(input_tokens=900, output_tokens=40, seconds=4.2, turns=2, tool_calls=1, tool_errors=0,
-                     hit_turn_cap=False, correct=True, answer="2.14.1 at 3h", args="service=auth | hours=24")
+    stats = RunStats(
+        input_tokens=900,
+        output_tokens=40,
+        seconds=4.2,
+        turns=2,
+        tool_calls=1,
+        tool_errors=0,
+        hit_turn_cap=False,
+        correct=True,
+        answer="2.14.1 at 3h",
+        args="service=auth | hours=24",
+    )
     with CommandTrace(tracing, "tool path direct") as command:
         assert traced_run(command, "run 1", lambda: stats) is stats
     step = spans(tracing, exporter)["run 1"].attributes
@@ -198,8 +216,8 @@ def test_the_mcp_server_inherits_the_clients_tracing_choice(monkeypatch) -> None
 
 def test_command_trace_reads_dot_env_before_deciding(monkeypatch) -> None:
     """TRACING=off in code/.env must turn a command's tracing off: the file is loaded first."""
-    import findyfixy.settings as settings
     from findyfixy.observability.tracing import command_trace
+    import findyfixy.settings as settings
 
     calls: list[str] = []
     monkeypatch.setattr(settings, "load_env", lambda: calls.append("load_env"))
@@ -233,8 +251,9 @@ def test_a_traced_console_run_announces_its_trace_link_right_after_it_starts(tra
 def test_a_trace_url_needs_the_backend_project() -> None:
     """No project id, no link: the viewer shows the id alone."""
     assert CONFIG.trace_url("abc") is None
-    with_project = TraceConfig(host="http://127.0.0.1:3000/", public_key="p", secret_key="s", service_name="t",
-                               project_id="findyfixy")
+    with_project = TraceConfig(
+        host="http://127.0.0.1:3000/", public_key="p", secret_key="s", service_name="t", project_id="findyfixy"
+    )
     assert with_project.trace_url("abc") == "http://127.0.0.1:3000/project/findyfixy/traces/abc"
 
 
@@ -243,8 +262,10 @@ def test_the_project_comes_from_the_setting_or_the_local_stack(tmp_path, monkeyp
     from findyfixy.settings import read_tracing
 
     env = tmp_path / ".env"
-    env.write_text("LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-a\nLANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-b\n"
-                   "LANGFUSE_INIT_PROJECT_ID=stackproj\n")
+    env.write_text(
+        "LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-a\nLANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-b\n"
+        "LANGFUSE_INIT_PROJECT_ID=stackproj\n"
+    )
     for name in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST", "TRACING", "LANGFUSE_PROJECT_ID"):
         monkeypatch.delenv(name, raising=False)
     assert read_tracing(stack_env=env).project_id == "stackproj"

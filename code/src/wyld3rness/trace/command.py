@@ -57,7 +57,7 @@ class CommandTrace:
         tracing: Tracing | None,
         name: str,
         *,
-        input: Any = None,  # noqa: A002 - the backend's word for it
+        input: Any = None,
         attributes: Attributes | None = None,
     ) -> None:
         """Hold the settings. The top span starts on `__enter__`."""
@@ -82,8 +82,7 @@ class CommandTrace:
     def __enter__(self) -> CommandTrace:
         """Start the top span and make it current."""
         if self._tracing is not None:
-            self._tree = SpanTree(self._tracing.tracer(), self._name, input=self._input,
-                                  attributes=self._attributes)
+            self._tree = SpanTree(self._tracing.tracer(), self._name, input=self._input, attributes=self._attributes)
             self._stack.enter_context(self._tree.activate())
         return self
 

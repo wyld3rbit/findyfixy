@@ -11,8 +11,8 @@ Why the size test matters
     (about double) inside the window.
 """
 
-import re
 from collections import Counter
+import re
 
 import pytest
 
@@ -44,10 +44,7 @@ def test_incident_is_realistic_not_a_one_liner(incident: Incident):
 
 @pytest.mark.parametrize("incident", BANK, ids=lambda i: i.id)
 def test_incident_uses_only_documentation_ip_addresses(incident: Incident):
-    stray = [
-        ip for ip in _IPV4.findall(incident.text)
-        if not ip.startswith(_ALLOWED_IP_PREFIXES)
-    ]
+    stray = [ip for ip in _IPV4.findall(incident.text) if not ip.startswith(_ALLOWED_IP_PREFIXES)]
     assert stray == []
 
 
@@ -69,7 +66,9 @@ def test_an_oversized_incident_is_rejected():
     with pytest.raises(ValueError):
         Incident.model_validate(
             {
-                "id": "x", "title": "t", "trap": "t",
+                "id": "x",
+                "title": "t",
+                "trap": "t",
                 "expected": {"severity": "sev3", "components": ["a"]},
                 "text": "x" * (MAX_TEXT_CHARS + 1),
             }

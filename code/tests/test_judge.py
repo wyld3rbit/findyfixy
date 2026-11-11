@@ -12,8 +12,8 @@ What a staff+ reader should notice
 
 import json
 
-import pytest
 from pydantic import BaseModel
+import pytest
 
 from wyld3rness.eval.judge import JudgeError, make_ollama_judge
 
@@ -147,4 +147,3 @@ def test_the_real_chat_reuses_one_client_per_model_and_schema(monkeypatch):
 
     judge.ask("p", Other)
     assert len(built) == 2  # a different schema needs its own client
-

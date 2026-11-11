@@ -38,13 +38,14 @@ Separation
 
 from __future__ import annotations
 
-import json
-import re
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
+import json
 from pathlib import Path
-from typing import Literal
+import re
+from typing import Any, Literal
+
 from findyfixy.paths import DATA
 
 INCIDENTS_PATH = DATA / "incidents.jsonl"
@@ -81,46 +82,91 @@ class EvalQuery:
 # pairs again from the cause, in the language of the root cause. A query never
 # contains a hostname, so only meaning can find the answer.
 MEANING: tuple[tuple[tuple[str, ...], str], ...] = (
-    (("INC-0009",), "A bad limit shipped in voice-verification configuration version 4.14.6 and about a third of requests were refused."),
-    (("INC-0021", "INC-0126"), "Gateway ran out of capacity at the daily traffic peak because the minimum number of replicas was too low."),
-    (("INC-0027",), "Most notifications clients could not connect after the TLS library was upgraded and dropped an older protocol version."),
+    (
+        ("INC-0009",),
+        "A bad limit shipped in voice-verification configuration version 4.14.6 and about a third of requests were refused.",
+    ),
+    (
+        ("INC-0021", "INC-0126"),
+        "Gateway ran out of capacity at the daily traffic peak because the minimum number of replicas was too low.",
+    ),
+    (
+        ("INC-0027",),
+        "Most notifications clients could not connect after the TLS library was upgraded and dropped an older protocol version.",
+    ),
     (("INC-0028",), "Billing queries hung for fourteen minutes while a database migration held a lock on a table."),
     (("INC-0057",), "The billing queue backed up to about sixty-seven thousand messages because consumers stalled."),
-    (("INC-0066",), "Logins were rejected on scheduler because one machine's clock was forty-five seconds off, past the token validity window."),
-    (("INC-0073",), "Auth became slow after a scheduled certificate rotation, with latency at forty-one times its usual level."),
+    (
+        ("INC-0066",),
+        "Logins were rejected on scheduler because one machine's clock was forty-five seconds off, past the token validity window.",
+    ),
+    (
+        ("INC-0073",),
+        "Auth became slow after a scheduled certificate rotation, with latency at forty-one times its usual level.",
+    ),
     (("INC-0075",), "One shard of auth took four fifths of the traffic and began timing out."),
-    (("INC-0094",), "After a vendor began answering with 429, voice-verification clients retried until load grew forty-five fold."),
+    (
+        ("INC-0094",),
+        "After a vendor began answering with 429, voice-verification clients retried until load grew forty-five fold.",
+    ),
     (("INC-0096",), "Billing used up all sixteen of its database connections and callers received errors."),
-    (("INC-0105",), "After a DNS change, voice-verification kept sending traffic to a retired backend for 161 minutes."),
+    (
+        ("INC-0105",),
+        "After a DNS change, voice-verification kept sending traffic to a retired backend for 161 minutes.",
+    ),
     (("INC-0123",), "Writes to scheduler failed for 157 minutes after a disk filled up."),
-    (("INC-0131",), "Notifications could not call a dependency for 85 minutes because an API credential had expired a month earlier."),
+    (
+        ("INC-0131",),
+        "Notifications could not call a dependency for 85 minutes because an API credential had expired a month earlier.",
+    ),
     (("INC-0145",), "A bad limit in scheduler configuration version 3.1.1 made it reject about a third of requests."),
-    (("INC-0155",), "On search, cache entries expired together and nearly half of requests fell through to the database."),
+    (
+        ("INC-0155",),
+        "On search, cache entries expired together and nearly half of requests fell through to the database.",
+    ),
     (("INC-0163",), "Scheduler callers got 503 errors because all sixty-seven database connections were in use."),
     (("INC-0178",), "Token validation failed on ledger because a server clock had drifted nineteen seconds."),
-    (("INC-0179",), "Memory on scheduler grew thirteen megabytes an hour from version 2.4.0 until processes were killed."),
-    (("INC-0191",), "After a rate-limit reload, auth refused traffic with 429 because the cap was nine requests per second."),
-    (("INC-0073",), "Peers did not have the intermediate authority that signed the new certificate and trust was never tested before cutover, on auth."),
-    (("INC-0094",), "No backoff and no retry budget meant every failure made more load, voice-verification calling a vendor."),
-    (("INC-0057",), "A malformed message crashed the consumer on each retry and there was no dead-letter path, on billing."),
+    (
+        ("INC-0179",),
+        "Memory on scheduler grew thirteen megabytes an hour from version 2.4.0 until processes were killed.",
+    ),
+    (
+        ("INC-0191",),
+        "After a rate-limit reload, auth refused traffic with 429 because the cap was nine requests per second.",
+    ),
+    (
+        ("INC-0073",),
+        "Peers did not have the intermediate authority that signed the new certificate and trust was never tested before cutover, on auth.",
+    ),
+    (
+        ("INC-0094",),
+        "No backoff and no retry budget meant every failure made more load, voice-verification calling a vendor.",
+    ),
+    (
+        ("INC-0057",),
+        "A malformed message crashed the consumer on each retry and there was no dead-letter path, on billing.",
+    ),
     (("INC-0028",), "Adding a column with a default rewrote the whole table under an exclusive lock, on billing."),
     (("INC-0155",), "A bulk refresh gave every key the same time to live, so they all expired at once, on search."),
     (("INC-0179",), "A cache added in 2.4.0 was keyed per request and never evicted anything, on scheduler."),
     (("INC-0191",), "An empty config path at deploy made the reload quietly fall back to default limits, on auth."),
     (("INC-0131",), "The credential lived ninety days and nobody owned the rotation reminder, on notifications."),
     (("INC-0075",), "Sharding by customer id alone let one huge customer concentrate load on a single shard, on auth."),
-    (("INC-0027",), "The new library default raised the minimum protocol version and nobody knew which clients were old, on notifications."),
+    (
+        ("INC-0027",),
+        "The new library default raised the minimum protocol version and nobody knew which clients were old, on notifications.",
+    ),
     (("INC-0105",), "A one day TTL plus a client library that cached lookups past the TTL, on voice-verification."),
 )
 
 
-def read_rows(path: Path = INCIDENTS_PATH) -> list[dict]:
+def read_rows(path: Path = INCIDENTS_PATH) -> list[dict[str, Any]]:
     """Read the corpus as plain dicts. Not at import: a bad file should fail loudly at use."""
     with path.open(encoding="utf-8") as handle:
         return [json.loads(line) for line in handle if line.strip()]
 
 
-def partners(rows: Sequence[Mapping]) -> dict[str, str]:
+def partners(rows: Sequence[Mapping[str, Any]]) -> dict[str, str]:
     """Map each seeded incident to its twin, in both directions."""
     pairs: dict[str, str] = {}
     for row in rows:
@@ -130,7 +176,7 @@ def partners(rows: Sequence[Mapping]) -> dict[str, str]:
     return pairs
 
 
-def hostnames_by_incident(rows: Sequence[Mapping]) -> dict[str, set[str]]:
+def hostnames_by_incident(rows: Sequence[Mapping[str, Any]]) -> dict[str, set[str]]:
     """Find, for each hostname, the incidents whose text contains it."""
     found: dict[str, set[str]] = defaultdict(set)
     for row in rows:
@@ -140,7 +186,7 @@ def hostnames_by_incident(rows: Sequence[Mapping]) -> dict[str, set[str]]:
     return found
 
 
-def meaning_queries(rows: Sequence[Mapping]) -> list[EvalQuery]:
+def meaning_queries(rows: Sequence[Mapping[str, Any]]) -> list[EvalQuery]:
     """The 30 paraphrase queries. Each answer is the anchors and their twins."""
     twin = partners(rows)
     known = {row["id"] for row in rows}
@@ -155,12 +201,10 @@ def meaning_queries(rows: Sequence[Mapping]) -> list[EvalQuery]:
     return queries
 
 
-def token_queries(rows: Sequence[Mapping], count: int = TOKEN_QUERY_COUNT) -> list[EvalQuery]:
+def token_queries(rows: Sequence[Mapping[str, Any]], count: int = TOKEN_QUERY_COUNT) -> list[EvalQuery]:
     """The exact-token queries. Hostnames are picked at an even stride, so the
     choice is fixed and spread over the sorted list, not hand-picked."""
-    usable = sorted(
-        (name, ids) for name, ids in hostnames_by_incident(rows).items() if len(ids) <= MAX_TOKEN_INCIDENTS
-    )
+    usable = sorted((name, ids) for name, ids in hostnames_by_incident(rows).items() if len(ids) <= MAX_TOKEN_INCIDENTS)
     if len(usable) < count:
         raise ValueError(f"only {len(usable)} usable hostnames, need {count}")
     stride = len(usable) // count
@@ -171,7 +215,7 @@ def token_queries(rows: Sequence[Mapping], count: int = TOKEN_QUERY_COUNT) -> li
     ]
 
 
-def build_queries(rows: Sequence[Mapping]) -> list[EvalQuery]:
+def build_queries(rows: Sequence[Mapping[str, Any]]) -> list[EvalQuery]:
     """All 40 queries: meaning first, then exact-token."""
     return meaning_queries(rows) + token_queries(rows)
 

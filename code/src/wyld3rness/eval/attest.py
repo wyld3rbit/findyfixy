@@ -68,7 +68,7 @@ from __future__ import annotations
 import argparse
 import ast
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import hashlib
 import json
 import os
@@ -76,7 +76,7 @@ from pathlib import Path, PurePosixPath
 import sys
 import tempfile
 from types import MappingProxyType
-from typing import Any, Final, NamedTuple, TextIO
+from typing import Any, Final, NamedTuple, TextIO, TypeGuard
 
 # 2 added `source_roots`: where first-party packages live (a `src/` layout,
 # or several in a workspace). A version 1 file names none, so it is refused
@@ -157,7 +157,7 @@ class Fingerprint(NamedTuple):
 
 def utc_now() -> datetime:
     """The current time in UTC. Injected as a default so tests can replace it."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def file_sha256(path: Path) -> str:
@@ -177,7 +177,8 @@ def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     so a rewrite of the same content is byte-identical and diffs stay small.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    handle = tempfile.NamedTemporaryFile(
+    # Not a `with` on the call itself: the except branch needs `handle.name` to clean up.
+    handle = tempfile.NamedTemporaryFile(  # noqa: SIM115
         "w", encoding="utf-8", dir=path.parent, prefix=path.name + ".", suffix=".tmp", delete=False
     )
     try:
@@ -459,8 +460,7 @@ def refusals(
         reasons.append(f"not a full run: {detail}")
     if started is not None and started.digest != fingerprint.digest:
         reasons.append(
-            "answer-affecting files changed during the run: "
-            + "; ".join(differences(started.files, fingerprint.files))
+            "answer-affecting files changed during the run: " + "; ".join(differences(started.files, fingerprint.files))
         )
     return reasons
 
@@ -501,10 +501,13 @@ def write_attestation(
     payload = {
         "version": ATTESTATION_VERSION,
         "verdict": VERDICT_PASS,
-        "created_utc": now().astimezone(timezone.utc).isoformat(timespec="seconds"),
+        "created_utc": now().astimezone(UTC).isoformat(timespec="seconds"),
         "fingerprint": fingerprint.digest,
-        "inputs": {"entry_modules": list(inputs.entry_modules), "extra_files": list(inputs.extra_files),
-                   "source_roots": list(inputs.source_roots)},
+        "inputs": {
+            "entry_modules": list(inputs.entry_modules),
+            "extra_files": list(inputs.extra_files),
+            "source_roots": list(inputs.source_roots),
+        },
         "files": dict(fingerprint.files),
         "report": {"name": report_file.name, "sha256": file_sha256(report_file)},
         "run": run_identity(report["provenance"]),
@@ -516,12 +519,12 @@ def write_attestation(
 # ---- Verifying ------------------------------------------------------------------
 
 
-def _is_str_map(value: object) -> bool:
+def _is_str_map(value: object) -> TypeGuard[dict[str, str]]:
     """True for a JSON object whose keys and values are all strings."""
     return isinstance(value, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in value.items())
 
 
-def _is_str_list(value: object) -> bool:
+def _is_str_list(value: object) -> TypeGuard[list[str]]:
     """True for a JSON array of strings."""
     return isinstance(value, list) and all(isinstance(x, str) for x in value)
 
@@ -553,9 +556,14 @@ def load_attestation(path: Path) -> dict[str, Any]:
         ("created_utc", isinstance(doc.get("created_utc"), str), "a string"),
         ("fingerprint", isinstance(doc.get("fingerprint"), str), "a string"),
         ("files", _is_str_map(doc.get("files")), "an object of paths to hashes"),
-        ("inputs", isinstance(inputs, dict) and _is_str_list(inputs.get("entry_modules"))
-         and _is_str_list(inputs.get("extra_files")) and _is_str_list(inputs.get("source_roots")),
-         "an object listing entry_modules, extra_files and source_roots"),
+        (
+            "inputs",
+            isinstance(inputs, dict)
+            and _is_str_list(inputs.get("entry_modules"))
+            and _is_str_list(inputs.get("extra_files"))
+            and _is_str_list(inputs.get("source_roots")),
+            "an object listing entry_modules, extra_files and source_roots",
+        ),
         ("report", _is_str_map(report) and {"name", "sha256"} <= set(report), "an object with name and sha256"),
         ("run", _is_str_map(doc.get("run")), "an object of strings"),
     )
@@ -624,7 +632,9 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="attest", description="Check the eval attestation against the checkout.")
     commands = parser.add_subparsers(dest="command", required=True)
     check_cmd = commands.add_parser("verify", help="exit 0 when the attestation covers the current files")
-    check_cmd.add_argument("--root", type=Path, required=True, help="the workspace folder the attested paths are relative to")
+    check_cmd.add_argument(
+        "--root", type=Path, required=True, help="the workspace folder the attested paths are relative to"
+    )
     check_cmd.add_argument("--attestation", required=True, help="the attestation file, relative to --root")
     check_cmd.add_argument("--list", action="store_true", help="also print every attested file")
     return parser

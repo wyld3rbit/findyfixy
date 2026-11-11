@@ -121,8 +121,9 @@ def test_long_bad_reply_is_truncated_in_the_retry_prompt():
 
 
 def test_evidence_is_in_the_first_prompt_and_in_the_retry_prompt():
-    ask, prompts = scripted(json.dumps({"severity": "sev3", "component": "x",
-                                        "next_action": "y", "confidence": 75}), GOOD)
+    ask, prompts = scripted(
+        json.dumps({"severity": "sev3", "component": "x", "next_action": "y", "confidence": 75}), GOOD
+    )
     ask_validated(ask, "m", "q", evidence="get_recent_deploys(hours=24,service=auth) result: []")
     assert len(prompts) == 2
     assert all("hours=24,service=auth" in p for p in prompts)
@@ -146,7 +147,7 @@ def run_with(reply_obj):
         events.append((kind, data))
 
     ask_validated(lambda m, p: reply_obj, "qwen2.5:7b", "q", emit=emit)
-    return [d for k, d in events if k == "model_reply"][0]
+    return next(d for k, d in events if k == "model_reply")
 
 
 def test_a_reply_is_still_a_string_to_everything_that_reads_it():

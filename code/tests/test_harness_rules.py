@@ -20,8 +20,12 @@ HARNESS = Path(wyld3rness.__file__).resolve().parent
 PYPROJECT = HARNESS.parents[1] / "pyproject.toml"
 # Top-level import names of the harness's declared dependencies. Kept next to
 # pyproject.toml's list by `test_the_allowlist_matches_the_declared_dependencies`.
-THIRD_PARTY = {"langchain_ollama": "langchain-ollama", "ollama": "ollama", "opentelemetry": "opentelemetry-*",
-               "pydantic": "pydantic"}
+THIRD_PARTY = {
+    "langchain_ollama": "langchain-ollama",
+    "ollama": "ollama",
+    "opentelemetry": "opentelemetry-*",
+    "pydantic": "pydantic",
+}
 
 
 def _imported_modules(path: Path) -> list[str]:
@@ -65,8 +69,10 @@ def test_the_harness_imports_only_the_standard_library_its_dependencies_and_itse
 
 def test_the_allowlist_matches_the_declared_dependencies() -> None:
     """Adding an import means declaring the package, and the other way round."""
-    declared = {d.split(">")[0].split("<")[0].split("[")[0].strip()
-                for d in tomllib.loads(PYPROJECT.read_text())["project"]["dependencies"]}
+    declared = {
+        d.split(">")[0].split("<")[0].split("[")[0].strip()
+        for d in tomllib.loads(PYPROJECT.read_text())["project"]["dependencies"]
+    }
     expected = {name for name in declared if not name.startswith("opentelemetry-")}
     assert {v for v in THIRD_PARTY.values() if v != "opentelemetry-*"} == expected
     assert any(name.startswith("opentelemetry-") for name in declared)

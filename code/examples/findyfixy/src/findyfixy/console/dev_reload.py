@@ -38,14 +38,14 @@ What is not watched
     only: the plain `findyfixy-console` is unchanged.
 """
 
+from collections.abc import Callable, Sequence
 import hashlib
 import os
+from pathlib import Path
 import signal
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Sequence
-from pathlib import Path
 from typing import Protocol
 
 # Relative to the workspace root (code/). A change here needs a NEW PROCESS: Python
@@ -96,9 +96,7 @@ def snapshot(root: Path, patterns: Sequence[str] = WATCH_PATTERNS) -> Snapshot:
 
 def diff(old: Snapshot, new: Snapshot) -> list[str]:
     """Paths that were added, removed or modified. Pure. Sorted."""
-    return sorted(
-        p for p in old.keys() | new.keys() if old.get(p) != new.get(p)
-    )
+    return sorted(p for p in old.keys() | new.keys() if old.get(p) != new.get(p))
 
 
 def fingerprint(snap: Snapshot) -> str:
@@ -157,8 +155,14 @@ def supervise(
     `out`), so the tests drive it with fakes and no real processes or time.
     The loop ends when `sleep` raises KeyboardInterrupt.
     """
-    read = read or (lambda: snapshot(root, RESTART_PATTERNS))
-    start = lambda: spawn(list(cmd), cwd=str(root), env=env)  # noqa: E731
+    if read is None:
+
+        def read() -> Snapshot:
+            return snapshot(root, RESTART_PATTERNS)
+
+    def start() -> Child:
+        return spawn(list(cmd), cwd=str(root), env=env)
+
     snap = read()
     child = start()
     crashed = False
@@ -173,10 +177,7 @@ def supervise(
                 snap, crashed, child = now, False, start()
             elif child.poll() is not None and not crashed:
                 crashed = True
-                out(
-                    f"[reload] server exited with code {child.poll()}. "
-                    "Waiting for a change to try again."
-                )
+                out(f"[reload] server exited with code {child.poll()}. Waiting for a change to try again.")
     except KeyboardInterrupt:
         _stop(child)
         out("[reload] stopped.")

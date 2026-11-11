@@ -18,9 +18,10 @@ What a staff+ reader should notice
 from __future__ import annotations
 
 import copy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 from typing import Any
@@ -46,7 +47,7 @@ ATTEST_SCRIPT = Path(attest.__file__)
 ENTRY = ("app.entry",)
 EXTRA = ("data/", "uv.lock")
 INPUTS = Inputs(ENTRY, EXTRA)
-CREATED = datetime(2026, 11, 9, 8, 0, 0, tzinfo=timezone.utc)
+CREATED = datetime(2026, 11, 9, 8, 0, 0, tzinfo=UTC)
 STALE = "the database is stale: run make ingest (1 chunk(s) to write, 0 to delete)"
 
 # A small app: an entry module with a top-level, a parent-package and a lazy
@@ -67,8 +68,12 @@ SOURCES = {
     "uv.lock": "version = 1\n",
 }
 INCLUDED = [
-    "app/__init__.py", "app/core.py", "app/entry.py", "app/helper.py",
-    "harness/__init__.py", "harness/lib.py",
+    "app/__init__.py",
+    "app/core.py",
+    "app/entry.py",
+    "app/helper.py",
+    "harness/__init__.py",
+    "harness/lib.py",
 ]
 FILES = sorted([*INCLUDED, "data/golden.jsonl", "uv.lock"])
 
@@ -91,23 +96,36 @@ def root(tmp_path: Path) -> Path:
 def passing(**provenance: Any) -> dict[str, Any]:
     """A minimal report of a full, real, clean run. Keyword arguments override provenance."""
     base = {
-        "judge_model": "judge:7b", "judge_digest": "d1", "git_sha": "abc1234", "git_dirty": False,
-        "timestamp_utc": "2026-11-09T07:00:00+00:00", "negative_control": False,
-        "small_model": "small:4b", "large_model": "large:4b", "threshold": 0.7,
+        "judge_model": "judge:7b",
+        "judge_digest": "d1",
+        "git_sha": "abc1234",
+        "git_dirty": False,
+        "timestamp_utc": "2026-11-09T07:00:00+00:00",
+        "negative_control": False,
+        "small_model": "small:4b",
+        "large_model": "large:4b",
+        "threshold": 0.7,
     }
     return {"provenance": {**base, **provenance}, "cases": [{"id": "g1"}, {"id": "g2"}]}
 
 
-def attest_now(root: Path, report: dict[str, Any] | None = None, problems: list[str] | None = None,
-               **kw: Any) -> Path:
+def attest_now(root: Path, report: dict[str, Any] | None = None, problems: list[str] | None = None, **kw: Any) -> Path:
     """Write an attestation for `root` from a fake report; return its path."""
     report_file = root / "reports" / "eval-x.json"
     report_file.parent.mkdir(exist_ok=True)
     report_file.write_text("{}\n")
     path = root / "evals" / "attestation.json"
-    write_attestation(path, report or passing(), problems or [], fingerprint(root, ENTRY, EXTRA),
-                      inputs=INPUTS, report_file=report_file, expected_case_ids={"g1", "g2"},
-                      now=lambda: CREATED, **kw)
+    write_attestation(
+        path,
+        report or passing(),
+        problems or [],
+        fingerprint(root, ENTRY, EXTRA),
+        inputs=INPUTS,
+        report_file=report_file,
+        expected_case_ids={"g1", "g2"},
+        now=lambda: CREATED,
+        **kw,
+    )
     return path
 
 
@@ -175,7 +193,7 @@ def test_a_relative_import_a_missing_module_and_a_bad_extra_are_errors(root: Pat
     with pytest.raises(FingerprintError, match="relative import"):
         current(root)
     (root / "app/core.py").write_text("import app.gone\n")
-    with pytest.raises(FingerprintError, match="app.gone"):
+    with pytest.raises(FingerprintError, match=r"app\.gone"):
         current(root)
     (root / "app/core.py").write_text(SOURCES["app/core.py"])
     for bad in ("../outside.txt", "/etc/hosts", "data/missing.jsonl", "gone/", "data/\x1b[2J"):
@@ -202,16 +220,24 @@ def test_the_closure_follows_imports_across_the_source_roots_of_a_workspace(tmp_
     """
     ws = tmp_path / "ws"
     for rel, text in {
-        "src/lib/__init__.py": "", "src/lib/core.py": "import json\n", "src/lib/unused.py": "",
-        "examples/app/src/app/__init__.py": "", "examples/app/src/app/entry.py": "from lib import core\n",
+        "src/lib/__init__.py": "",
+        "src/lib/core.py": "import json\n",
+        "src/lib/unused.py": "",
+        "examples/app/src/app/__init__.py": "",
+        "examples/app/src/app/entry.py": "from lib import core\n",
         "examples/app/uv.lock": "",
     }.items():
         (ws / rel).parent.mkdir(parents=True, exist_ok=True)
         (ws / rel).write_text(text)
     roots = ("src", "examples/app/src")
     got = sorted(fingerprint(ws, ENTRY, ("examples/app/uv.lock",), roots).files)
-    assert got == ["examples/app/src/app/__init__.py", "examples/app/src/app/entry.py",
-                   "examples/app/uv.lock", "src/lib/__init__.py", "src/lib/core.py"]
+    assert got == [
+        "examples/app/src/app/__init__.py",
+        "examples/app/src/app/entry.py",
+        "examples/app/uv.lock",
+        "src/lib/__init__.py",
+        "src/lib/core.py",
+    ]
     with pytest.raises(FingerprintError, match="is not a first-party module"):
         fingerprint(ws, ENTRY, (), ("src",))  # the app's root left out: its entry is unknown
 
@@ -245,9 +271,14 @@ def test_the_attestation_holds_relative_paths_hashes_and_the_run_identity(root: 
     assert doc["verdict"] == "pass" and doc["fingerprint"] == current(root).digest
     assert doc["files"] == dict(current(root).files) and doc["report"]["name"] == "eval-x.json"
     assert doc["inputs"] == {"entry_modules": list(ENTRY), "extra_files": list(EXTRA), "source_roots": ["."]}
-    assert doc["run"] == {"judge_model": "judge:7b", "judge_digest": "d1", "git_sha": "abc1234",
-                          "timestamp_utc": "2026-11-09T07:00:00+00:00",
-                          "small_model": "small:4b", "large_model": "large:4b"}
+    assert doc["run"] == {
+        "judge_model": "judge:7b",
+        "judge_digest": "d1",
+        "git_sha": "abc1234",
+        "timestamp_utc": "2026-11-09T07:00:00+00:00",
+        "small_model": "small:4b",
+        "large_model": "large:4b",
+    }
     assert doc["created_utc"] == "2026-11-09T08:00:00+00:00"
     assert str(root) not in json.dumps(doc)
 
@@ -278,7 +309,7 @@ def test_files_edited_during_the_run_are_refused_and_an_older_attestation_is_kep
     path = attest_now(root)
     before, kept = current(root), path.read_bytes()
     (root / "app/core.py").write_text("PROMPT = 'edited mid-run'\n")
-    with pytest.raises(AttestationRefused, match="changed during the run: changed: app/core.py"):
+    with pytest.raises(AttestationRefused, match=re.escape("changed during the run: changed: app/core.py")):
         attest_now(root, started=before)
     assert path.read_bytes() == kept
 
@@ -305,10 +336,17 @@ def test_verify_reports_a_missing_malformed_or_failed_attestation(root: Path) ->
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("version", True), ("version", "1"), ("verdict", ["pass"]), ("fingerprint", 7),
-        ("created_utc", None), ("files", ["app/core.py"]), ("files", {"app/core.py": 1}),
-        ("inputs", {"entry_modules": "app.entry", "extra_files": []}), ("report", {"name": "x"}),
-        ("run", ["abc"]), ("run", {"git_sha": 1234}),
+        ("version", True),
+        ("version", "1"),
+        ("verdict", ["pass"]),
+        ("fingerprint", 7),
+        ("created_utc", None),
+        ("files", ["app/core.py"]),
+        ("files", {"app/core.py": 1}),
+        ("inputs", {"entry_modules": "app.entry", "extra_files": []}),
+        ("report", {"name": "x"}),
+        ("run", ["abc"]),
+        ("run", {"git_sha": 1234}),
     ],
 )
 def test_every_field_read_is_type_checked(root: Path, field: str, value: Any) -> None:
@@ -332,8 +370,11 @@ def test_no_attested_value_can_start_a_workflow_command_in_the_ci_log(root: Path
     doc = json.loads(path.read_text())
     rewrite(path, files={**doc["files"], "x\n::stop-commands::tok": "0" * 64})
     failed = cli_run(root)
-    rewrite(path, files=doc["files"], run={**doc["run"], "git_sha": "abc\n::error file=a::owned",
-                                           "timestamp_utc": "\n::add-mask::x"})
+    rewrite(
+        path,
+        files=doc["files"],
+        run={**doc["run"], "git_sha": "abc\n::error file=a::owned", "timestamp_utc": "\n::add-mask::x"},
+    )
     passed = cli_run(root, "--list")
     assert failed.returncode == 1 and passed.returncode == 0
     for out in (failed.stdout, passed.stdout):
@@ -344,9 +385,21 @@ def test_no_attested_value_can_start_a_workflow_command_in_the_ci_log(root: Path
 def cli_run(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     """The command line as CI runs it: this one file, -I, and no site-packages at all (-S)."""
     return subprocess.run(
-        [sys.executable, "-I", "-S", str(ATTEST_SCRIPT), "verify", "--root", str(root),
-         "--attestation", "evals/attestation.json", *args],
-        capture_output=True, text=True, timeout=60,
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            str(ATTEST_SCRIPT),
+            "verify",
+            "--root",
+            str(root),
+            "--attestation",
+            "evals/attestation.json",
+            *args,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
 
 
@@ -371,25 +424,39 @@ def test_the_command_line_runs_alone_and_exits_0_1_or_2(root: Path, tmp_path: Pa
 # ---- The --gate wiring in cli.py --------------------------------------------------
 
 
-def gate_cli(root: Path, report: dict[str, Any], argv: list[str], *,
-             checks: list[list[str]] | None = None, **kw: Any) -> int:
+def gate_cli(
+    root: Path, report: dict[str, Any], argv: list[str], *, checks: list[list[str]] | None = None, **kw: Any
+) -> int:
     """`main` with a fixed run and an attestation spec over the tree.
 
     `checks` are the precondition results, one per call, in order (default:
     always in sync). The run records that it ran in `report["_ran"]`.
     """
     answers = iter(checks or [])
-    spec = AttestationSpec(path=root / "evals" / "attestation.json", root=root, inputs=INPUTS,
-                           case_ids=lambda: ["g1", "g2"], preconditions=lambda: next(answers, []))
+    spec = AttestationSpec(
+        path=root / "evals" / "attestation.json",
+        root=root,
+        inputs=INPUTS,
+        case_ids=lambda: ["g1", "g2"],
+        preconditions=lambda: next(answers, []),
+    )
 
     def fixed(progress, **_):
         """Mark the run and return a copy of the report."""
         report["_ran"] = True
         return copy.deepcopy({k: v for k, v in report.items() if k != "_ran"})
 
-    return main(argv, prog="python -m some.app", run=fixed, reports_dir=root / "reports",
-                baseline_path=root / "evals" / "baseline.json", display_root=root, attestation=spec,
-                now=lambda: NOW, **kw)
+    return main(
+        argv,
+        prog="python -m some.app",
+        run=fixed,
+        reports_dir=root / "reports",
+        baseline_path=root / "evals" / "baseline.json",
+        display_root=root,
+        attestation=spec,
+        now=lambda: NOW,
+        **kw,
+    )
 
 
 def fake_report(**provenance: Any) -> dict[str, Any]:
@@ -430,7 +497,10 @@ def test_a_failing_gate_or_a_refused_run_writes_nothing_and_keeps_the_gate_exit_
 
 
 def test_a_refused_baseline_in_the_same_command_writes_no_attestation(root: Path, baseline: Path, capsys) -> None:
-    """`--gate --write-baseline`: the gate passes, the baseline is refused, so the command fails and nothing is attested."""
+    """`--gate --write-baseline`: the gate passes and the baseline is refused.
+
+    So the command fails and nothing is attested.
+    """
     # The app's legacy control key marks this run a control for the baseline only.
     assert gate_cli(root, fake_report(), ["--gate", "--write-baseline"], legacy_control={"git_sha": "abc1234"}) == 1
     captured = capsys.readouterr()

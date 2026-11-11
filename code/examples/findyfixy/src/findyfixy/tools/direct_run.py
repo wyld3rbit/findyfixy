@@ -37,19 +37,18 @@ Run it:   uv run findyfixy-direct-run [runs]
 Test it:  uv run pytest
 """
 
+from collections.abc import Callable
+from dataclasses import dataclass
 import os
 import statistics
 import sys
 import time
-from collections.abc import Callable
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from langchain_core.messages import HumanMessage
-from langgraph.graph.state import CompiledStateGraph
+from langchain_core.messages import BaseMessage, HumanMessage
 
-from findyfixy.tools.investigate import analyse, build_investigator, format_args
 from findyfixy.tools.deploys import make_deploys_tool
+from findyfixy.tools.investigate import Investigator, analyse, build_investigator, format_args
 
 if TYPE_CHECKING:
     from wyld3rness.trace.command import CommandTrace, Step
@@ -93,7 +92,7 @@ def is_correct(answer: str) -> bool:
 
 
 def run_once(
-    investigator: CompiledStateGraph,
+    investigator: Investigator,
     question: str = TASK,
     *,
     clock: Callable[[], float] = time.perf_counter,
@@ -108,7 +107,7 @@ def run_once(
     return stats_from(final["messages"], clock() - start)
 
 
-def stats_from(messages: list, seconds: float) -> RunStats:
+def stats_from(messages: list[BaseMessage], seconds: float) -> RunStats:
     """Turn a finished conversation and its wall time into a table row. Pure.
 
     Shared by the direct path and the MCP paths (findyfixy/mcp/run.py), so every
@@ -163,16 +162,22 @@ def format_row(label: str, r: RunStats) -> str:
 
 
 HEADER = (
-    f"{'run':>7} {'in_tok':>7} {'out_tok':>7} {'secs':>7} {'turns':>5} "
-    f"{'calls':>5} {'errs':>4} {'correct':>8}  args"
+    f"{'run':>7} {'in_tok':>7} {'out_tok':>7} {'secs':>7} {'turns':>5} {'calls':>5} {'errs':>4} {'correct':>8}  args"
 )
 
 
 def record_run(step: "Step", stats: RunStats) -> None:
     """What one run cost and did, on its step. Shared by the direct and MCP paths so they stay comparable."""
-    step.set(seconds=round(stats.seconds, 3), input_tokens=stats.input_tokens,
-             output_tokens=stats.output_tokens, turns=stats.turns, tool_calls=stats.tool_calls,
-             tool_errors=stats.tool_errors, hit_turn_cap=stats.hit_turn_cap, correct=stats.correct)
+    step.set(
+        seconds=round(stats.seconds, 3),
+        input_tokens=stats.input_tokens,
+        output_tokens=stats.output_tokens,
+        turns=stats.turns,
+        tool_calls=stats.tool_calls,
+        tool_errors=stats.tool_errors,
+        hit_turn_cap=stats.hit_turn_cap,
+        correct=stats.correct,
+    )
 
 
 def traced_run(command: "CommandTrace", name: str, once: Callable[[], RunStats]) -> RunStats:
@@ -197,9 +202,7 @@ def main(argv: list[str] | None = None) -> None:
     n = int(args[0]) if args else DEFAULT_RUNS
     tool = make_deploys_tool()
     model_name = os.environ["SMALL_MODEL"]
-    investigator = build_investigator(
-        ChatOllama(model=model_name).bind_tools([tool]), tool
-    )
+    investigator = build_investigator(ChatOllama(model=model_name).bind_tools([tool]), tool)
 
     from findyfixy.observability.tracing import command_trace
 

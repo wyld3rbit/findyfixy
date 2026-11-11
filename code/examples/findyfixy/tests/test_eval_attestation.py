@@ -19,8 +19,8 @@ What a staff+ reader should notice
 import ast
 from pathlib import Path
 
-import findyfixy.paths as paths
 from findyfixy.evals.answers import ATTEST_ENTRY, ATTEST_EXTRA, ATTEST_SOURCE_ROOTS, ATTESTATION_PATH
+import findyfixy.paths as paths
 from findyfixy.paths import WORKSPACE
 from wyld3rness.eval.attest import fingerprint, import_closure
 
@@ -29,14 +29,35 @@ from wyld3rness.eval.attest import fingerprint, import_closure
 # Paths relative to the workspace root (code/), as the attestation writes them.
 APP = "examples/findyfixy/src/findyfixy/"
 HARNESS = "src/wyld3rness/"
-OFF_THE_EVAL_PATH = tuple(APP + m for m in (
-    "console/server.py", "console/eval_run.py", "console/fakes.py", "console/dev_reload.py",
-    "console/stress.py", "tools/direct_run.py", "mcp/client.py", "mcp/run.py", "mcp/server.py",
-)) + (HARNESS + "testing.py",)
-ON_THE_EVAL_PATH = tuple(APP + m for m in (
-    "evals/answers.py", "evals/adapter.py", "triage/graph.py", "triage/record.py", "retrieval/retrieve.py",
-    "retrieval/ingest.py", "llm.py",
-)) + tuple(HARNESS + m for m in ("eval/runner.py", "eval/metrics.py", "eval/judge.py", "eval/attest.py"))
+OFF_THE_EVAL_PATH = (
+    *(
+        APP + m
+        for m in (
+            "console/server.py",
+            "console/eval_run.py",
+            "console/fakes.py",
+            "console/dev_reload.py",
+            "console/stress.py",
+            "tools/direct_run.py",
+            "mcp/client.py",
+            "mcp/run.py",
+            "mcp/server.py",
+        )
+    ),
+    HARNESS + "testing.py",
+)
+ON_THE_EVAL_PATH = tuple(
+    APP + m
+    for m in (
+        "evals/answers.py",
+        "evals/adapter.py",
+        "triage/graph.py",
+        "triage/record.py",
+        "retrieval/retrieve.py",
+        "retrieval/ingest.py",
+        "llm.py",
+    )
+) + tuple(HARNESS + m for m in ("eval/runner.py", "eval/metrics.py", "eval/judge.py", "eval/attest.py"))
 # Paths the gate writes and never reads, so they are not inputs.
 OUTPUTS = {ATTESTATION_PATH.relative_to(WORKSPACE).as_posix()}
 
@@ -95,7 +116,9 @@ def built_paths(path: Path, constants: dict[str, str]) -> set[str]:
     return {
         found
         for node in ast.walk(tree)
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div) and id(node) not in inner
+        if isinstance(node, ast.BinOp)
+        and isinstance(node.op, ast.Div)
+        and id(node) not in inner
         and (found := resolve(node, constants)) is not None
     }
 
@@ -123,7 +146,9 @@ def test_the_declared_inputs_fingerprint_on_this_tree() -> None:
     """Every extra exists, the data directory is expanded, and its README is not an input."""
     found = fingerprint(WORKSPACE, ATTEST_ENTRY, ATTEST_EXTRA, ATTEST_SOURCE_ROOTS)
     ex = "examples/findyfixy/"
-    assert {ex + "data/golden.jsonl", ex + "data/incidents.jsonl", "uv.lock", ex + "docker-compose.yml"} <= set(found.files)
+    assert {ex + "data/golden.jsonl", ex + "data/incidents.jsonl", "uv.lock", ex + "docker-compose.yml"} <= set(
+        found.files
+    )
     assert ex + "data/README.md" not in found.files and len(found.digest) == 64
 
 

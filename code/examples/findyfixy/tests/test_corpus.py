@@ -6,8 +6,8 @@ but different words, or the Day 4 recall number would measure nothing.
 """
 
 import json
-import re
 from pathlib import Path
+import re
 
 import pytest
 
@@ -20,8 +20,16 @@ from findyfixy.retrieval.corpus import (
 )
 
 FIELDS = {
-    "id", "service", "severity", "date", "summary", "timeline",
-    "root_cause", "remediation", "synthetic", "twin_of",
+    "id",
+    "service",
+    "severity",
+    "date",
+    "summary",
+    "timeline",
+    "root_cause",
+    "remediation",
+    "synthetic",
+    "twin_of",
 }
 
 

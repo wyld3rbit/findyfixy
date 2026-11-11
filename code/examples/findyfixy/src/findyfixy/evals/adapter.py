@@ -57,8 +57,12 @@ SEVERITY = "severity"
 class Invokable(Protocol):
     """What the adapter needs from a compiled graph: `invoke(state) -> state`."""
 
-    def invoke(self, state: dict[str, Any]) -> Mapping[str, Any]:
-        """Run the graph on `{"question": ...}` and return the final state."""
+    def invoke(self, state: Any, /) -> Mapping[str, Any]:
+        """Run the graph on `{"question": ...}` and return the final state.
+
+        `state` is `Any` because a compiled graph types its input as its own
+        state class, which this pure module does not import.
+        """
         ...
 
 
@@ -93,9 +97,7 @@ def holdout(candidates: Sequence[Prior], source_id: str, k: int) -> list[Prior]:
     return [p for p in candidates if p.incident_id != source_id][:k]
 
 
-def make_holdout_recall(
-    candidates: Candidates, source_id: str, k: int, sink: list[Prior]
-) -> Recall:
+def make_holdout_recall(candidates: Candidates, source_id: str, k: int, sink: list[Prior]) -> Recall:
     """Build the recall step for one case, bound to that case's source id.
 
     Every call asks for `k + 1` candidates and filters. The kept priors are
@@ -119,10 +121,7 @@ def make_holdout_recall(
 
 def render_answer(triage: Triage) -> str:
     """Plain-text answer for the judge. Confidence is left out: it is not a claim."""
-    return (
-        f"Severity {triage.severity}. Component {triage.component}. "
-        f"Next action: {triage.next_action}"
-    )
+    return f"Severity {triage.severity}. Component {triage.component}. Next action: {triage.next_action}"
 
 
 def render_contexts(priors: Sequence[Prior]) -> list[str]:

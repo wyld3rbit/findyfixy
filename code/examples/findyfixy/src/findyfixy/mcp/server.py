@@ -72,9 +72,7 @@ def build_server(path: Path = DEFAULT_DEPLOYS_PATH, tracing: "Tracing | None" = 
     @server.tool(name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def get_recent_deploys_tool(
         service: Annotated[Service, Field(description=fields["service"].description)],
-        hours: Annotated[
-            int, Field(ge=1, le=MAX_HOURS, description=fields["hours"].description)
-        ],
+        hours: Annotated[int, Field(ge=1, le=MAX_HOURS, description=fields["hours"].description)],
     ) -> str:
         """Run the shared function. Returns JSON text, like the direct tool."""
         from wyld3rness.trace.command import CommandTrace

@@ -37,17 +37,20 @@ def test_a_valid_table_parses() -> None:
     assert parse_prices(ONE) == [ModelPrice("qwen3:4b", 5e-8, 4e-7, "gpt-5-nano")]
 
 
-@pytest.mark.parametrize("change, message", [
-    (("input_per_token = 0.00000005\n", ""), "missing"),
-    (('reference = "gpt-5-nano"\n', 'reference = "gpt-5-nano"\nprice = 1\n'), "unknown"),
-    (("0.00000005", "-1"), ">= 0"),
-    (("0.00000005", "true"), ">= 0"),
-    (("0.00000005", '"cheap"'), ">= 0"),
-    (("0.00000005", "nan"), ">= 0"),
-    (('"gpt-5-nano"', '""'), "reference"),
-    (('"qwen3:4b"', '" "'), "name"),
-    (('"qwen3:4b"', '"qwen3:4b "'), "spaces"),
-])
+@pytest.mark.parametrize(
+    "change, message",
+    [
+        (("input_per_token = 0.00000005\n", ""), "missing"),
+        (('reference = "gpt-5-nano"\n', 'reference = "gpt-5-nano"\nprice = 1\n'), "unknown"),
+        (("0.00000005", "-1"), ">= 0"),
+        (("0.00000005", "true"), ">= 0"),
+        (("0.00000005", '"cheap"'), ">= 0"),
+        (("0.00000005", "nan"), ">= 0"),
+        (('"gpt-5-nano"', '""'), "reference"),
+        (('"qwen3:4b"', '" "'), "name"),
+        (('"qwen3:4b"', '"qwen3:4b "'), "spaces"),
+    ],
+)
 def test_a_malformed_entry_is_rejected_by_name(change: tuple[str, str], message: str) -> None:
     """No default fills a gap: a typo cannot price a model at zero."""
     with pytest.raises(PriceTableError, match=message):
@@ -78,9 +81,16 @@ def test_the_match_pattern_is_exact() -> None:
 
 def own(price: ModelPrice, id_: str, **changes: object) -> dict[str, object]:
     """A backend definition for `price`, as the API returns it."""
-    return {"id": id_, "modelName": price.name, "matchPattern": price.match_pattern, "unit": "TOKENS",
-            "inputPrice": price.input_per_token, "outputPrice": price.output_per_token,
-            "isLangfuseManaged": False, **changes}
+    return {
+        "id": id_,
+        "modelName": price.name,
+        "matchPattern": price.match_pattern,
+        "unit": "TOKENS",
+        "inputPrice": price.input_per_token,
+        "outputPrice": price.output_per_token,
+        "isLangfuseManaged": False,
+        **changes,
+    }
 
 
 PRICE = ModelPrice("qwen3:4b", 5e-8, 4e-7, "gpt-5-nano")
@@ -92,12 +102,15 @@ def test_a_matching_definition_is_left_alone() -> None:
     assert (plan.create, plan.delete, plan.unchanged) == ([], [], [PRICE])
 
 
-@pytest.mark.parametrize("definitions, deleted", [
-    ([], []),
-    ([own(PRICE, "a", inputPrice=1e-6)], ["a"]),
-    ([own(PRICE, "a", matchPattern="qwen3")], ["a"]),
-    ([own(PRICE, "a"), own(PRICE, "b")], ["a", "b"]),
-])
+@pytest.mark.parametrize(
+    "definitions, deleted",
+    [
+        ([], []),
+        ([own(PRICE, "a", inputPrice=1e-6)], ["a"]),
+        ([own(PRICE, "a", matchPattern="qwen3")], ["a"]),
+        ([own(PRICE, "a"), own(PRICE, "b")], ["a", "b"]),
+    ],
+)
 def test_a_missing_changed_or_duplicated_definition_is_replaced(definitions, deleted) -> None:
     """Every case ends at exactly one definition with the table's prices."""
     plan = plan_sync([PRICE], definitions)

@@ -29,16 +29,17 @@ Design decisions and what changes at scale:
 
 from __future__ import annotations
 
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 import hashlib
 import json
 import os
-from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, get_args
 
-import psycopg
 from pgvector import Vector
+import psycopg
+
 from findyfixy.paths import DATA
 
 if TYPE_CHECKING:
@@ -84,10 +85,7 @@ CREATE TABLE IF NOT EXISTS chunks (
 """
 # HNSW with pgvector's defaults (m = 16, ef_construction = 64). Cosine
 # operator class, because the vectors are normalised and queries use cosine.
-_INDEX = (
-    "CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw "
-    "ON chunks USING hnsw (embedding vector_cosine_ops)"
-)
+_INDEX = "CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw ON chunks USING hnsw (embedding vector_cosine_ops)"
 
 _UPSERT = """
 INSERT INTO chunks (id, incident_id, section, service, severity, incident_date,
@@ -145,10 +143,7 @@ class Report:
     unchanged: int
 
     def __str__(self) -> str:
-        return (
-            f"chunks {self.total}: written {self.written}, "
-            f"deleted {self.deleted}, unchanged {self.unchanged}"
-        )
+        return f"chunks {self.total}: written {self.written}, deleted {self.deleted}, unchanged {self.unchanged}"
 
 
 def content_hash(model: str, embed_text: str, incident_date: str) -> str:
@@ -281,9 +276,7 @@ def database_staleness(conn: Connection, path: Path = SOURCE_PATH) -> list[str]:
     return staleness(plan_changes(read_chunks(path), existing), models)
 
 
-def embed_in_batches(
-    embed: Embedder, texts: Sequence[str], batch_size: int
-) -> list[list[float]]:
+def embed_in_batches(embed: Embedder, texts: Sequence[str], batch_size: int) -> list[list[float]]:
     """Embed in bounded batches and check every vector's size.
 
     Batching bounds memory: a batch is padded to its longest text, so one giant
@@ -312,8 +305,16 @@ def apply_plan(
         if plan.to_write:
             rows = [
                 (
-                    c.id, c.incident_id, c.section, c.service, c.severity,
-                    c.incident_date, c.body, c.hash, model, Vector(v),
+                    c.id,
+                    c.incident_id,
+                    c.section,
+                    c.service,
+                    c.severity,
+                    c.incident_date,
+                    c.body,
+                    c.hash,
+                    model,
+                    Vector(list(v)),
                 )
                 for c, v in zip(plan.to_write, vectors, strict=True)
             ]
@@ -365,9 +366,10 @@ def make_embedder() -> Embedder:
         raise ValueError("model dimension does not match the table column")
 
     def embed(texts: Sequence[str]) -> list[list[float]]:
-        return model.encode(
+        vectors: list[list[float]] = model.encode(
             list(texts), normalize_embeddings=True, show_progress_bar=False
         ).tolist()
+        return vectors
 
     return embed
 
@@ -389,8 +391,10 @@ def main() -> None:
     from findyfixy.observability.tracing import command_trace
 
     chunks = read_chunks(SOURCE_PATH)
-    with command_trace("ingest", input=f"{SOURCE_PATH.name}: {len(chunks)} chunks") as command, \
-            psycopg.connect(database_url(), autocommit=True) as conn:
+    with (
+        command_trace("ingest", input=f"{SOURCE_PATH.name}: {len(chunks)} chunks") as command,
+        psycopg.connect(database_url(), autocommit=True) as conn,
+    ):
         ensure_schema(conn)
         # Registering after the extension exists lets psycopg send `Vector` values.
         from pgvector.psycopg import register_vector

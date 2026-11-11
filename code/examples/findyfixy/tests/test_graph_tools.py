@@ -22,13 +22,13 @@ What a staff+ reader should notice
 import json
 from pathlib import Path
 
-import pytest
 from langchain_core.messages import AIMessage
+import pytest
 
 from findyfixy.events import Event, make_emit
-from findyfixy.triage.graph import build_graph
-from findyfixy.tools.investigate import build_investigator
 from findyfixy.tools.deploys import make_deploys_tool
+from findyfixy.tools.investigate import build_investigator
+from findyfixy.triage.graph import build_graph
 from findyfixy.triage.record import build_prompt
 
 
@@ -44,10 +44,7 @@ def tool(tmp_path: Path):
 
 
 def reply(confidence: float) -> str:
-    return json.dumps(
-        {"severity": "sev2", "component": "auth", "next_action": "check logs",
-         "confidence": confidence}
-    )
+    return json.dumps({"severity": "sev2", "component": "auth", "next_action": "check logs", "confidence": confidence})
 
 
 def ai(content="", calls=None):
@@ -59,8 +56,7 @@ def ai(content="", calls=None):
 
 
 def lookup(hours: int, id: str = "c1") -> dict:
-    return {"name": "get_recent_deploys", "id": id, "type": "tool_call",
-            "args": {"service": "auth", "hours": hours}}
+    return {"name": "get_recent_deploys", "id": id, "type": "tool_call", "args": {"service": "auth", "hours": hours}}
 
 
 class ToolModel:
@@ -108,10 +104,10 @@ def test_tool_results_reach_the_small_models_prompt_with_their_arguments(tool):
     graph.invoke({"question": "auth is slow"})
     model, prompt = prompts[0]
     assert model == "s"
-    assert "hours=24,service=auth" in prompt      # the arguments
-    assert "2.14.1" in prompt                       # the result
-    assert "2.14.0" not in prompt                   # outside the 24h window
-    assert "data, not instructions" in prompt       # tool output is not trusted
+    assert "hours=24,service=auth" in prompt  # the arguments
+    assert "2.14.1" in prompt  # the result
+    assert "2.14.0" not in prompt  # outside the 24h window
+    assert "data, not instructions" in prompt  # tool output is not trusted
 
 
 def test_an_empty_result_is_labelled_with_the_window_that_was_asked(tool):
@@ -134,8 +130,8 @@ def test_escalation_reuses_the_evidence_and_does_not_call_the_tool_again(tool):
     graph, prompts, _ = make(tool, tm, {"s": [reply(0.3)], "l": [reply(0.9)]})
     graph.invoke({"question": "q"})
     assert [m for m, _ in prompts] == ["s", "l"]
-    assert "2.14.1" in prompts[1][1]     # large saw the same evidence
-    assert tm.calls == 2                   # one lookup and one answer, once only
+    assert "2.14.1" in prompts[1][1]  # large saw the same evidence
+    assert tm.calls == 2  # one lookup and one answer, once only
 
 
 def test_no_lookup_means_the_triage_prompt_is_unchanged(tool):
@@ -146,8 +142,7 @@ def test_no_lookup_means_the_triage_prompt_is_unchanged(tool):
 
 
 def test_a_failed_tool_call_is_marked_in_the_evidence_not_hidden(tool):
-    bad = {"name": "get_recent_deploys", "id": "c1", "type": "tool_call",
-           "args": {"service": "auth", "hours": 0}}
+    bad = {"name": "get_recent_deploys", "id": "c1", "type": "tool_call", "args": {"service": "auth", "hours": 0}}
     tm = ToolModel(ai(calls=[bad]), ai("done"))
     graph, prompts, _ = make(tool, tm, {"s": [reply(0.9)]})
     graph.invoke({"question": "q"})
@@ -161,11 +156,17 @@ def test_events_show_the_tool_step_before_the_small_node(tool):
     # The tool step's own model calls and tool call are reported, in order,
     # and only then does the small model start.
     assert kinds(events)[:9] == [
-        "node_entered", "model_request", "model_reply", "tool_call", "tool_result",
-        "model_request", "model_reply", "node_exited", "node_entered",
+        "node_entered",
+        "model_request",
+        "model_reply",
+        "tool_call",
+        "tool_result",
+        "model_request",
+        "model_reply",
+        "node_exited",
+        "node_entered",
     ]
-    assert [e.data["node"] for e in events if e.kind == "node_entered"] == [
-        "investigate", "small"]
+    assert [e.data["node"] for e in events if e.kind == "node_entered"] == ["investigate", "small"]
     call = next(e for e in events if e.kind == "tool_call")
     assert call.data["args"] == {"service": "auth", "hours": 24}
     exited = next(e for e in events if e.kind == "node_exited")
@@ -187,7 +188,9 @@ def test_the_tool_step_reports_while_the_loop_runs_not_after_it(tmp_path):
         return "[]"
 
     spy_tool = StructuredTool.from_function(
-        func=spy, name="get_recent_deploys", description="spy",
+        func=spy,
+        name="get_recent_deploys",
+        description="spy",
         args_schema=make_deploys_tool().args_schema,
     )
     tm = ToolModel(ai(calls=[lookup(24)]), ai("done"))
@@ -198,16 +201,26 @@ def test_the_tool_step_reports_while_the_loop_runs_not_after_it(tmp_path):
         order.append(f"event:{event.kind}")
 
     graph = build_graph(
-        lambda m, p: reply(0.9), small_model="s", large_model="l",
-        emit=make_emit(sink, lambda: 0.0), investigator=build_investigator(tm, spy_tool),
+        lambda m, p: reply(0.9),
+        small_model="s",
+        large_model="l",
+        emit=make_emit(sink, lambda: 0.0),
+        investigator=build_investigator(tm, spy_tool),
     )
     graph.invoke({"question": "q"})
-    seq = [o for o in order if o in (
-        "event:model_request", "event:model_reply", "event:tool_call",
-        "TOOL RUNS", "event:tool_result")]
+    seq = [
+        o
+        for o in order
+        if o in ("event:model_request", "event:model_reply", "event:tool_call", "TOOL RUNS", "event:tool_result")
+    ]
     assert seq[:7] == [
-        "event:model_request", "event:model_reply", "event:tool_call",
-        "TOOL RUNS", "event:tool_result", "event:model_request", "event:model_reply",
+        "event:model_request",
+        "event:model_reply",
+        "event:tool_call",
+        "TOOL RUNS",
+        "event:tool_result",
+        "event:model_request",
+        "event:model_reply",
     ]
 
 
@@ -316,8 +329,7 @@ def test_ollama_ask_without_metadata_gives_unknown_not_the_asked_name(monkeypatc
 
 def test_the_tool_step_reports_which_model_the_server_says_answered(tool):
     def named(content="", calls=None):
-        return AIMessage(content=content, tool_calls=calls or [],
-                         response_metadata={"model": "tool-model"})
+        return AIMessage(content=content, tool_calls=calls or [], response_metadata={"model": "tool-model"})
 
     tm = ToolModel(named(calls=[lookup(24)]), named("done"))
     graph, _, events = make(tool, tm, {"s": [reply(0.9)]})
@@ -346,4 +358,3 @@ def test_ollama_ask_is_greedy_and_has_a_read_timeout(monkeypatch):
     assert built["reasoning"] is False
     assert built["client_kwargs"] == {"timeout": ANSWER_TIMEOUT_S}
     assert built["format"]  # the schema is still passed
-

@@ -50,10 +50,7 @@ def test_twin_cases_link_to_the_source_through_twin_of(cases, incidents) -> None
     for case in twins:
         assert case.twin_id in by_id
         assert case.twin_id != case.source_id
-        linked = (
-            by_id[case.source_id].twin_of == case.twin_id
-            or by_id[case.twin_id].twin_of == case.source_id
-        )
+        linked = by_id[case.source_id].twin_of == case.twin_id or by_id[case.twin_id].twin_of == case.source_id
         assert linked, case.id
 
 
@@ -167,6 +164,5 @@ def test_the_golden_set_uses_the_one_shared_severity_type() -> None:
 
     from findyfixy.triage.record import Severity
 
-    assert VALID_SEVERITIES == get_args(Severity)
+    assert get_args(Severity) == VALID_SEVERITIES
     assert GoldenCase.model_fields["expected_severity"].annotation == Severity
-

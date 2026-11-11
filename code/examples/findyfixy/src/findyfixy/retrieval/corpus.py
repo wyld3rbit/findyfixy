@@ -33,12 +33,13 @@ Known limits, so nobody over-reads a result:
 
 from __future__ import annotations
 
-import json
-import random
 from dataclasses import asdict, dataclass, field, replace
 from datetime import date, timedelta
+import json
 from pathlib import Path
+import random
 from typing import Literal, get_args
+
 from findyfixy.paths import DATA
 
 CorpusService = Literal[
@@ -143,7 +144,9 @@ def _v(summary: str, s1: str, s2: str, s3: str, root: str, fix: str) -> Voice:
 
 SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
-        "cert-rotation", ("sev1", "sev2"), (0, 7, 22),
+        "cert-rotation",
+        ("sev1", "sev2"),
+        (0, 7, 22),
         _v(
             "p95 latency on {service} rose to {n} times normal after a certificate rotation.",
             "Alert: {service} p95 above SLO on {host}.",
@@ -163,7 +166,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("auth", "gateway", "voice-verification", "notifications"),
     ),
     Scenario(
-        "pool-exhaustion", ("sev1", "sev2"), (0, 5, 18),
+        "pool-exhaustion",
+        ("sev1", "sev2"),
+        (0, 5, 18),
         _v(
             "{service} requests timed out; the database connection pool on {host} hit its limit of {n}.",
             "Alert: 503s from {service}, error rate above {n} percent.",
@@ -183,7 +188,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("billing", "ledger", "auth", "scheduler"),
     ),
     Scenario(
-        "clock-skew", ("sev2",), (0, 9, 25),
+        "clock-skew",
+        ("sev2",),
+        (0, 9, 25),
         _v(
             "Token validation failures on {service}: the clock on {host} drifted {n} seconds.",
             "Alert: rising 401s on {service}.",
@@ -203,7 +210,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("auth", "gateway", "ledger", "scheduler"),
     ),
     Scenario(
-        "cache-stampede", ("sev2", "sev3"), (0, 4, 16),
+        "cache-stampede",
+        ("sev2", "sev3"),
+        (0, 4, 16),
         _v(
             "Cache keys on {service} expired together and {n} percent of requests fell through to the database.",
             "Alert: database load behind {service} at its limit.",
@@ -223,7 +232,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("gateway", "search", "auth", "notifications"),
     ),
     Scenario(
-        "bad-config-push", ("sev1", "sev2"), (0, 6, 14),
+        "bad-config-push",
+        ("sev1", "sev2"),
+        (0, 6, 14),
         _v(
             "Config version {ver} set a wrong limit on {service}; {n} percent of traffic was rejected.",
             "Alert: rejects on {service} after config push.",
@@ -242,7 +253,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         ),
     ),
     Scenario(
-        "disk-full", ("sev2",), (0, 8, 20),
+        "disk-full",
+        ("sev2",),
+        (0, 8, 20),
         _v(
             "{host} ran out of disk and {service} writes failed for {mins} minutes.",
             "Alert: write errors on {host}.",
@@ -262,7 +275,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("ledger", "notifications", "search", "scheduler"),
     ),
     Scenario(
-        "dns-stale", ("sev2", "sev3"), (0, 11, 30),
+        "dns-stale",
+        ("sev2", "sev3"),
+        (0, 11, 30),
         _v(
             "{service} kept sending traffic to a retired backend for {mins} minutes after a DNS change; {n} percent of calls failed.",
             "Alert: errors from {service} to one upstream.",
@@ -282,7 +297,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("gateway", "auth", "voice-verification", "billing"),
     ),
     Scenario(
-        "retry-storm", ("sev2",), (0, 3, 15),
+        "retry-storm",
+        ("sev2",),
+        (0, 3, 15),
         _v(
             "Client retries on {service} multiplied load {n} times after a vendor began returning 429.",
             "Alert: outbound request rate from {service} {n}x normal.",
@@ -302,7 +319,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("billing", "notifications", "voice-verification", "ledger"),
     ),
     Scenario(
-        "memory-leak", ("sev3", "sev2"), (0, 40, 95),
+        "memory-leak",
+        ("sev3", "sev2"),
+        (0, 40, 95),
         _v(
             "{host} was OOM-killed repeatedly; memory on {service} grew {n} MB per hour since version {ver}.",
             "Alert: restarts of {host} every few hours.",
@@ -322,7 +341,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("search", "gateway", "notifications", "scheduler"),
     ),
     Scenario(
-        "migration-lock", ("sev1",), (0, 3, 12),
+        "migration-lock",
+        ("sev1",),
+        (0, 3, 12),
         _v(
             "A schema migration locked a table on {service} for {mins} minutes.",
             "Alert: queries on {service} blocked.",
@@ -342,7 +363,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("ledger", "billing", "auth", "scheduler"),
     ),
     Scenario(
-        "queue-backlog", ("sev3", "sev2"), (0, 12, 35),
+        "queue-backlog",
+        ("sev3", "sev2"),
+        (0, 12, 35),
         _v(
             "Queue depth on {service} reached {n} thousand messages because consumers stalled.",
             "Alert: oldest message on {service} queue is {n} minutes old.",
@@ -362,7 +385,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("notifications", "scheduler", "billing", "search"),
     ),
     Scenario(
-        "rate-limit-reload", ("sev2",), (0, 5, 13),
+        "rate-limit-reload",
+        ("sev2",),
+        (0, 5, 13),
         _v(
             "A rate-limit reload on {service} applied a limit of {n} requests per second, far below demand.",
             "Alert: 429 responses from {service}.",
@@ -382,7 +407,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("gateway", "auth", "search", "billing"),
     ),
     Scenario(
-        "vendor-outage", ("sev2", "sev1"), (0, 6, 24),
+        "vendor-outage",
+        ("sev2", "sev1"),
+        (0, 6, 24),
         _v(
             "A third-party provider outage degraded {service} for {mins} minutes; {n} percent of calls failed.",
             "Alert: provider error rate at {n} percent for {service}.",
@@ -402,7 +429,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("voice-verification", "notifications", "billing", "auth"),
     ),
     Scenario(
-        "autoscaler-floor", ("sev3", "sev2"), (0, 10, 28),
+        "autoscaler-floor",
+        ("sev3", "sev2"),
+        (0, 10, 28),
         _v(
             "{service} saturated at the start of the daily peak; the autoscaler floor was too low.",
             "Alert: CPU on {service} above {n} percent.",
@@ -422,7 +451,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("search", "gateway", "auth", "notifications"),
     ),
     Scenario(
-        "leader-flap", ("sev2",), (0, 8, 21),
+        "leader-flap",
+        ("sev2",),
+        (0, 8, 21),
         _v(
             "Leader election on {service} flapped {n} times in {mins} minutes.",
             "Alert: repeated leader changes on {service}.",
@@ -442,7 +473,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("scheduler", "ledger", "auth", "billing"),
     ),
     Scenario(
-        "hot-shard", ("sev2", "sev3"), (0, 7, 26),
+        "hot-shard",
+        ("sev2", "sev3"),
+        (0, 7, 26),
         _v(
             "One shard of {service} took {n} percent of traffic and timed out.",
             "Alert: latency on one shard of {service} at {host}.",
@@ -462,7 +495,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("ledger", "search", "auth", "notifications"),
     ),
     Scenario(
-        "expired-secret", ("sev1", "sev2"), (0, 2, 17),
+        "expired-secret",
+        ("sev1", "sev2"),
+        (0, 2, 17),
         _v(
             "An expired API credential caused {service} to fail every call to a dependency for {mins} minutes; the credential was {n} days past its renewal date.",
             "Alert: 401s from dependency on {service}.",
@@ -482,7 +517,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("auth", "billing", "notifications", "gateway"),
     ),
     Scenario(
-        "deploy-regression", ("sev2", "sev3"), (0, 9, 27),
+        "deploy-regression",
+        ("sev2", "sev3"),
+        (0, 9, 27),
         _v(
             "Version {ver} of {service} introduced a regression: p95 rose {n} percent.",
             "Alert: latency regression on {service} after deploy of {ver}.",
@@ -501,7 +538,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         ),
     ),
     Scenario(
-        "tls-version", ("sev2",), (0, 6, 19),
+        "tls-version",
+        ("sev2",),
+        (0, 6, 19),
         _v(
             "A TLS library upgrade on {service} dropped support for a protocol version used by {n} percent of clients.",
             "Alert: handshake failures on {service}.",
@@ -521,7 +560,9 @@ SCENARIOS: tuple[Scenario, ...] = (
         services=("gateway", "voice-verification", "notifications", "billing"),
     ),
     Scenario(
-        "noisy-neighbor", ("sev3",), (0, 14, 33),
+        "noisy-neighbor",
+        ("sev3",),
+        (0, 14, 33),
         _v(
             "A batch job on {host} starved {service} of CPU for {mins} minutes.",
             "Alert: latency on {service} with low request volume.",
@@ -624,8 +665,7 @@ def build_corpus(seed: int = 7, *, total: int = 200, pairs: int = 20) -> list[In
     rng.shuffle(deal)
 
     drafts = [
-        _Draft(order, draw_facts(rng, scenario), voice_a=rng.random() < 0.5)
-        for order, scenario in enumerate(deal)
+        _Draft(order, draw_facts(rng, scenario), voice_a=rng.random() < 0.5) for order, scenario in enumerate(deal)
     ]
     for offset, source in enumerate(rng.sample(drafts, pairs)):
         later = source.facts.day + timedelta(days=rng.randint(1, 4))
@@ -644,9 +684,7 @@ def build_corpus(seed: int = 7, *, total: int = 200, pairs: int = 20) -> list[In
     ids = {d.order: f"INC-{position:04d}" for position, d in enumerate(ordered, 1)}
     incidents = []
     for draft in ordered:
-        summary, timeline, root_cause, remediation = render(
-            draft.facts, voice_a=draft.voice_a
-        )
+        summary, timeline, root_cause, remediation = render(draft.facts, voice_a=draft.voice_a)
         incidents.append(
             Incident(
                 id=ids[draft.order],

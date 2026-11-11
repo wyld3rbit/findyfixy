@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
 from findyfixy.paths import DATA
 
 # Resolved from this file, never from the current directory.

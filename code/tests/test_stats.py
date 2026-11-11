@@ -19,16 +19,29 @@ from wyld3rness.eval.stats import (
 )
 
 
-def rec(group: str, ok: bool | None, faith: float | None, latency: float = 1.0,
-        error: str | None = None) -> dict[str, Any]:
+def rec(
+    group: str, ok: bool | None, faith: float | None, latency: float = 1.0, error: str | None = None
+) -> dict[str, Any]:
     """A case record with label `kind` (absent when `ok` is None)."""
+
     def m(score: float | None) -> dict[str, Any]:
         """One metric result with this score, failed when None."""
         return {"score": score, "failed": score is None}
 
-    record: dict[str, Any] = {"id": "x", "group": group, "latency_s": latency, "run_error": error,
-                              "metrics": {} if error else {"faithfulness": m(faith), "response_relevancy": m(0.8),
-                                                           "context_recall": m(0.4), "action_quality": m(0.5)}}
+    record: dict[str, Any] = {
+        "id": "x",
+        "group": group,
+        "latency_s": latency,
+        "run_error": error,
+        "metrics": {}
+        if error
+        else {
+            "faithfulness": m(faith),
+            "response_relevancy": m(0.8),
+            "context_recall": m(0.4),
+            "action_quality": m(0.5),
+        },
+    }
     if ok is not None:
         record.update(kind="x", kind_match=ok, expected_kind="x")
     return record
@@ -66,8 +79,14 @@ def test_a_label_is_scored_only_over_the_cases_that_expect_it() -> None:
 def test_label_scores_come_first_sorted_then_the_metrics_in_fixed_order() -> None:
     """The score order is rebuilt from names alone."""
     names = ordered_score_names(["action_quality", "zeta_match", "faithfulness", "alpha_match"])
-    assert names == ("alpha_match", "zeta_match", "faithfulness", "response_relevancy",
-                     "context_recall", "action_quality")
+    assert names == (
+        "alpha_match",
+        "zeta_match",
+        "faithfulness",
+        "response_relevancy",
+        "context_recall",
+        "action_quality",
+    )
     assert match_name("severity") == "severity_match"
 
 

@@ -65,6 +65,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           uv sync --locked --all-packages --project code
+          make lint
           make test
 
       # The harness alone, in an environment with no app installed: proves the

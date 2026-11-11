@@ -35,10 +35,10 @@ What changes at scale
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import math
 import re
 import tomllib
-from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from wyld3rness.trace.tracing import TraceConfig
@@ -107,16 +107,18 @@ def parse_prices(text: str) -> list[ModelPrice]:
             raise PriceTableError(f"{where}: missing {missing}, unknown {unknown}")
         name, reference = entry["name"], entry["reference"]
         if not isinstance(name, str) or not name or name != name.strip():
-            raise PriceTableError(f"{where}: name must be a non-empty string with no surrounding spaces, "
-                                  f"got {name!r}")
+            raise PriceTableError(f"{where}: name must be a non-empty string with no surrounding spaces, got {name!r}")
         if not isinstance(reference, str) or not reference.strip():
             raise PriceTableError(f"{where} ({name}): reference must name the source of the price")
         # The backend matches case-insensitively, so "Qwen3:8b" and "qwen3:8b" are one model.
         if name.casefold() in seen:
             raise PriceTableError(f"{where}: {name} is listed twice")
         seen.add(name.casefold())
-        prices.append(ModelPrice(name, _price(entry, "input_per_token", where),
-                                 _price(entry, "output_per_token", where), reference))
+        prices.append(
+            ModelPrice(
+                name, _price(entry, "input_per_token", where), _price(entry, "output_per_token", where), reference
+            )
+        )
     return prices
 
 
@@ -137,13 +139,16 @@ class SyncPlan:
 
 def _same(price: ModelPrice, definition: dict[str, Any]) -> bool:
     """True when a backend definition already says what the table says."""
+
     def close(a: object, b: float) -> bool:
         return isinstance(a, int | float) and math.isclose(a, b, rel_tol=1e-9, abs_tol=0.0)
 
-    return (definition.get("matchPattern") == price.match_pattern
-            and definition.get("unit") == "TOKENS"
-            and close(definition.get("inputPrice"), price.input_per_token)
-            and close(definition.get("outputPrice"), price.output_per_token))
+    return (
+        definition.get("matchPattern") == price.match_pattern
+        and definition.get("unit") == "TOKENS"
+        and close(definition.get("inputPrice"), price.input_per_token)
+        and close(definition.get("outputPrice"), price.output_per_token)
+    )
 
 
 def _matches(pattern: object, name: str) -> bool:
@@ -194,8 +199,10 @@ def plan_sync(prices: list[ModelPrice], definitions: list[dict[str, Any]]) -> Sy
         for definition in others:
             hit = [p.name for p in prices if _matches(definition.get("matchPattern"), p.name)]
             if hit:
-                plan.conflicts.append(f"{definition.get('modelName')!r} (pattern {definition.get('matchPattern')!r}) "
-                                      f"also matches {', '.join(hit)}")
+                plan.conflicts.append(
+                    f"{definition.get('modelName')!r} (pattern {definition.get('matchPattern')!r}) "
+                    f"also matches {', '.join(hit)}"
+                )
     return plan
 
 
@@ -240,13 +247,17 @@ class LangfuseModels:
 
     def create(self, price: ModelPrice) -> None:
         """Add a token-priced definition that matches the model name exactly."""
-        self._call("POST", MODELS_PATH, {
-            "modelName": price.name,
-            "matchPattern": price.match_pattern,
-            "unit": "TOKENS",
-            "inputPrice": price.input_per_token,
-            "outputPrice": price.output_per_token,
-        })
+        self._call(
+            "POST",
+            MODELS_PATH,
+            {
+                "modelName": price.name,
+                "matchPattern": price.match_pattern,
+                "unit": "TOKENS",
+                "inputPrice": price.input_per_token,
+                "outputPrice": price.output_per_token,
+            },
+        )
 
     def delete(self, definition_id: str) -> None:
         """Remove one of the project's own definitions."""

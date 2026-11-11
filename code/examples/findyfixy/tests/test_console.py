@@ -14,16 +14,17 @@ Why no Ollama
     console by hand and by the integration bank.
 """
 
+from collections.abc import Iterator
 import http.client
 import json
 import threading
 import time
-from collections.abc import Iterator
 
 import pytest
 
-from findyfixy.console.server import BASELINE_PATH as ROOT_BASELINE, RunHub, serve
-from findyfixy.console.fakes import FAKE_RECALL, ScriptedToolModel, fake_ask, fake_cases, scripted_reply
+from findyfixy.console.fakes import ScriptedToolModel, fake_cases, scripted_reply
+from findyfixy.console.server import BASELINE_PATH as ROOT_BASELINE
+from findyfixy.console.server import RunHub, serve
 
 
 @pytest.fixture
@@ -167,9 +168,7 @@ def test_foreign_origin_is_refused(server):
 def test_post_needs_json_content_type(server):
     _, port = server
     body = json.dumps({"mode": "fake", "scenario": "stay_small"})
-    status, _ = call(
-        port, "POST", "/run", body, {"Content-Type": "application/x-www-form-urlencoded"}
-    )
+    status, _ = call(port, "POST", "/run", body, {"Content-Type": "application/x-www-form-urlencoded"})
     assert status == 415
 
 
@@ -270,7 +269,6 @@ def finished(events):
 
 
 def test_hunt_stops_at_the_run_that_returns_a_bad_value(monkeypatch):
-    import findyfixy.console.server as console
 
     calls = {"n": 0}
 
@@ -294,7 +292,6 @@ def test_hunt_stops_at_the_run_that_returns_a_bad_value(monkeypatch):
 
 
 def test_hunt_ends_at_the_cap_when_nothing_goes_wrong(monkeypatch):
-    import findyfixy.console.server as console
 
     _, port, srv = hunt_server(monkeypatch, lambda m, p: scripted_reply(0.9))
     try:
@@ -306,7 +303,6 @@ def test_hunt_ends_at_the_cap_when_nothing_goes_wrong(monkeypatch):
 
 
 def test_hunt_rotates_the_fixed_questions_from_the_chosen_one(monkeypatch):
-    import findyfixy.console.server as console
     from findyfixy.triage.graph import QUESTIONS
 
     _, port, srv = hunt_server(monkeypatch, lambda m, p: scripted_reply(0.9))
@@ -334,7 +330,6 @@ def test_hunt_on_infrastructure_error_stops_and_says_so(monkeypatch):
 
 
 def test_stop_ends_a_hunt_after_the_current_run(monkeypatch):
-    import findyfixy.console.server as console
 
     holder = {}
 
@@ -363,7 +358,6 @@ def test_stop_endpoint_is_accepted(server):
     [{"hunt_max": 51}, {"hunt_max": 0}, {"hunt_max": 5, "force_escalation": True}],
 )
 def test_bad_hunt_requests_are_422(monkeypatch, extra):
-    import findyfixy.console.server as console
 
     _, port, srv = hunt_server(monkeypatch, lambda m, p: scripted_reply(0.9))
     try:
@@ -383,9 +377,7 @@ def test_hunt_in_fake_mode_is_422(server):
 def test_config_lists_the_incident_bank():
     from findyfixy.retrieval.incidents import load_incidents
 
-    hub = RunHub(
-        live_models=None, incidents=load_incidents(), sleep=lambda s: None, fake_delay=0
-    )
+    hub = RunHub(live_models=None, incidents=load_incidents(), sleep=lambda s: None, fake_delay=0)
     srv = serve(hub, port=0)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
@@ -428,7 +420,6 @@ def test_page_keeps_the_hidden_attribute_working(server):
 
 
 def test_force_retry_runs_the_real_retry_on_the_real_model(monkeypatch):
-    import findyfixy.console.server as console
 
     prompts: list[str] = []
 
@@ -436,7 +427,7 @@ def test_force_retry_runs_the_real_retry_on_the_real_model(monkeypatch):
         prompts.append(prompt)
         return scripted_reply(0.9)
 
-    hub, port, srv = hunt_server(monkeypatch, ask)
+    _hub, port, srv = hunt_server(monkeypatch, ask)
     try:
         post_run(port, {"mode": "live", "question": "real incident text", "force_retry": True})
         events = stream(port)
@@ -456,7 +447,6 @@ def test_force_retry_runs_the_real_retry_on_the_real_model(monkeypatch):
 
 
 def test_force_retry_alone_does_not_escalate(monkeypatch):
-    import findyfixy.console.server as console
 
     _, port, srv = hunt_server(monkeypatch, lambda m, p: scripted_reply(0.9))
     try:
@@ -469,7 +459,6 @@ def test_force_retry_alone_does_not_escalate(monkeypatch):
 
 
 def test_force_retry_and_force_escalation_combine(monkeypatch):
-    import findyfixy.console.server as console
 
     _, port, srv = hunt_server(monkeypatch, lambda m, p: scripted_reply(0.9))
     try:
@@ -496,7 +485,6 @@ def test_force_retry_and_force_escalation_combine(monkeypatch):
     ],
 )
 def test_force_retry_conflicts_are_422(monkeypatch, body):
-    import findyfixy.console.server as console
 
     _, port, srv = hunt_server(monkeypatch, lambda m, p: scripted_reply(0.9))
     try:
@@ -540,8 +528,7 @@ def test_scripted_tool_model_reports_no_token_numbers(server):
     # Invented token counts would look real. The step must report them unknown.
     _, port = server
     exited = next(
-        e for e in run_fake(port, "tool_lookup")
-        if e["kind"] == "node_exited" and e["data"]["node"] == "investigate"
+        e for e in run_fake(port, "tool_lookup") if e["kind"] == "node_exited" and e["data"]["node"] == "investigate"
     )
     assert exited["data"]["input_tokens"] is None
 
@@ -555,18 +542,18 @@ def test_other_fake_scenarios_have_no_tool_step(server):
 
 def live_hub_with_tools(monkeypatch, with_investigator=True):
     import findyfixy.console.server as console
-    from findyfixy.tools.investigate import build_investigator
     from findyfixy.tools.deploys import make_deploys_tool
+    from findyfixy.tools.investigate import build_investigator
 
     monkeypatch.setattr(console, "ollama_ask", lambda m, p: scripted_reply(0.9))
     investigator = None
     if with_investigator:
-        investigator = build_investigator(
-            ScriptedToolModel(24), make_deploys_tool()
-        )
+        investigator = build_investigator(ScriptedToolModel(24), make_deploys_tool())
     hub = RunHub(
-        live_models=("s", "l"), investigator=investigator,
-        sleep=lambda s: None, fake_delay=0,
+        live_models=("s", "l"),
+        investigator=investigator,
+        sleep=lambda s: None,
+        fake_delay=0,
     )
     srv = serve(hub, port=0)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -600,9 +587,7 @@ def post_run_when_free(port, body):
 def test_live_use_tools_without_a_configured_tool_step_is_503(monkeypatch):
     srv = live_hub_with_tools(monkeypatch, with_investigator=False)
     try:
-        status, _ = post_run(
-            srv.server_address[1], {"mode": "live", "question": "q", "use_tools": True}
-        )
+        status, _ = post_run(srv.server_address[1], {"mode": "live", "question": "q", "use_tools": True})
         assert status == 503
     finally:
         srv.shutdown()
@@ -700,7 +685,8 @@ def test_a_stressed_live_run_uses_that_stress_and_says_so(monkeypatch):
         assert seen == ["vague_prompt"]
         assert events[0]["data"]["stress"] == "vague_prompt"
     finally:
-        srv.shutdown(); srv.server_close()
+        srv.shutdown()
+        srv.server_close()
 
 
 def test_an_unstressed_live_run_does_not_build_a_stressed_ask(monkeypatch):
@@ -711,31 +697,36 @@ def test_an_unstressed_live_run_does_not_build_a_stressed_ask(monkeypatch):
         stream(port)
         assert seen == []
     finally:
-        srv.shutdown(); srv.server_close()
+        srv.shutdown()
+        srv.server_close()
 
 
 def test_hunt_can_be_combined_with_a_stress(monkeypatch):
     srv, seen = stressed_hub(monkeypatch)
     port = srv.server_address[1]
     try:
-        status, _ = post_run(port, {"mode": "live", "question": "q", "hunt_max": 2,
-                                    "stress": "no_format"})
+        status, _ = post_run(port, {"mode": "live", "question": "q", "hunt_max": 2, "stress": "no_format"})
         assert status == 202 and seen == ["no_format"]
         stream(port)
     finally:
-        srv.shutdown(); srv.server_close()
+        srv.shutdown()
+        srv.server_close()
 
 
-@pytest.mark.parametrize("body", [
-    {"mode": "live", "question": "q", "stress": "nonsense"},
-    {"mode": "fake", "scenario": "stay_small", "stress": "no_format"},
-])
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"mode": "live", "question": "q", "stress": "nonsense"},
+        {"mode": "fake", "scenario": "stay_small", "stress": "no_format"},
+    ],
+)
 def test_bad_stress_requests_are_422(monkeypatch, body):
     srv, _ = stressed_hub(monkeypatch)
     try:
         assert post_run(srv.server_address[1], body)[0] == 422
     finally:
-        srv.shutdown(); srv.server_close()
+        srv.shutdown()
+        srv.server_close()
 
 
 def test_config_lists_the_stresses_with_descriptions(server):
@@ -773,7 +764,7 @@ def test_a_fake_run_shows_the_recall_step_when_the_hub_has_one():
         srv.shutdown()
         srv.server_close()
     assert events[0]["data"]["recall"] is True
-    assert [e["data"]["node"] for e in events if e["kind"] == "node_entered"][0] == "recall"
+    assert next(e["data"]["node"] for e in events if e["kind"] == "node_entered") == "recall"
     (done,) = [e for e in events if e["kind"] == "node_exited" and e["data"]["node"] == "recall"]
     # A fake run never calls the real recall: it shows the fixed, invented ones.
     assert done["data"]["incidents"] == [p.incident_id for p in FAKE_RECALL]
@@ -1045,7 +1036,10 @@ def test_a_live_eval_hub_runs_the_injected_eval_and_streams_its_events():
         srv.server_close()
     assert seen == [(3, False)]
     assert [(e["source"], e["kind"]) for e in events] == [
-        ("harness", "eval_started"), ("app", "node_entered"), ("harness", "eval_finished")]
+        ("harness", "eval_started"),
+        ("app", "node_entered"),
+        ("harness", "eval_finished"),
+    ]
 
 
 def test_live_eval_cuts_the_session_to_n_cases_and_hands_the_graph_its_emitter(monkeypatch, tmp_path):
@@ -1060,9 +1054,17 @@ def test_live_eval_cuts_the_session_to_n_cases_and_hands_the_graph_its_emitter(m
     from wyld3rness.testing import FakeJudge, case, embed
 
     real = cli.live_runner
-    monkeypatch.setattr(cli, "live_runner", lambda open_session, **kw: real(
-        open_session, **kw, make_judge=lambda m: FakeJudge(), digest=lambda m: "dig",
-        git=lambda repo: ("abc1234", False)))
+    monkeypatch.setattr(
+        cli,
+        "live_runner",
+        lambda open_session, **kw: real(
+            open_session,
+            **kw,
+            make_judge=lambda m: FakeJudge(),
+            digest=lambda m: "dig",
+            git=lambda repo: ("abc1234", False),
+        ),
+    )
     controls = []
 
     @contextmanager
@@ -1072,8 +1074,9 @@ def test_live_eval_cuts_the_session_to_n_cases_and_hands_the_graph_its_emitter(m
 
         def make_graph(recall):
             """A graph with a confident scripted model and this case's recall."""
-            return build_graph(lambda m, p: scripted_reply(0.9), small_model="s", large_model="l",
-                               emit=emit, recall=recall)
+            return build_graph(
+                lambda m, p: scripted_reply(0.9), small_model="s", large_model="l", emit=emit, recall=recall
+            )
 
         sut = FindyFixy(make_graph=make_graph, candidates=lambda q, n: [], small_model="s", large_model="l")
         cases = [case(f"g{i}", source_id=f"S{i}", twin_id=None) for i in range(3)]
@@ -1084,13 +1087,23 @@ def test_live_eval_cuts_the_session_to_n_cases_and_hands_the_graph_its_emitter(m
     suite = live_eval(open_session, golden_path=golden, repo_dir=tmp_path, progress=lambda m: None, size=3)
     assert suite.size == 3
     app_events, harness_events = [], []
-    result = suite.run(2, emit=lambda kind, **d: app_events.append(kind),
-                       on_event=lambda kind, **d: harness_events.append((kind, d)), should_stop=lambda: False)
+    result = suite.run(
+        2,
+        emit=lambda kind, **d: app_events.append(kind),
+        on_event=lambda kind, **d: harness_events.append((kind, d)),
+        should_stop=lambda: False,
+    )
     assert controls == [False]
     assert [c["id"] for c in result.report["cases"]] == ["g0", "g1"] and result.subset is True
     assert "route" in app_events
-    assert harness_events[0] == ("eval_started", {"n": 2, "cases": ["g0", "g1"], "system": {
-        "small_model": "s", "large_model": "l", "threshold": 0.7, "recall_k": 3}})
+    assert harness_events[0] == (
+        "eval_started",
+        {
+            "n": 2,
+            "cases": ["g0", "g1"],
+            "system": {"small_model": "s", "large_model": "l", "threshold": 0.7, "recall_k": 3},
+        },
+    )
     assert result.report["provenance"]["judge_digest"] == "dig"
     full = suite.run(3, emit=lambda kind, **d: None, on_event=lambda kind, **d: None, should_stop=lambda: False)
     assert full.subset is False

@@ -28,12 +28,16 @@ Reading the numbers honestly
 
 from __future__ import annotations
 
-import statistics
-import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+import statistics
+import time
+from typing import TYPE_CHECKING
 
 from findyfixy.evals.queries import EvalQuery, load_queries
+
+if TYPE_CHECKING:
+    from findyfixy.retrieval.retrieve import Found
 
 K = 5
 
@@ -104,10 +108,7 @@ def evaluate_all(
     for name, search in searches.items():
         search(queries[0].query, k)  # warm-up, not measured
         out[name] = {
-            kind: evaluate(
-                search, [q for q in queries if kind in ("all", q.kind)], k=k, clock=clock
-            )
-            for kind in kinds
+            kind: evaluate(search, [q for q in queries if kind in ("all", q.kind)], k=k, clock=clock) for kind in kinds
         }
     return out
 
@@ -121,8 +122,7 @@ def format_table(results: Mapping[str, Mapping[str, Scores]]) -> str:
     for name, groups in results.items():
         for kind, s in groups.items():
             lines.append(
-                f"| {name} | {kind} | {s.queries} | {s.recall:.2f} | {s.all_found:.2f} "
-                f"| {s.mrr:.3f} | {s.p50_ms:.0f} |"
+                f"| {name} | {kind} | {s.queries} | {s.recall:.2f} | {s.all_found:.2f} | {s.mrr:.3f} | {s.p50_ms:.0f} |"
             )
     return "\n".join(lines)
 
@@ -141,7 +141,7 @@ def main() -> None:
         with command.step("load retriever"):  # the embedder and the reranker: about 1.3 GB
             retriever = build_retriever(conn, stage=stage_spans(command.tracing))
 
-        def ids(method: Callable[..., list], label: str) -> Search:
+        def ids(method: Callable[..., list[Found]], label: str) -> Search:
             """One retriever as a `Search`, each call a step with the retriever's stages inside."""
 
             def search(query: str, k: int) -> list[str]:

@@ -64,9 +64,7 @@ def test_token_labels_are_exactly_the_incidents_that_contain_the_token(rows) -> 
     """Recomputed independently of the module's own helper."""
     for query in token_queries(rows):
         token = query.query.rsplit(" ", 1)[-1]
-        containing = sorted(
-            row["id"] for row in rows if any(token in row[field] for field in TEXT_FIELDS)
-        )
+        containing = sorted(row["id"] for row in rows if any(token in row[field] for field in TEXT_FIELDS))
         assert list(query.relevant) == containing, query.id
         assert 1 <= len(containing) <= MAX_TOKEN_INCIDENTS
 
@@ -88,7 +86,6 @@ def test_hostname_pattern_skips_ordinary_hyphenated_words() -> None:
 def test_the_committed_file_matches_what_the_code_builds(rows) -> None:
     """Catches a hand edit of the data file, or a corpus change with no rebuild."""
     assert [json.loads(line) for line in EVAL_PATH.read_text().splitlines()] == [
-        {"id": q.id, "kind": q.kind, "query": q.query, "relevant": list(q.relevant)}
-        for q in build_queries(rows)
+        {"id": q.id, "kind": q.kind, "query": q.query, "relevant": list(q.relevant)} for q in build_queries(rows)
     ]
     assert load_queries() == build_queries(rows)

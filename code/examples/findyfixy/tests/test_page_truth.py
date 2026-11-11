@@ -26,22 +26,22 @@ Why parse the page instead of running it in a browser
 
 import json
 import os
+from pathlib import Path
 import re
 import shutil
 import subprocess
 import time
-from pathlib import Path
 from typing import get_args
 
 import pytest
 
-from findyfixy.console.server import EvalRequest, RunHub, wire
 from findyfixy.console.fakes import ScriptedToolModel, fake_ask
+from findyfixy.console.server import EvalRequest, RunHub, wire
 from findyfixy.events import EventKind
-from findyfixy.triage.graph import build_graph
-from findyfixy.tools.investigate import build_investigator
 from findyfixy.paths import PAGE, ROOT, WORKSPACE
 from findyfixy.tools.deploys import make_deploys_tool
+from findyfixy.tools.investigate import build_investigator
+from findyfixy.triage.graph import build_graph
 from wyld3rness.eval.events import EvalEventKind
 
 REPLAY = ROOT / "tests" / "js" / "replay.js"
@@ -56,11 +56,13 @@ def page_nodes(page: str) -> list[dict[str, str]]:
     nodes = []
     for attrs, body in _NODE.findall(page):
         found = dict(_ATTR.findall(attrs))
-        nodes.append({
-            "name": _NAME.search(body).group(1),
-            "status": found.get("data-status", ""),
-            "code": found.get("data-code", ""),
-        })
+        nodes.append(
+            {
+                "name": _NAME.search(body).group(1),
+                "status": found.get("data-status", ""),
+                "code": found.get("data-code", ""),
+            }
+        )
     return nodes
 
 
@@ -181,8 +183,13 @@ def replay(tmp_path: Path, events: list[dict], ids: str) -> dict:
     path = tmp_path / "events.json"
     path.write_text(json.dumps(events))
     env = {k: v for k, v in os.environ.items() if k != "NODE_OPTIONS"}
-    out = subprocess.run(["node", str(REPLAY), str(PAGE), str(path), "2", ids, "reduced"],
-                         capture_output=True, text=True, timeout=40, env=env)
+    out = subprocess.run(
+        ["node", str(REPLAY), str(PAGE), str(path), "2", ids, "reduced"],
+        capture_output=True,
+        text=True,
+        timeout=40,
+        env=env,
+    )
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
 
@@ -246,8 +253,14 @@ def test_a_trace_link_is_followed_only_for_http_urls() -> None:
     """The run_traced URL travels in an event; a javascript: or data: URL must never become a link."""
     page = PAGE.read_text()
     func = re.search(r"function traceHref\(url\) \{.*?\n\}\n", page, re.S).group(0)
-    cases = ["http://127.0.0.1:3000/project/p/traces/abc", "https://x.example/t", "javascript:alert(1)",
-             "data:text/html,x", "not a url", None]
+    cases = [
+        "http://127.0.0.1:3000/project/p/traces/abc",
+        "https://x.example/t",
+        "javascript:alert(1)",
+        "data:text/html,x",
+        "not a url",
+        None,
+    ]
     script = func + f"console.log(JSON.stringify({json.dumps(cases)}.map(traceHref)));"
     env = {k: v for k, v in os.environ.items() if k != "NODE_OPTIONS"}
     out = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=20, env=env)

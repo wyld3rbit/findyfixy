@@ -24,9 +24,10 @@ What a staff+ reader should notice
 import json
 from pathlib import Path
 
-import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+import pytest
 
+from findyfixy.tools.deploys import make_deploys_tool
 from findyfixy.tools.investigate import (
     MAX_TURNS,
     ToolCallRecord,
@@ -34,7 +35,6 @@ from findyfixy.tools.investigate import (
     build_investigator,
     format_evidence,
 )
-from findyfixy.tools.deploys import make_deploys_tool
 
 
 @pytest.fixture
@@ -53,11 +53,15 @@ def call(args: dict, name: str = "get_recent_deploys", id: str = "c1") -> dict:
 
 
 def ai(content: str = "", calls=None, tokens=(10, 5)) -> AIMessage:
-    usage = None if tokens is None else {
-        "input_tokens": tokens[0],
-        "output_tokens": tokens[1],
-        "total_tokens": sum(tokens),
-    }
+    usage = (
+        None
+        if tokens is None
+        else {
+            "input_tokens": tokens[0],
+            "output_tokens": tokens[1],
+            "total_tokens": sum(tokens),
+        }
+    )
     return AIMessage(content=content, tool_calls=calls or [], usage_metadata=usage)
 
 
@@ -176,10 +180,12 @@ def test_the_cap_is_configurable(tool):
 
 def test_parallel_tool_calls_in_one_message_are_each_recorded(tool):
     model = ScriptedModel(
-        ai(calls=[
-            call({"service": "auth", "hours": 24}, id="a"),
-            call({"service": "auth", "hours": 100}, id="b"),
-        ]),
+        ai(
+            calls=[
+                call({"service": "auth", "hours": 24}, id="a"),
+                call({"service": "auth", "hours": 100}, id="b"),
+            ]
+        ),
         ai("done"),
     )
     inv = run(model, tool)

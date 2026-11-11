@@ -43,10 +43,10 @@ Judge failure modes (read before trusting a number)
       result file can record which wording produced it.
 """
 
+from collections.abc import Callable, Sequence
 import hashlib
 import math
 import re
-from collections.abc import Callable, Sequence
 from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, Field
@@ -212,6 +212,7 @@ ACTION_SCORES: dict[str, float] = {"helpful": 1.0, "partial": 0.5, "unhelpful": 
 
 # ---- Pure helpers. ----------------------------------------------------------
 
+
 def split_sentences(text: str) -> list[str]:
     """Split text into non-empty, stripped sentences. Pure."""
     return [s.strip() for s in _SENTENCE_END.split(text.strip()) if s.strip()]
@@ -229,7 +230,7 @@ def cosine(a: Sequence[float], b: Sequence[float]) -> float:
     nb = math.sqrt(sum(y * y for y in b))
     if na == 0.0 or nb == 0.0:
         raise ValueError("zero vector")
-    return sum(x * y for x, y in zip(a, b)) / (na * nb)
+    return sum(x * y for x, y in zip(a, b, strict=True)) / (na * nb)
 
 
 def _join(contexts: Sequence[str]) -> str:
@@ -272,9 +273,7 @@ def _nothing_to_stand_on(key: str, items: Sequence[str]) -> tuple[float, tuple[d
 # ---- Metrics. ---------------------------------------------------------------
 
 
-def faithfulness(
-    judge: Judge, answer: str, contexts: Sequence[str]
-) -> MetricResult:
+def faithfulness(judge: Judge, answer: str, contexts: Sequence[str]) -> MetricResult:
     """Fraction of the answer's claims that the contexts support.
 
     Zero claims means failed (nothing to score). Any `JudgeError` fails the
@@ -290,17 +289,13 @@ def faithfulness(
         if not contexts:
             score, trace = _nothing_to_stand_on("claim", claims)
         else:
-            score, trace = _fraction_supported(
-                judge, SUPPORT_PROMPT, "claim", claims, _join(contexts)
-            )
+            score, trace = _fraction_supported(judge, SUPPORT_PROMPT, "claim", claims, _join(contexts))
     except JudgeError as err:
         return _failed(f"judge: {err}")
     return MetricResult(score, False, trace)
 
 
-def response_relevancy(
-    judge: Judge, embed: Embed, question: str, answer: str, n: int = 3
-) -> MetricResult:
+def response_relevancy(judge: Judge, embed: Embed, question: str, answer: str, n: int = 3) -> MetricResult:
     """Mean cosine between the question and `n` questions the answer implies.
 
     An answer that drifts off topic implies questions unlike the real one.
@@ -308,9 +303,7 @@ def response_relevancy(
     returns the wrong number of vectors, or any vector is zero.
     """
     try:
-        generated = judge.ask(
-            QUESTIONS_PROMPT.format(answer=answer, n=n), Questions
-        ).questions
+        generated = judge.ask(QUESTIONS_PROMPT.format(answer=answer, n=n), Questions).questions
     except JudgeError as err:
         return _failed(f"judge: {err}")
     if len(generated) != n:
@@ -322,13 +315,11 @@ def response_relevancy(
         sims = [cosine(vectors[0], v) for v in vectors[1:]]
     except ValueError as err:
         return _failed(f"embedding: {err}")
-    trace = tuple({"question": q, "similarity": s} for q, s in zip(generated, sims))
+    trace = tuple({"question": q, "similarity": s} for q, s in zip(generated, sims, strict=True))
     return MetricResult(sum(sims) / n, False, trace)
 
 
-def context_recall(
-    judge: Judge, reference: str, contexts: Sequence[str]
-) -> MetricResult:
+def context_recall(judge: Judge, reference: str, contexts: Sequence[str]) -> MetricResult:
     """Fraction of reference sentences the contexts support.
 
     Measures retrieval, not generation: did we fetch what the right answer
@@ -342,9 +333,7 @@ def context_recall(
         score, trace = _nothing_to_stand_on("sentence", sentences)
         return MetricResult(score, False, trace)
     try:
-        score, trace = _fraction_supported(
-            judge, ATTRIBUTION_PROMPT, "sentence", sentences, _join(contexts)
-        )
+        score, trace = _fraction_supported(judge, ATTRIBUTION_PROMPT, "sentence", sentences, _join(contexts))
     except JudgeError as err:
         return _failed(f"judge: {err}")
     return MetricResult(score, False, trace)
@@ -366,4 +355,3 @@ def action_quality(judge: Judge, next_action: str, reference: str) -> MetricResu
         return _failed(f"judge: {err}")
     trace = ({"action": next_action, "rating": verdict.rating, "reason": _cap(verdict.reason)},)
     return MetricResult(ACTION_SCORES[verdict.rating], False, trace)
-

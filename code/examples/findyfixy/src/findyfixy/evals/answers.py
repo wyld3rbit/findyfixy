@@ -62,13 +62,14 @@ import sys
 from types import MappingProxyType
 
 from findyfixy.evals.adapter import FindyFixy, Invokable, to_case
+from findyfixy.evals.golden import DEFAULT_PATH as GOLDEN_PATH
+from findyfixy.evals.golden import load_golden
 from findyfixy.events import Emit, no_emit
-from findyfixy.evals.golden import DEFAULT_PATH as GOLDEN_PATH, load_golden
-from findyfixy.triage.graph import Recall
-from findyfixy.paths import EVALS, REPORTS, ROOT, WORKSPACE
-from findyfixy.settings import MissingEnvironment, load_env, read_models
 from findyfixy.observability.adapter import RunTracer
 from findyfixy.observability.tracing import open_tracing
+from findyfixy.paths import EVALS, REPORTS, ROOT, WORKSPACE
+from findyfixy.settings import MissingEnvironment, load_env, read_models
+from findyfixy.triage.graph import Recall
 from findyfixy.wiring import SharedRetrieval, stage_spans
 from wyld3rness.eval import cli
 from wyld3rness.eval.attest import Inputs
@@ -98,7 +99,8 @@ ATTEST_SOURCE_ROOTS: tuple[str, ...] = ("src", "examples/findyfixy/src")
 # invisible to that test. The embedding and reranker weights are pinned by
 # name and revision in the code, which is fingerprinted, not by their bytes.
 ATTEST_EXTRA: tuple[str, ...] = (
-    "examples/findyfixy/data/",  # the golden set, the corpus `make ingest` loads (and its twin pairs), the deploy tool's data
+    # the golden set, the corpus `make ingest` loads (and its twin pairs), the deploy tool's data
+    "examples/findyfixy/data/",
     "examples/findyfixy/evals/baseline.json",  # what the gate compared against
     "uv.lock",  # library versions change answers (tokenizers, rerankers, clients)
     "examples/findyfixy/docker-compose.yml",  # pins the Postgres and pgvector image the retrieval runs on
@@ -168,8 +170,8 @@ def open_live_session(
     sends what is queued. With tracing, every case's graph run is a trace
     under the harness's case span, and the scores land on it.
     """
-    from findyfixy.triage.graph import build_graph
     from findyfixy.llm import ollama_ask
+    from findyfixy.triage.graph import build_graph
 
     load_env()
     try:
@@ -204,10 +206,21 @@ def open_live_session(
                 recall=None if negative_control else recall,
             )
 
-        sut = FindyFixy(make_graph=make_graph, candidates=shared.candidates, small_model=small,
-                        large_model=large, run_tracer=run_tracer)
-        yield Session(sut=sut, cases=[to_case(g) for g in goldens], judge_model=models.judge,
-                      embed=shared.embed, tracing=tracing, scores=scores)
+        sut = FindyFixy(
+            make_graph=make_graph,
+            candidates=shared.candidates,
+            small_model=small,
+            large_model=large,
+            run_tracer=run_tracer,
+        )
+        yield Session(
+            sut=sut,
+            cases=[to_case(g) for g in goldens],
+            judge_model=models.judge,
+            embed=shared.embed,
+            tracing=tracing,
+            scores=scores,
+        )
     finally:
         try:
             if owned and shared is not None:

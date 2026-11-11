@@ -19,7 +19,7 @@ baseline refuses an unknown fingerprint (see report.baseline_refusals).
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 import subprocess
 from typing import Any
@@ -78,7 +78,7 @@ def build_provenance(
         "golden_sha256": golden_sha256,
         "git_sha": sha,
         "git_dirty": dirty,
-        "timestamp_utc": now().astimezone(timezone.utc).isoformat(timespec="seconds"),
+        "timestamp_utc": now().astimezone(UTC).isoformat(timespec="seconds"),
         "bootstrap_seed": seed,
         "bootstrap_resamples": BOOTSTRAP_RESAMPLES,
         "negative_control": negative_control,

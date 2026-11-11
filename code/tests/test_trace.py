@@ -18,11 +18,11 @@ from __future__ import annotations
 import threading
 import time
 
-import pytest
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
+import pytest
 
 from wyld3rness.trace.spans import (
     GEN_AI_INPUT_TOKENS,

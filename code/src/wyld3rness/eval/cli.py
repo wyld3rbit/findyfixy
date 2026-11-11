@@ -200,8 +200,11 @@ def live_runner(
                 session.cases,
                 sut=session.sut,
                 # With tracing, every judge call is a generation in its case's trace.
-                judge=(make_judge(session.judge_model, tracer=session.tracing.tracer())
-                       if session.tracing is not None else make_judge(session.judge_model)),
+                judge=(
+                    make_judge(session.judge_model, tracer=session.tracing.tracer())
+                    if session.tracing is not None
+                    else make_judge(session.judge_model)
+                ),
                 embed=session.embed,
                 provenance=provenance,
                 progress=progress,
@@ -229,14 +232,18 @@ def _parser(prog: str, control_flag: str, control_help: str) -> argparse.Argumen
         help="cases to run in parallel. Set OLLAMA_NUM_PARALLEL on the server to match.",
     )
     parser.add_argument(control_flag, dest="negative_control", action="store_true", help=control_help)
-    parser.add_argument("--show-case", metavar="ID", help="print one case from a saved report, with every judge decision")
+    parser.add_argument(
+        "--show-case", metavar="ID", help="print one case from a saved report, with every judge decision"
+    )
     parser.add_argument(
         "--compare",
         metavar="REPORT",
         type=Path,
         help="compare REPORT with --report (default: the newest) case by case, without running",
     )
-    parser.add_argument("--report", type=Path, help="the saved report for --show-case or --compare (default: the newest)")
+    parser.add_argument(
+        "--report", type=Path, help="the saved report for --show-case or --compare (default: the newest)"
+    )
     parser.add_argument(
         "--baseline-from",
         metavar="REPORT",

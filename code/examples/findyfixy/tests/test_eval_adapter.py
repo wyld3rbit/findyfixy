@@ -35,9 +35,24 @@ from wyld3rness.testing import NOW, PROV, FakeJudge, embed
 # The record keys every FindyFixy report has carried since Day 5, plus `labels`
 # (the label names, stored explicitly since 2026-11-09).
 RECORD_KEYS = {
-    "id", "group", "source_id", "twin_id", "recalled_ids", "twin_recalled", "model_used", "latency_s",
-    "severity", "severity_match", "question", "reference", "expected_severity", "answer", "contexts",
-    "metrics", "run_error", "labels",
+    "id",
+    "group",
+    "source_id",
+    "twin_id",
+    "recalled_ids",
+    "twin_recalled",
+    "model_used",
+    "latency_s",
+    "severity",
+    "severity_match",
+    "question",
+    "reference",
+    "expected_severity",
+    "answer",
+    "contexts",
+    "metrics",
+    "run_error",
+    "labels",
 }
 AGGREGATE_KEYS = {"n", "n_run_errors", "scores", "twin_recall_rate", "median_latency_s"}
 
@@ -117,15 +132,23 @@ def ranked() -> FakeCandidates:
 
 def adapter(candidates: FakeCandidates | None = None, **graph: Any) -> FindyFixy:
     """The FindyFixy adapter over the fake graph and retriever."""
-    return FindyFixy(make_graph=graph_factory(**graph), candidates=candidates or ranked(),
-                     small_model="s", large_model="l")
+    return FindyFixy(
+        make_graph=graph_factory(**graph), candidates=candidates or ranked(), small_model="s", large_model="l"
+    )
 
 
-def run(goldens: list[GoldenCase], sut: FindyFixy | None = None, judge: FakeJudge | None = None,
-        **kw: Any) -> dict[str, Any]:
+def run(
+    goldens: list[GoldenCase], sut: FindyFixy | None = None, judge: FakeJudge | None = None, **kw: Any
+) -> dict[str, Any]:
     """`run_eval` over the adapter, with the fake judge and embedder."""
-    return run_eval([to_case(g) for g in goldens], sut=sut or adapter(), judge=judge or FakeJudge(),
-                    embed=embed, provenance=PROV, **kw)
+    return run_eval(
+        [to_case(g) for g in goldens],
+        sut=sut or adapter(),
+        judge=judge or FakeJudge(),
+        embed=embed,
+        provenance=PROV,
+        **kw,
+    )
 
 
 # ---- Holdout ----------------------------------------------------------------
@@ -185,8 +208,7 @@ def test_contexts_equal_what_the_prompt_used_and_are_capped() -> None:
 def test_judge_prompts_contain_the_recalled_context_and_never_the_source() -> None:
     """The twin's text reaches the judge; the source's never does."""
     judge = FakeJudge()
-    cands = FakeCandidates([prior("S", summary="SOURCE-TEXT"), prior("T", summary="TWIN-TEXT"),
-                            prior("X"), prior("Y")])
+    cands = FakeCandidates([prior("S", summary="SOURCE-TEXT"), prior("T", summary="TWIN-TEXT"), prior("X"), prior("Y")])
     run([golden("g1", "S", "T")], sut=adapter(cands), judge=judge)
     joined = "\n".join(judge.prompts)
     assert "TWIN-TEXT" in joined
@@ -217,7 +239,7 @@ def test_a_findyfixy_record_has_exactly_the_keys_of_every_saved_report() -> None
     assert ok["model_used"] == "small" and ok["twin_id"] == "T" and ok["labels"] == ["severity"]
     assert list(report["aggregates"]) == ["overall", "twin", "no_twin"]
     assert all(set(a) == AGGREGATE_KEYS for a in report["aggregates"].values())
-    assert list(report["aggregates"]["overall"]["scores"])[0] == "severity_match"
+    assert next(iter(report["aggregates"]["overall"]["scores"])) == "severity_match"
 
 
 def test_a_graph_error_is_recorded_with_what_was_recalled() -> None:
@@ -233,8 +255,10 @@ def test_a_graph_error_is_recorded_with_what_was_recalled() -> None:
 
 def test_a_graph_that_returns_no_triage_is_a_run_error() -> None:
     """No triage in the final state is a run error, not a crash."""
+
     class Empty:
         """A graph that never produces a triage."""
+
         def invoke(self, state):
             """A final state with no triage."""
             return {}
@@ -262,9 +286,11 @@ def test_twin_recall_rate_counts_only_twin_cases_where_the_twin_came_back() -> N
 
 def test_twin_recall_rate_leaves_out_run_errors() -> None:
     """Run errors are not in the rate; no twin cases means None."""
-    records = [{"run_error": None, "twin_id": "T", "twin_recalled": True},
-               {"run_error": "boom", "twin_id": "T"},
-               {"run_error": None, "twin_id": None, "twin_recalled": False}]
+    records = [
+        {"run_error": None, "twin_id": "T", "twin_recalled": True},
+        {"run_error": "boom", "twin_id": "T"},
+        {"run_error": None, "twin_id": None, "twin_recalled": False},
+    ]
     assert twin_recall_rate(records) == 1.0
     assert twin_recall_rate([]) is None
 
@@ -292,10 +318,15 @@ def fake_session(graph: dict[str, Any] | None = None, log: list[bool] | None = N
         """Yield one fake session, honouring the control flag like the live one."""
         if log is not None:
             log.append(negative_control)
-        sut = FindyFixy(make_graph=graph_factory(use_recall=not negative_control, **(graph or {})),
-                        candidates=ranked(), small_model="s", large_model="l")
-        yield Session(sut=sut, cases=[to_case(golden("g1", "S", "T")), to_case(golden("g2", "S2"))],
-                      judge_model="j", embed=embed)
+        sut = FindyFixy(
+            make_graph=graph_factory(use_recall=not negative_control, **(graph or {})),
+            candidates=ranked(),
+            small_model="s",
+            large_model="l",
+        )
+        yield Session(
+            sut=sut, cases=[to_case(golden("g1", "S", "T")), to_case(golden("g2", "S2"))], judge_model="j", embed=embed
+        )
 
     return open_session
 
@@ -303,16 +334,30 @@ def fake_session(graph: dict[str, Any] | None = None, log: list[bool] | None = N
 def offline(monkeypatch) -> None:
     """Keep the real live_runner, but with a fake judge, digest, git and clock."""
     real = cli.live_runner
-    monkeypatch.setattr(cli, "live_runner", lambda open_session, **kw: real(
-        open_session, **kw, make_judge=lambda m: FakeJudge(), digest=lambda m: "dig",
-        git=lambda repo: ("abc1234", False), now=lambda: NOW))
+    monkeypatch.setattr(
+        cli,
+        "live_runner",
+        lambda open_session, **kw: real(
+            open_session,
+            **kw,
+            make_judge=lambda m: FakeJudge(),
+            digest=lambda m: "dig",
+            git=lambda repo: ("abc1234", False),
+            now=lambda: NOW,
+        ),
+    )
 
 
 def entry(argv: list[str], tmp_path: Path, **kw: Any) -> int:
     """The app's real `main`, with test paths and an in-sync database unless `kw` says otherwise."""
     kw.setdefault("database_check", lambda: [])
-    return eval_answers.main(argv, reports_dir=tmp_path / "r", baseline_path=tmp_path / "b.json",
-                             attestation_path=tmp_path / "attestation.json", **kw)
+    return eval_answers.main(
+        argv,
+        reports_dir=tmp_path / "r",
+        baseline_path=tmp_path / "b.json",
+        attestation_path=tmp_path / "attestation.json",
+        **kw,
+    )
 
 
 def test_no_recall_runs_the_negative_control_and_it_can_never_become_a_baseline(
@@ -352,8 +397,14 @@ def test_the_case_viewer_shows_the_findyfixy_fields(tmp_path: Path, monkeypatch,
     capsys.readouterr()
     assert entry(["--show-case", "g1"], tmp_path) == 0
     out = capsys.readouterr().out
-    for needle in ("LABEL      severity: expected sev2, answered sev2  MATCH", "recalled_ids: T, X, Y",
-                   "source_id: S", "twin_id: T", "twin_recalled: True", "model_used: small"):
+    for needle in (
+        "LABEL      severity: expected sev2, answered sev2  MATCH",
+        "recalled_ids: T, X, Y",
+        "source_id: S",
+        "twin_id: T",
+        "twin_recalled: True",
+        "model_used: small",
+    ):
         assert needle in out, needle
 
 
@@ -414,8 +465,13 @@ def test_with_a_run_tracer_each_case_has_a_findyfixy_run_inside_its_eval_case_tr
 
     exporter = InMemorySpanExporter()
     tracing = Tracing.start(TraceConfig("http://127.0.0.1:1", "pk-lf-t", "sk-lf-t", "t"), exporter=exporter)
-    sut = FindyFixy(make_graph=graph_factory(fail_on={"g2"}), candidates=ranked(), small_model="s",
-                    large_model="l", run_tracer=RunTracer(tracing.tracer()))
+    sut = FindyFixy(
+        make_graph=graph_factory(fail_on={"g2"}),
+        candidates=ranked(),
+        small_model="s",
+        large_model="l",
+        run_tracer=RunTracer(tracing.tracer()),
+    )
     report = run([golden("g1", "S"), golden("g2", "S2")], sut=sut, tracing=tracing)
     tracing.flush()
     spans = list(exporter.get_finished_spans())

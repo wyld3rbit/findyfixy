@@ -274,8 +274,12 @@ def answer_case(
         return _answer(case, sut=sut, timer=timer, on_event=on_event)
     from wyld3rness.trace.spans import SpanTree
 
-    tree = SpanTree(tracing.tracer(), f"eval case {case.id}", input=case.question,
-                    attributes={**(run_attributes or {}), "eval.case": case.id, "eval.group": case.group})
+    tree = SpanTree(
+        tracing.tracer(),
+        f"eval case {case.id}",
+        input=case.question,
+        attributes={**(run_attributes or {}), "eval.case": case.id, "eval.group": case.group},
+    )
     try:
         with tree.activate():
             # The trace id joins the record before the system answers. An app
@@ -458,7 +462,7 @@ def _send_scores(
 def _status(record: Mapping[str, Any], case: Case) -> str:
     """One progress word per case: the run error, or each label's match."""
     if record["run_error"]:
-        return record["run_error"]
+        return str(record["run_error"])
     matches = [f"{match_name(label)}={record[match_name(label)]}" for label in case.expected]
     return " ".join(matches) or "ok"
 
@@ -573,13 +577,13 @@ def run_eval(
                 done = answered_count
             raise EvalStopped(f"stopped after {done} of {n} cases")
         on_event("case_started", id=case.id, group=case.group, index=index + 1, n=n)
-        result = answer_case(case, sut=sut, timer=timer, on_event=on_event, tracing=tracing,
-                             run_attributes=run_attributes)
+        result = answer_case(
+            case, sut=sut, timer=timer, on_event=on_event, tracing=tracing, run_attributes=run_attributes
+        )
         with progress_lock:
             answered_count += 1
             progress(
-                f"[{answered_count}/{n}] {case.id} {_status(result.record, case)} "
-                f"({result.record['latency_s']:.1f}s)"
+                f"[{answered_count}/{n}] {case.id} {_status(result.record, case)} ({result.record['latency_s']:.1f}s)"
             )
         return result
 
@@ -590,8 +594,16 @@ def run_eval(
             with progress_lock:
                 done = judged_count
             raise EvalStopped(f"stopped after judging {done} of {len(to_judge)} answered cases")
-        score_case(item.case, item.record, item.answer, judge=judge, embed=embed, on_event=on_event,
-                   tree=item.tree, scores=scores)
+        score_case(
+            item.case,
+            item.record,
+            item.answer,
+            judge=judge,
+            embed=embed,
+            on_event=on_event,
+            tree=item.tree,
+            scores=scores,
+        )
         with progress_lock:
             judged_count += 1
             progress(f"[judged {judged_count}/{len(to_judge)}] {item.case.id}")

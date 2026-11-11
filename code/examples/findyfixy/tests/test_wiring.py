@@ -5,8 +5,8 @@ import time
 
 import pytest
 
-import findyfixy.wiring as wiring
 from findyfixy.triage.record import Prior
+import findyfixy.wiring as wiring
 
 
 class FakeFound:

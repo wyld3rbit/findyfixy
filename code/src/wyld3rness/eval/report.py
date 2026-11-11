@@ -20,7 +20,7 @@ its reports or its baseline.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import json
 from pathlib import Path
 import sys
@@ -56,12 +56,14 @@ BASELINE_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {"git_dirty", "bootstrap_seed", "bootstrap_resamples", "negative_control"}
 )
 
+
 class BaselineMissing(Exception):
     """The baseline file does not exist. Distinct from a failed gate."""
 
 
 class BaselineRefused(Exception):
     """A baseline must not be written from this run. The message says why."""
+
 
 # ---- Files ------------------------------------------------------------------
 #
@@ -72,7 +74,7 @@ class BaselineRefused(Exception):
 
 def report_path(now: datetime, directory: Path) -> Path:
     """`reports/eval-<UTC timestamp>.json`. Second resolution is enough for a sequential run."""
-    stamp = now.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = now.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
     return directory / f"eval-{stamp}.json"
 
 
@@ -90,11 +92,12 @@ def load_baseline(path: Path, command: str | None = None) -> dict[str, Any]:
     """
     if not path.exists():
         run = f"`{command} --write-baseline`" if command else "the eval with `--write-baseline`"
-        raise BaselineMissing(
-            f"no baseline at {path.name}. Run {run} "
-            "once, review the numbers, and commit the file."
-        )
-    return json.loads(path.read_text(encoding="utf-8"))
+        raise BaselineMissing(f"no baseline at {path.name}. Run {run} once, review the numbers, and commit the file.")
+    baseline = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(baseline, dict):
+        # Malformed JSON already raises a ValueError; a valid non-object is the same fault.
+        raise ValueError(f"{path.name} is not a baseline: expected a JSON object")
+    return baseline
 
 
 # ---- Baseline and gate ------------------------------------------------------
@@ -157,9 +160,7 @@ def write_baseline(
         "provenance": {k: v for k, v in provenance.items() if k not in excluded},
         "scores": {n: {"mean": overall[n]["mean"], "ci": overall[n]["ci"]} for n in names},
         "floors": {
-            n: round(max(0.0, overall[n]["mean"] - floor_margin), 4)
-            for n in names
-            if overall[n]["mean"] is not None
+            n: round(max(0.0, overall[n]["mean"] - floor_margin), 4) for n in names if overall[n]["mean"] is not None
         },
         "max_failure_rate": max_failure_rate,
     }
@@ -400,8 +401,10 @@ def show_case(case_id: str, report_path: Path | None, reports_dir: Path) -> int:
         print(f"error: no case {case_id!r} in that report. Cases: {known}", file=sys.stderr)
         return 2
     if "question" not in record:
-        print("warning: this report predates self-contained records; "
-              "the alert and reference were not saved in it", file=sys.stderr)
+        print(
+            "warning: this report predates self-contained records; the alert and reference were not saved in it",
+            file=sys.stderr,
+        )
     print(format_case(record))
     return 0
 
@@ -412,7 +415,8 @@ def case_differences(old: Mapping[str, Any], new: Mapping[str, Any]) -> list[str
     Compared per case id: which cases ran and in what order, the question and
     reference, the run error, the answer text, the contexts the judge saw,
     each label with its match and expected value, and each metric's score and
-    failed flag. Both reports must have unique case ids (`load_report`). Not compared: latency and timing (they always move), the
+    failed flag. Both reports must have unique case ids (`load_report`).
+    Not compared: latency and timing (they always move), the
     provenance (a new run has a new timestamp and commit), and the judge's
     reasons (free text; the score is what the gate reads). Empty means the
     runs agree on everything the gate and a reader of a case can see.
@@ -452,8 +456,7 @@ def compare_reports(first: Path, second: Path) -> int:
     runner, tracing) proves it did not.
     """
     if first.resolve() == second.resolve():
-        print(f"error: both reports are {first.name}; name the other run with --report",
-              file=sys.stderr)
+        print(f"error: both reports are {first.name}; name the other run with --report", file=sys.stderr)
         return 2
     try:
         a, b = load_report(first), load_report(second)
@@ -466,14 +469,14 @@ def compare_reports(first: Path, second: Path) -> int:
     if problems:
         print(f"compare: {len(problems)} difference(s) between {first.name} and {second.name}")
         return 1
-    print(f"compare: identical, {len(a['cases'])} cases ({first.name} and {second.name}): "
-          "answers, contexts, labels and every metric score")
+    print(
+        f"compare: identical, {len(a['cases'])} cases ({first.name} and {second.name}): "
+        "answers, contexts, labels and every metric score"
+    )
     return 0
 
 
-def freeze_baseline(
-    report_path: Path, baseline_path: Path, legacy_control: LegacyControl = NO_LEGACY_CONTROL
-) -> int:
+def freeze_baseline(report_path: Path, baseline_path: Path, legacy_control: LegacyControl = NO_LEGACY_CONTROL) -> int:
     """Freeze a saved report as the baseline, with the same refusals as a live run.
 
     The baseline is then exactly the numbers that were reviewed, not a fresh
@@ -525,4 +528,3 @@ def format_table(report: Mapping[str, Any]) -> str:
         ]
         lines.append("| " + " | ".join(row) + " |")
     return "\n".join(lines)
-

@@ -20,8 +20,10 @@ What a staff+ reader should notice
       instructions. It models untrusted text, which lives in the report.
 """
 
-import pytest
+from typing import ClassVar
+
 from langchain_core.messages import AIMessage
+import pytest
 
 from findyfixy.console.stress import (
     DESCRIPTIONS,
@@ -44,8 +46,8 @@ from findyfixy.triage.record import (
 class FakeChat:
     """Records how it was built and what it was asked. Returns a canned reply."""
 
-    built: list[dict] = []
-    prompts: list[str] = []
+    built: ClassVar[list[dict]] = []
+    prompts: ClassVar[list[str]] = []
 
     def __init__(self, model, **kwargs):
         FakeChat.built.append({"model": model, **kwargs})
@@ -84,7 +86,7 @@ def test_vague_prompt_still_asks_for_a_confidence_field():
 def test_the_percent_note_lands_at_the_end_of_the_report():
     out = with_percent_note(build_prompt("the report"))
     assert out == build_prompt("the report") + PERCENT_NOTE
-    assert out.index("Report:") < out.index(PERCENT_NOTE)   # after the instructions
+    assert out.index("Report:") < out.index(PERCENT_NOTE)  # after the instructions
 
 
 def test_the_percent_note_goes_before_evidence_and_before_a_retry_section():
@@ -97,7 +99,7 @@ def test_the_percent_note_goes_before_evidence_and_before_a_retry_section():
 
 
 def test_none_is_the_plain_request_with_the_json_constraint():
-    reply, built, prompt = run("none")
+    _reply, built, prompt = run("none")
     assert "format" in built and "num_ctx" not in built and prompt == "PROMPT"
 
 
@@ -145,4 +147,3 @@ def test_no_format_removes_only_the_format() -> None:
     assert "format" not in FakeChat.built[-1]
     make_ollama_ask("none", chat=FakeChat)("m", "prompt")
     assert "format" in FakeChat.built[-1]
-

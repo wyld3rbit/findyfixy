@@ -63,28 +63,28 @@ Failure modes
       the error. The server stays up.
 """
 
-import json
-import os
-import sys
-import threading
-import time
 from collections.abc import Callable
 from dataclasses import asdict
 from functools import partial
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
+import json
+import os
 from pathlib import Path
+import sys
+import threading
+import time
 from typing import Literal
 from urllib.parse import parse_qs, urlparse
 
-from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError
 
+from findyfixy.console.dev_reload import fingerprint, snapshot
 from findyfixy.console.eval_run import (
     EVAL_DEFAULT,
     EvalRun,
-    HarnessEvent,
     EvalSuite,
+    HarnessEvent,
     live_eval,
     run_and_judge,
 )
@@ -99,20 +99,19 @@ from findyfixy.console.fakes import (
     fake_eval,
     inject_bad_first_reply,
 )
-from findyfixy.console.dev_reload import fingerprint, snapshot
-from findyfixy.events import Emit, Event, make_emit, make_stamped_emit
-from findyfixy.retrieval.incidents import DEFAULT_PATH, Incident, load_incidents
-from findyfixy.paths import EVALS, PAGE, ROOT, WORKSPACE
-from findyfixy.settings import load_env, optional_models
-from findyfixy.wiring import SharedRetrieval, stage_spans
-from findyfixy.tools.investigate import build_investigator
 from findyfixy.console.stress import DESCRIPTIONS, STRESSES, Stress, make_ollama_ask
-from findyfixy.tools.deploys import make_deploys_tool
-from findyfixy.triage.graph import QUESTIONS, THRESHOLD, Recall, build_graph
+from findyfixy.events import Emit, Event, make_emit, make_stamped_emit
 from findyfixy.llm import answer_options, ollama_ask
 from findyfixy.observability.adapter import EventSpans, traced_sink
 from findyfixy.observability.tracing import open_tracing
+from findyfixy.paths import EVALS, PAGE, ROOT, WORKSPACE
+from findyfixy.retrieval.incidents import DEFAULT_PATH, Incident, load_incidents
+from findyfixy.settings import load_env, optional_models
+from findyfixy.tools.deploys import make_deploys_tool
+from findyfixy.tools.investigate import Investigator, build_investigator
+from findyfixy.triage.graph import QUESTIONS, THRESHOLD, Recall, build_graph
 from findyfixy.triage.record import RECALL_K, Ask, TriageError
+from findyfixy.wiring import SharedRetrieval, stage_spans
 from wyld3rness.trace.tracing import Tracing
 
 Mode = Literal["live", "fake"]
@@ -232,7 +231,7 @@ class RunHub:
         *,
         live_models: tuple[str, str] | None,
         incidents: list[Incident] | None = None,
-        investigator: CompiledStateGraph | None = None,
+        investigator: Investigator | None = None,
         recall: Recall | None = None,
         sleep: Callable[[float], None] = time.sleep,
         fake_delay: float = 0.6,
@@ -345,8 +344,9 @@ class RunHub:
         emit = make_emit(self._publish, self._clock)
         on_event = make_stamped_emit(self._publish, self._clock, HarnessEvent)
         try:
-            run_and_judge(run, n, emit=emit, on_event=on_event, should_stop=self._stop.is_set,
-                          baseline_path=self._baseline_path)
+            run_and_judge(
+                run, n, emit=emit, on_event=on_event, should_stop=self._stop.is_set, baseline_path=self._baseline_path
+            )
         finally:
             with self._cond:
                 self._running = False
@@ -397,8 +397,15 @@ class RunHub:
         threading.Thread(
             target=self._run,
             args=(
-                run_id, ask, small, large, question, req.mode, forced,
-                req.hunt_max, req.force_retry,
+                run_id,
+                ask,
+                small,
+                large,
+                question,
+                req.mode,
+                forced,
+                req.hunt_max,
+                req.force_retry,
             ),
             kwargs={
                 "investigator": investigator,
@@ -452,7 +459,7 @@ class RunHub:
         hunt_max: int | None,
         force_retry: bool,
         *,
-        investigator: CompiledStateGraph | None = None,
+        investigator: Investigator | None = None,
         stress: Stress = "none",
         recall: Recall | None = None,
     ) -> None:
@@ -468,8 +475,11 @@ class RunHub:
         # Tracing is one more reader of the same events. It never blocks: spans
         # are built in memory and exported on the exporter's own thread.
         # Tracing first: the trace is complete before any viewer hears the run end.
-        sink = watch.sink if self._tracing is None else traced_sink(
-            EventSpans(self._tracing.tracer()), watch.sink, self._tracing.config.trace_url)
+        sink = (
+            watch.sink
+            if self._tracing is None
+            else traced_sink(EventSpans(self._tracing.tracer()), watch.sink, self._tracing.config.trace_url)
+        )
         emit = make_emit(sink, self._clock)
         # Confidence is at most 1.0 and the route keeps a record only when
         # confidence >= threshold. A threshold above 1.0 therefore sends every
@@ -480,8 +490,18 @@ class RunHub:
 
         def once(q: str) -> str:
             return self._run_once(
-                emit, ask, small, large, q, mode, forced, run_id, threshold,
-                investigator, stress, recall,
+                emit,
+                ask,
+                small,
+                large,
+                q,
+                mode,
+                forced,
+                run_id,
+                threshold,
+                investigator,
+                stress,
+                recall,
             )
 
         try:
@@ -505,7 +525,7 @@ class RunHub:
         forced: bool,
         run_id: int,
         threshold: float,
-        investigator: CompiledStateGraph | None = None,
+        investigator: Investigator | None = None,
         stress: Stress = "none",
         recall: Recall | None = None,
     ) -> Literal["finished", "failed", "error"]:
@@ -516,10 +536,19 @@ class RunHub:
         treats the two differently: the first is what it is looking for, the
         second means stop and say so.
         """
-        emit("run_started", run=run_id, mode=mode, question=question,
-             small_model=small, large_model=large, threshold=threshold, forced=forced,
-             tools=investigator is not None, stress=stress,
-             recall=recall is not None)
+        emit(
+            "run_started",
+            run=run_id,
+            mode=mode,
+            question=question,
+            small_model=small,
+            large_model=large,
+            threshold=threshold,
+            forced=forced,
+            tools=investigator is not None,
+            stress=stress,
+            recall=recall is not None,
+        )
         try:
             graph = build_graph(
                 ask,
@@ -541,7 +570,7 @@ class RunHub:
         except TriageError as err:
             emit("run_failed", error_type="TriageError", error=str(err))
             return "failed"
-        except Exception as err:  # noqa: BLE001 - the viewer must hear about it
+        except Exception as err:
             emit("run_failed", error_type=type(err).__name__, error=str(err))
             return "error"
 
@@ -629,9 +658,7 @@ QUIET_ROUTES = ("/version", "/favicon.ico")
 UNTRACED_ROUTES = (*QUIET_ROUTES, "/events")
 
 
-def make_handler(
-    hub: RunHub, page: Path, dev_root: Path | None = None
-) -> type[BaseHTTPRequestHandler]:
+def make_handler(hub: RunHub, page: Path, dev_root: Path | None = None) -> type[BaseHTTPRequestHandler]:
     """Build the request handler class bound to `hub` and the page path.
 
     `dev_root`, when given, turns on dev mode: `/version` reports a fingerprint
@@ -696,7 +723,8 @@ def make_handler(
             self._send(status, json.dumps(payload).encode(), "application/json")
 
         def _host_ok(self) -> bool:
-            port = self.server.server_address[1]
+            assert isinstance(self.server, HTTPServer)
+            port = self.server.server_port
             return self.headers.get("Host") in {
                 f"127.0.0.1:{port}",
                 f"localhost:{port}",
@@ -711,10 +739,10 @@ def make_handler(
             }
 
         # -- routes -------------------------------------------------------
-        def do_GET(self) -> None:  # noqa: N802 - stdlib naming
+        def do_GET(self) -> None:
             self._traced("GET", self._get)
 
-        def do_POST(self) -> None:  # noqa: N802 - stdlib naming
+        def do_POST(self) -> None:
             self._traced("POST", self._post)
 
         def _get(self) -> None:
@@ -723,12 +751,8 @@ def make_handler(
             url = urlparse(self.path)
             if url.path == "/":
                 if not page.is_file():
-                    return self._send(
-                        HTTPStatus.OK, b"page not built yet", "text/plain"
-                    )
-                return self._send(
-                    HTTPStatus.OK, page.read_bytes(), "text/html; charset=utf-8"
-                )
+                    return self._send(HTTPStatus.OK, b"page not built yet", "text/plain")
+                return self._send(HTTPStatus.OK, page.read_bytes(), "text/html; charset=utf-8")
             if url.path == "/favicon.ico":
                 # The page declares an inline icon, so browsers normally never ask.
                 # Some still do. Answer "no content" instead of a 404 in the log.
@@ -746,10 +770,7 @@ def make_handler(
                     HTTPStatus.OK,
                     {
                         "questions": QUESTIONS,
-                        "incidents": [
-                            {"id": i.id, "title": i.title, "text": i.text}
-                            for i in hub.incidents
-                        ],
+                        "incidents": [{"id": i.id, "title": i.title, "text": i.text} for i in hub.incidents],
                         "scenarios": list(SCENARIOS),
                         "tools_available": hub.tools_available,
                         "live_available": hub.live_available,
@@ -779,16 +800,13 @@ def make_handler(
             if path not in ("/run", "/eval"):
                 return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
             if not self.headers.get("Content-Type", "").startswith("application/json"):
-                return self._json(
-                    HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {"error": "send JSON"}
-                )
+                return self._json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {"error": "send JSON"})
             try:
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
                 length = -1
             if not 0 < length <= _MAX_BODY:
-                return self._json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
-                                  {"error": "bad body size"})
+                return self._json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "bad body size"})
             self.close_connection = False  # body is about to be read in full
             try:
                 body = self.rfile.read(length)
@@ -900,9 +918,7 @@ def main(argv: list[str] | None = None) -> None:
         from langchain_ollama import ChatOllama
 
         tool = make_deploys_tool()
-        investigator = build_investigator(
-            ChatOllama(model=models.small, **answer_options()).bind_tools([tool]), tool
-        )
+        investigator = build_investigator(ChatOllama(model=models.small, **answer_options()).bind_tools([tool]), tool)
     # One database connection, embedder and reranker for the whole process:
     # triage recall and the eval session share it, so a live eval loads no copy.
     # One tracer provider for the process: triage runs and live eval runs share it.
@@ -911,7 +927,8 @@ def main(argv: list[str] | None = None) -> None:
         retrieval = SharedRetrieval(stage=stage_spans(tracing)) if models else None
         live_eval_suite = None
         if retrieval is not None:
-            from findyfixy.evals.answers import GOLDEN_PATH, open_live_session
+            from findyfixy.evals.answers import open_live_session
+            from findyfixy.evals.golden import DEFAULT_PATH as GOLDEN_PATH
             from findyfixy.evals.golden import load_golden
 
             live_eval_suite = live_eval(

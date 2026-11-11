@@ -17,8 +17,8 @@ Rules this module keeps:
   stack's own `.env` (both git-ignored), and `TraceConfig` never prints it.
 """
 
-import os
 from dataclasses import dataclass
+import os
 from pathlib import Path
 
 from wyld3rness.trace.tracing import TraceConfig
@@ -127,5 +127,6 @@ def read_tracing(stack_env: Path | None = None) -> TraceConfig | None:
     if not (public and secret):
         return None
     user = os.environ.get("TRACE_USER", "").strip() or "local"
-    return TraceConfig(host=host, public_key=public, secret_key=secret, service_name=SERVICE_NAME,
-                       user_id=user, project_id=project)
+    return TraceConfig(
+        host=host, public_key=public, secret_key=secret, service_name=SERVICE_NAME, user_id=user, project_id=project
+    )

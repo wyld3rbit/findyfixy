@@ -16,12 +16,12 @@ system under test describes itself as `data: FAKE`, so the page marks every scor
 from such a run as fake.
 """
 
-import json
 from collections.abc import Callable, Sequence
 from itertools import cycle
+import json
 from typing import Any, Literal, TypeVar
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, BaseMessage
 from pydantic import BaseModel
 
 from findyfixy.console.eval_run import EvalResult, EvalSuite
@@ -33,7 +33,6 @@ from wyld3rness.eval.case import Case
 from wyld3rness.eval.events import EvalEmit
 from wyld3rness.eval.metrics import ActionRating, Claims, Questions, Verdict
 from wyld3rness.eval.runner import run_eval
-
 
 Scenario = Literal[
     "stay_small",
@@ -47,9 +46,30 @@ Scenario = Literal[
 # What the page shows for the recall step in a fake run: fixed, invented, and
 # marked as such by its IDs. A fake run must never need a database or a model.
 FAKE_RECALL: tuple[Prior, ...] = (
-    Prior("FAKE-1", "auth", "sev2", "Latency rose after a certificate rotation.", "Peers lacked the new intermediate authority.", "Test trust chains before every rotation."),
-    Prior("FAKE-2", "auth", "sev3", "Slow logins after a rotation.", "Trust was not tested before cutover.", "Add a trust check to the rotation runbook."),
-    Prior("FAKE-3", "gateway", "sev2", "Saturation at the daily peak.", "The autoscaler floor was too low.", "Raise the autoscaler floor ahead of the daily peak."),
+    Prior(
+        "FAKE-1",
+        "auth",
+        "sev2",
+        "Latency rose after a certificate rotation.",
+        "Peers lacked the new intermediate authority.",
+        "Test trust chains before every rotation.",
+    ),
+    Prior(
+        "FAKE-2",
+        "auth",
+        "sev3",
+        "Slow logins after a rotation.",
+        "Trust was not tested before cutover.",
+        "Add a trust check to the rotation runbook.",
+    ),
+    Prior(
+        "FAKE-3",
+        "gateway",
+        "sev2",
+        "Saturation at the daily peak.",
+        "The autoscaler floor was too low.",
+        "Raise the autoscaler floor ahead of the daily peak.",
+    ),
 )
 
 
@@ -99,7 +119,7 @@ class ScriptedToolModel:
         self._hours = hours
         self._asked = False
 
-    def invoke(self, messages: list) -> AIMessage:
+    def invoke(self, messages: list[BaseMessage], /) -> AIMessage:
         if self._asked:
             return AIMessage(content="done")
         self._asked = True
@@ -162,8 +182,16 @@ def inject_bad_first_reply(ask: Ask, small_model: str, emit: Emit) -> Ask:
 # escalation, a retry and one case whose models never give a valid record, so a
 # full fake run shows every path, including a run error the gate must catch.
 FAKE_EVAL_SCENARIOS: tuple[Scenario, ...] = (
-    "stay_small", "escalate", "retry_then_small", "stay_small", "stay_small",
-    "escalate", "stay_small", "retry_then_small", "stay_small", "large_fails",
+    "stay_small",
+    "escalate",
+    "retry_then_small",
+    "stay_small",
+    "stay_small",
+    "escalate",
+    "stay_small",
+    "retry_then_small",
+    "stay_small",
+    "large_fails",
 )
 # The invented set mirrors the golden set's shape (20 twin, 10 no_twin), so a
 # full fake run exercises the gate. Its size is this data's own, not a limit.
@@ -208,14 +236,20 @@ class ScriptedJudge:
 
     def ask(self, prompt: str, schema: type[T]) -> T:
         """A canned reply of the right schema."""
+        # model_validate builds the reply as the asked-for type, so the return
+        # type follows `schema` without a cast, and pydantic checks the values.
         if schema is Claims:
-            return Claims(claims=["FAKE claim: the component is named.", "FAKE claim: an action is given."])
+            return schema.model_validate(
+                {"claims": ["FAKE claim: the component is named.", "FAKE claim: an action is given."]}
+            )
         if schema is Questions:
-            return Questions(questions=["FAKE question one?", "FAKE question two?", "FAKE question three?"])
+            return schema.model_validate(
+                {"questions": ["FAKE question one?", "FAKE question two?", "FAKE question three?"]}
+            )
         if schema is ActionRating:
-            return ActionRating(rating=next(self._rating), reason="FAKE rating")
+            return schema.model_validate({"rating": next(self._rating), "reason": "FAKE rating"})
         if schema is Verdict:
-            return Verdict(supported=next(self._supported), reason="FAKE verdict")
+            return schema.model_validate({"supported": next(self._supported), "reason": "FAKE verdict"})
         raise TypeError(f"the scripted judge has no reply for {schema.__name__}")
 
 

@@ -13,9 +13,9 @@ import json
 
 import pytest
 
+from findyfixy.console.stress import PERCENT_NOTE, with_percent_note
 from findyfixy.events import Event, make_emit
 from findyfixy.triage.graph import build_graph
-from findyfixy.console.stress import PERCENT_NOTE, with_percent_note
 from findyfixy.triage.record import (
     MAX_PRIOR_CHARS,
     PRIOR_MARKER,
@@ -25,15 +25,27 @@ from findyfixy.triage.record import (
 )
 
 PRIORS = [
-    Prior("INC-0073", "auth", "sev2", "Latency rose after a certificate rotation.", "Peers lacked the intermediate authority.", "Test trust before rotating."),
-    Prior("INC-0054", "auth", "sev3", "Slow logins after rotation.", "Trust was not tested before cutover.", "Add a trust check to the runbook."),
+    Prior(
+        "INC-0073",
+        "auth",
+        "sev2",
+        "Latency rose after a certificate rotation.",
+        "Peers lacked the intermediate authority.",
+        "Test trust before rotating.",
+    ),
+    Prior(
+        "INC-0054",
+        "auth",
+        "sev3",
+        "Slow logins after rotation.",
+        "Trust was not tested before cutover.",
+        "Add a trust check to the runbook.",
+    ),
 ]
 
 
 def reply(confidence: float) -> str:
-    return json.dumps(
-        {"severity": "sev2", "component": "auth", "next_action": "check", "confidence": confidence}
-    )
+    return json.dumps({"severity": "sev2", "component": "auth", "next_action": "check", "confidence": confidence})
 
 
 def run(recall, confidences=(0.9,), **kwargs):
@@ -47,7 +59,12 @@ def run(recall, confidences=(0.9,), **kwargs):
 
     events: list[Event] = []
     graph = build_graph(
-        ask, small_model="small", large_model="large", emit=make_emit(events.append, lambda: 0.0), recall=recall, **kwargs
+        ask,
+        small_model="small",
+        large_model="large",
+        emit=make_emit(events.append, lambda: 0.0),
+        recall=recall,
+        **kwargs,
     )
     graph.invoke({"question": "auth is slow"})
     return prompts, events
@@ -178,4 +195,3 @@ def test_every_real_incident_fits_under_the_cap_with_its_fix() -> None:
         assert not text.endswith("..."), r["id"]
         longest = max(longest, len(text))
     assert longest <= MAX_PRIOR_CHARS
-

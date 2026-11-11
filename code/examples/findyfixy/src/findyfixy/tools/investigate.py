@@ -54,13 +54,13 @@ What changes at scale
       them, not the sum.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Annotated, Literal, Protocol, TypedDict, get_args
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.tools import BaseTool
-from langgraph.graph import END, StateGraph
+from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 
@@ -89,9 +89,7 @@ INVESTIGATE_PROMPT = (
 
 def investigation_prompt(question: str) -> str:
     """Wrap a report in the investigate instructions. Pure."""
-    return INVESTIGATE_PROMPT.format(
-        services=", ".join(get_args(Service)), question=question
-    )
+    return INVESTIGATE_PROMPT.format(services=", ".join(get_args(Service)), question=question)
 
 
 class ToolModel(Protocol):
@@ -101,7 +99,7 @@ class ToolModel(Protocol):
     tests.
     """
 
-    def invoke(self, messages: list[BaseMessage]) -> AIMessage: ...
+    def invoke(self, messages: list[BaseMessage], /) -> AIMessage: ...
 
 
 class InvestigationState(TypedDict, total=False):
@@ -119,7 +117,7 @@ class ToolCallRecord:
     """One tool call the model made, with what came back."""
 
     name: str
-    args: dict
+    args: dict[str, object]
     result: str
     error: bool
 
@@ -141,12 +139,16 @@ class Investigation:
     served_by: tuple[str, ...] = ()
 
 
+# The compiled loop, typed by its state so callers see what goes in and comes out.
+Investigator = CompiledStateGraph[InvestigationState, None, InvestigationState, InvestigationState]
+
+
 def build_investigator(
     model: ToolModel,
     tool: BaseTool | Sequence[BaseTool],
     *,
     max_turns: int = MAX_TURNS,
-) -> CompiledStateGraph:
+) -> Investigator:
     """Compile the agent and tools loop. Nothing runs until `.invoke()`.
 
     Start it with `{"messages": [HumanMessage(question)]}`. `tool` is one tool
@@ -169,7 +171,7 @@ def build_investigator(
         wants_tools = isinstance(last, AIMessage) and bool(last.tool_calls)
         if wants_tools and state.get("turns", 0) < max_turns:
             return "tools"
-        return END
+        return "__end__"  # langgraph's END, spelled out so the Literal holds
 
     g = StateGraph(InvestigationState)
     g.add_node("agent", agent)
@@ -180,7 +182,7 @@ def build_investigator(
     return g.compile()
 
 
-def content_text(content: str | list) -> str:
+def content_text(content: str | Sequence[object]) -> str:
     """Plain text of a message's content. Pure.
 
     A direct tool returns a string. An MCP tool returns a list of content
@@ -203,7 +205,7 @@ def content_text(content: str | list) -> str:
     return "".join(parts)
 
 
-def _sum_tokens(replies: list[AIMessage], key: str) -> int | None:
+def _sum_tokens(replies: list[AIMessage], key: Literal["input_tokens", "output_tokens", "total_tokens"]) -> int | None:
     """Total one usage field across turns, or None if any turn lacked it."""
     total = 0
     for reply in replies:
@@ -226,7 +228,7 @@ def analyse(messages: list[BaseMessage]) -> Investigation:
     calls: list[ToolCallRecord] = []
     for reply in replies:
         for call in reply.tool_calls:
-            res = results.get(call["id"])
+            res = results.get(call["id"]) if call["id"] is not None else None
             calls.append(
                 ToolCallRecord(
                     name=call["name"],
@@ -254,7 +256,7 @@ def analyse(messages: list[BaseMessage]) -> Investigation:
     )
 
 
-def format_args(args: dict) -> str:
+def format_args(args: Mapping[str, object]) -> str:
     """Compact, stable text for a call's arguments: `service=auth,hours=1`."""
     return ",".join(f"{k}={args[k]}" for k in sorted(args))
 

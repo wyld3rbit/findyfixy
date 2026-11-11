@@ -32,9 +32,9 @@ Failure modes (read before trusting a score)
       cost lever: a judge metric costs several calls per sample.
 """
 
+from collections.abc import Callable
 import json
 import threading
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -75,8 +75,9 @@ class ChatText(str):
     output_tokens: int | None
     served_by: str | None
 
-    def __new__(cls, text: str, input_tokens: int | None = None, output_tokens: int | None = None,
-                served_by: str | None = None) -> "ChatText":
+    def __new__(
+        cls, text: str, input_tokens: int | None = None, output_tokens: int | None = None, served_by: str | None = None
+    ) -> "ChatText":
         obj = super().__new__(cls, text)
         obj.input_tokens, obj.output_tokens, obj.served_by = input_tokens, output_tokens, served_by
         return obj
@@ -157,9 +158,12 @@ def traced_chat(chat: ChatFn, tracer: "Tracer") -> ChatFn:
         """One traced judge call."""
         with generation(tracer, model, prompt, name=f"judge {model}") as gen:
             reply = chat(model, prompt, json_schema)
-            gen.done(reply, input_tokens=getattr(reply, "input_tokens", None),
-                     output_tokens=getattr(reply, "output_tokens", None),
-                     response_model=getattr(reply, "served_by", None))
+            gen.done(
+                reply,
+                input_tokens=getattr(reply, "input_tokens", None),
+                output_tokens=getattr(reply, "output_tokens", None),
+                response_model=getattr(reply, "served_by", None),
+            )
             return reply
 
     return call
@@ -187,12 +191,9 @@ class _OllamaJudge:
                 return schema.model_validate_json(reply)
             except ValidationError as err:
                 last_error = err
-                current = RETRY_PROMPT.format(
-                    prompt=prompt, reply=reply[:_MAX_ECHO_CHARS], error=err
-                )
+                current = RETRY_PROMPT.format(prompt=prompt, reply=reply[:_MAX_ECHO_CHARS], error=err)
         raise JudgeError(
-            f"{self._model} gave no valid {schema.__name__} after "
-            f"{self._retries + 1} attempt(s): {last_error}"
+            f"{self._model} gave no valid {schema.__name__} after {self._retries + 1} attempt(s): {last_error}"
         )
 
 

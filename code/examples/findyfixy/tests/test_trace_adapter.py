@@ -21,17 +21,17 @@ import threading
 import time
 from typing import Any
 
-import pytest
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
+import pytest
 
+from findyfixy.console.fakes import FAKE_RECALL
 import findyfixy.console.server as console
 from findyfixy.console.server import RunHub, RunRequest
-from findyfixy.console.fakes import FAKE_RECALL
 from findyfixy.events import Event
-from findyfixy.settings import read_tracing
 from findyfixy.observability.adapter import EventSpans, traced_sink
+from findyfixy.settings import read_tracing
 from wyld3rness.trace.spans import GEN_AI_INPUT_TOKENS, GEN_AI_OUTPUT_TOKENS, GEN_AI_REQUEST_MODEL, LF_TYPE
 from wyld3rness.trace.tracing import TraceConfig, Tracing
 
@@ -57,8 +57,7 @@ def traced(monkeypatch):
 
 def run_fake(tracing: Tracing, scenario: str) -> None:
     """One fake console run with tracing and a recall step, waited to the end."""
-    hub = RunHub(live_models=None, sleep=lambda s: None, fake_delay=0, tracing=tracing,
-                 recall=lambda q: FAKE_RECALL)
+    hub = RunHub(live_models=None, sleep=lambda s: None, fake_delay=0, tracing=tracing, recall=lambda q: FAKE_RECALL)
     hub.start(RunRequest(mode="fake", scenario=scenario))
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
@@ -81,8 +80,9 @@ def parent(spans: list[ReadableSpan], span: ReadableSpan) -> str | None:
     return next(s.name for s in spans if s.context.span_id == span.parent.span_id)
 
 
-@pytest.mark.parametrize("scenario", ["stay_small", "retry_then_small", "escalate", "large_fails",
-                                      "tool_lookup", "tool_wrong_window"])
+@pytest.mark.parametrize(
+    "scenario", ["stay_small", "retry_then_small", "escalate", "large_fails", "tool_lookup", "tool_wrong_window"]
+)
 def test_every_scenario_maps_without_a_swallowed_error_and_ends_its_trace(traced, scenario: str) -> None:
     """One trace per run, one root, every span ended, no mapping error."""
     tracing, exporter, made = traced
@@ -221,18 +221,20 @@ def feed(events: list[tuple[str, dict]]) -> tuple[EventSpans, list[ReadableSpan]
 
 def test_two_tool_calls_from_one_reply_are_siblings_with_their_own_results() -> None:
     """The graph emits both calls, then both results, in call order (graph.py, ToolNode)."""
-    adapter, spans, tracing = feed([
-        ("run_started", {"question": "q"}),
-        ("node_entered", {"node": "investigate", "model": "m"}),
-        ("model_request", {"model": "m", "attempt": 1}),
-        ("model_reply", {"model": "m", "reply": ""}),
-        ("tool_call", {"name": "deploys", "args": {"hours": 1}}),
-        ("tool_call", {"name": "deploys", "args": {"hours": 24}}),
-        ("tool_result", {"name": "deploys", "result": "one hour", "error": False}),
-        ("tool_result", {"name": "deploys", "result": "one day", "error": False}),
-        ("node_exited", {"node": "investigate", "model": "m"}),
-        ("run_finished", {"model_used": "m", "triage": {}}),
-    ])
+    adapter, spans, tracing = feed(
+        [
+            ("run_started", {"question": "q"}),
+            ("node_entered", {"node": "investigate", "model": "m"}),
+            ("model_request", {"model": "m", "attempt": 1}),
+            ("model_reply", {"model": "m", "reply": ""}),
+            ("tool_call", {"name": "deploys", "args": {"hours": 1}}),
+            ("tool_call", {"name": "deploys", "args": {"hours": 24}}),
+            ("tool_result", {"name": "deploys", "result": "one hour", "error": False}),
+            ("tool_result", {"name": "deploys", "result": "one day", "error": False}),
+            ("node_exited", {"node": "investigate", "model": "m"}),
+            ("run_finished", {"model_used": "m", "triage": {}}),
+        ]
+    )
     tools = sorted((s for s in spans if s.attributes.get(LF_TYPE) == "tool"), key=lambda s: s.start_time)
     assert [parent(spans, t) for t in tools] == ["node investigate", "node investigate"]
     assert [t.attributes["langfuse.observation.output"] for t in tools] == ["one hour", "one day"]
@@ -242,13 +244,15 @@ def test_two_tool_calls_from_one_reply_are_siblings_with_their_own_results() -> 
 
 def test_a_tool_call_the_loop_never_ran_ends_as_an_error() -> None:
     """At the turn cap a reply can ask for a tool that never runs: the span must not look like a lookup."""
-    adapter, spans, tracing = feed([
-        ("run_started", {"question": "q"}),
-        ("node_entered", {"node": "investigate", "model": "m"}),
-        ("tool_call", {"name": "deploys", "args": {}}),
-        ("node_exited", {"node": "investigate", "model": "m", "hit_turn_cap": True}),
-        ("run_finished", {"model_used": "m", "triage": {}}),
-    ])
+    adapter, spans, tracing = feed(
+        [
+            ("run_started", {"question": "q"}),
+            ("node_entered", {"node": "investigate", "model": "m"}),
+            ("tool_call", {"name": "deploys", "args": {}}),
+            ("node_exited", {"node": "investigate", "model": "m", "hit_turn_cap": True}),
+            ("run_finished", {"model_used": "m", "triage": {}}),
+        ]
+    )
     tool = next(s for s in spans if s.attributes.get(LF_TYPE) == "tool")
     assert tool.status.status_code is StatusCode.ERROR and "not run" in tool.status.description
     assert adapter.errors == 0

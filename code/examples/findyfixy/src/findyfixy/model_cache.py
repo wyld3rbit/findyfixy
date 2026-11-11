@@ -27,12 +27,9 @@ Failure modes
 """
 
 from collections.abc import Callable
-from typing import TypeVar
-
-M = TypeVar("M")
 
 
-def cache_first(load: Callable[..., M]) -> M:
+def cache_first[M](load: Callable[..., M]) -> M:
     """The model from the local cache, or downloaded once if the cache does not hold it."""
     try:
         return load(local_files_only=True)

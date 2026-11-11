@@ -21,9 +21,9 @@ What a staff+ reader should notice
       `Literal` return annotation.
 """
 
-import pytest
-
 import json
+
+import pytest
 
 from findyfixy.triage.graph import build_graph
 from findyfixy.triage.record import TriageError
@@ -151,4 +151,3 @@ def test_one_model_never_escalates_to_itself(confidence: float) -> None:
     state = graph.invoke({"question": "anything"})
     assert calls == [SMALL]
     assert state["model_used"] == SMALL
-

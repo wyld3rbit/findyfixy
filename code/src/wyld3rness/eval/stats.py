@@ -71,6 +71,7 @@ def require_schema(built: Mapping[str, Any], schema: Sequence[str], what: str) -
         extra, missing = sorted(set(built) - set(schema)), sorted(set(schema) - set(built))
         raise RuntimeError(f"{what} drifted from its schema: extra {extra}, missing {missing}")
 
+
 # A saved evaluation report: provenance, aggregates, cases and timing.
 Report = dict[str, Any]
 
@@ -127,8 +128,8 @@ def bootstrap_ci(
     rng = random.Random(seed)
     means = sorted(sum(rng.choices(values, k=n)) / n for _ in range(resamples))
     tail = (1 - confidence) / 2
-    low = means[int(math.floor(tail * resamples))]
-    high = means[min(resamples - 1, int(math.ceil((1 - tail) * resamples)) - 1)]
+    low = means[math.floor(tail * resamples)]
+    high = means[min(resamples - 1, math.ceil((1 - tail) * resamples) - 1)]
     return (low, high)
 
 

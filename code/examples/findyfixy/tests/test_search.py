@@ -28,8 +28,14 @@ def test_queries_get_the_instruction_and_documents_do_not() -> None:
     embed_query(spy, "  certificate rotation  ")
     assert seen == [QUERY_PREFIX + "certificate rotation"]
     row = {
-        "id": "INC-1", "service": "auth", "severity": "sev1", "date": "2026-01-01",
-        "summary": "s", "timeline": "t", "root_cause": "r", "remediation": "m",
+        "id": "INC-1",
+        "service": "auth",
+        "severity": "sev1",
+        "date": "2026-01-01",
+        "summary": "s",
+        "timeline": "t",
+        "root_cause": "r",
+        "remediation": "m",
     }
     assert not any(c.embed_text.startswith(QUERY_PREFIX) for c in chunk_incident(row))
 

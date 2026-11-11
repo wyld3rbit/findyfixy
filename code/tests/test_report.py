@@ -15,6 +15,7 @@ What a staff+ reader should notice
 import json
 import os
 from pathlib import Path
+import re
 from typing import Any
 
 import pytest
@@ -23,13 +24,13 @@ from wyld3rness.eval import report as er
 from wyld3rness.eval.report import (
     BaselineMissing,
     BaselineRefused,
+    case_differences,
+    compare_reports,
     format_case,
     format_table,
     freeze_baseline,
     gate,
     load_baseline,
-    case_differences,
-    compare_reports,
     show_case,
     write_baseline,
     write_report,
@@ -42,19 +43,23 @@ def stat(mean: float | None, ci: list[float] | None = None, rate: float = 0.0) -
     return {"mean": mean, "ci": ci, "n_scored": 30, "n_failed": 0, "failure_rate": rate}
 
 
-def report_with(means: dict[str, tuple[float, list[float]]], rate: float = 0.0, errors: int = 0,
-                prov: dict[str, Any] | None = None) -> dict[str, Any]:
+def report_with(
+    means: dict[str, tuple[float, list[float]]], rate: float = 0.0, errors: int = 0, prov: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """A report with these overall means, failure rate and run errors, and nothing else."""
     scores = {n: stat(m, ci, rate) for n, (m, ci) in means.items()}
     cases = [{"id": f"g{i}", "group": "a", "run_error": "boom"} for i in range(errors)]
     overall = {"n": 30, "n_run_errors": errors, "scores": scores, "median_latency_s": 12.0}
-    return {"provenance": prov or dict(PROV), "aggregates": {"overall": overall, "a": overall},
-            "cases": cases}
+    return {"provenance": prov or dict(PROV), "aggregates": {"overall": overall, "a": overall}, "cases": cases}
 
 
-GOOD = {"kind_match": (0.8, [0.7, 0.9]), "faithfulness": (0.8, [0.7, 0.9]),
-        "response_relevancy": (0.8, [0.7, 0.9]), "context_recall": (0.8, [0.7, 0.9]),
-        "action_quality": (0.8, [0.7, 0.9])}
+GOOD = {
+    "kind_match": (0.8, [0.7, 0.9]),
+    "faithfulness": (0.8, [0.7, 0.9]),
+    "response_relevancy": (0.8, [0.7, 0.9]),
+    "context_recall": (0.8, [0.7, 0.9]),
+    "action_quality": (0.8, [0.7, 0.9]),
+}
 
 
 def baseline_for(report: dict[str, Any], tmp_path: Path) -> dict[str, Any]:
@@ -113,11 +118,10 @@ def test_any_run_error_fails_and_names_the_case(tmp_path: Path) -> None:
     assert len(problems) == 1 and "run error" in problems[0] and "g0: boom" in problems[0]
 
 
-@pytest.mark.parametrize("key,value", [("judge_digest", "d2"), ("prompt_versions", {"m": "h2"}),
-                                       ("golden_sha256", "g2")])
-def test_incomparable_baseline_says_rebaseline_and_skips_the_comparison(
-    tmp_path: Path, key: str, value: Any
-) -> None:
+@pytest.mark.parametrize(
+    "key,value", [("judge_digest", "d2"), ("prompt_versions", {"m": "h2"}), ("golden_sha256", "g2")]
+)
+def test_incomparable_baseline_says_rebaseline_and_skips_the_comparison(tmp_path: Path, key: str, value: Any) -> None:
     """A changed judge, prompt or golden set makes the means meaningless to compare."""
     base = baseline_for(report_with(GOOD), tmp_path)
     terrible = {n: (0.1, [0.0, 0.2]) for n in GOOD}  # would breach floors and regress
@@ -157,7 +161,7 @@ def test_missing_baseline_is_a_clear_error_that_names_the_command(tmp_path: Path
     """The error names the fix, with the app's own command when given."""
     with pytest.raises(BaselineMissing, match="--write-baseline"):
         load_baseline(tmp_path / "nope.json")
-    with pytest.raises(BaselineMissing, match="`python -m my.app --write-baseline`"):
+    with pytest.raises(BaselineMissing, match=re.escape("`python -m my.app --write-baseline`")):
         load_baseline(tmp_path / "nope.json", command="python -m my.app")
 
 
@@ -179,8 +183,14 @@ def test_write_baseline_sets_floors_from_the_overall_means(tmp_path: Path) -> No
 
 def test_the_baseline_keeps_the_apps_provenance_and_drops_the_per_run_keys(tmp_path: Path) -> None:
     """App keys reach the baseline; dirty flag, bootstrap and control keys do not."""
-    prov = {**PROV, "fake_model": "m1", "git_dirty": False, "bootstrap_seed": 17,
-            "bootstrap_resamples": 1000, "negative_control": False}
+    prov = {
+        **PROV,
+        "fake_model": "m1",
+        "git_dirty": False,
+        "bootstrap_seed": 17,
+        "bootstrap_resamples": 1000,
+        "negative_control": False,
+    }
     write_baseline(report_with(GOOD, prov=prov), tmp_path / "b.json")
     kept = json.loads((tmp_path / "b.json").read_text())["provenance"]
     assert set(kept) == {*PROV, "fake_model"} - {"git_dirty"}
@@ -205,10 +215,8 @@ def test_an_apps_legacy_control_flag_is_refused_and_kept_out_of_the_baseline(tmp
     """The app names its old flag; the harness itself names none."""
     legacy = {"old_flag": False}
     with pytest.raises(BaselineRefused, match="negative control"):
-        write_baseline(report_with(GOOD, prov={**PROV, "old_flag": False}), tmp_path / "b.json",
-                       legacy_control=legacy)
-    write_baseline(report_with(GOOD, prov={**PROV, "old_flag": True}), tmp_path / "b.json",
-                   legacy_control=legacy)
+        write_baseline(report_with(GOOD, prov={**PROV, "old_flag": False}), tmp_path / "b.json", legacy_control=legacy)
+    write_baseline(report_with(GOOD, prov={**PROV, "old_flag": True}), tmp_path / "b.json", legacy_control=legacy)
     assert "old_flag" not in json.loads((tmp_path / "b.json").read_text())["provenance"]
     # Without the hook the same key is just provenance: copied, and no refusal.
     write_baseline(report_with(GOOD, prov={**PROV, "old_flag": False}), tmp_path / "c.json")
@@ -242,6 +250,7 @@ def test_report_is_written_under_a_timestamped_name(tmp_path: Path) -> None:
 
 def test_report_write_is_atomic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed rename leaves no target and no temp file."""
+
     def boom(src: str, dst: Any) -> None:
         """A rename that fails, as on a full disk."""
         raise OSError("disk full at rename")
@@ -285,8 +294,10 @@ def test_table_does_not_crash_on_empty_or_single_case_runs() -> None:
 def test_table_rows_follow_the_cases_and_columns_follow_the_scores() -> None:
     """Rows in group order of first appearance; columns from the scores and app extras."""
     lines = format_table(run([case("g1", "b"), case("g2", "a")])).splitlines()
-    assert lines[0] == ("| group | n | kind_match | faithfulness | response_relevancy | context_recall "
-                        "| action_quality | ran_rate | median_s | run_err |")
+    assert lines[0] == (
+        "| group | n | kind_match | faithfulness | response_relevancy | context_recall "
+        "| action_quality | ran_rate | median_s | run_err |"
+    )
     assert [line.split(" | ")[0] for line in lines[2:]] == ["| overall", "| b", "| a"]
 
 
@@ -307,10 +318,22 @@ def test_show_case_prints_everything_needed_to_check_a_score(tmp_path: Path, cap
     path = saved_report(tmp_path)
     assert show_case("g1", path, tmp_path) == 0
     out = capsys.readouterr().out
-    for needle in ("g1  a", "ALERT      question g1", "REFERENCE  Root cause", "LABEL      kind: expected x, answered x  MATCH",
-                   "META       source_id: S", "           model_used: small", "ANSWER", "faithfulness:",
-                   "response_relevancy:", "context_recall:", "[x] it is auth", "SEEN BY THE MODEL",
-                   "action_quality: 1.000", "helpful  -- fake"):
+    for needle in (
+        "g1  a",
+        "ALERT      question g1",
+        "REFERENCE  Root cause",
+        "LABEL      kind: expected x, answered x  MATCH",
+        "META       source_id: S",
+        "           model_used: small",
+        "ANSWER",
+        "faithfulness:",
+        "response_relevancy:",
+        "context_recall:",
+        "[x] it is auth",
+        "SEEN BY THE MODEL",
+        "action_quality: 1.000",
+        "helpful  -- fake",
+    ):
         assert needle in out, needle
 
 
@@ -335,11 +358,22 @@ def test_show_case_with_an_unknown_id_or_no_report_is_a_clear_error(tmp_path: Pa
 
 def test_the_viewer_survives_a_run_error_and_a_failed_metric() -> None:
     """Partial records still print."""
-    errored = {"id": "g1", "group": "a", "run_error": "RuntimeError: boom", "latency_s": 0.1,
-               "question": "q", "reference": "r"}
+    errored = {
+        "id": "g1",
+        "group": "a",
+        "run_error": "RuntimeError: boom",
+        "latency_s": 0.1,
+        "question": "q",
+        "reference": "r",
+    }
     assert "RUN ERROR  RuntimeError: boom" in format_case(errored)
-    failed = {**errored, "run_error": None, "answer": "a", "contexts": [],
-              "metrics": {"faithfulness": {"score": None, "failed": True, "trace": []}}}
+    failed = {
+        **errored,
+        "run_error": None,
+        "answer": "a",
+        "contexts": [],
+        "metrics": {"faithfulness": {"score": None, "failed": True, "trace": []}},
+    }
     out = format_case(failed)
     assert "faithfulness: FAILED" in out and "(no context)" in out
 

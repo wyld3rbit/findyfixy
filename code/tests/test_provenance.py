@@ -6,8 +6,8 @@ What these tests cover
     directory the caller names.
 """
 
-import subprocess
 from pathlib import Path
+import subprocess
 from typing import Any
 
 import pytest
@@ -21,8 +21,13 @@ from wyld3rness.testing import NOW
 def provenance(**over: Any) -> dict[str, Any]:
     """`build_provenance` with fakes; keyword arguments override them."""
     args: dict[str, Any] = dict(
-        judge_model="qwen2.5:7b", digest=lambda m: "dig-" + m, golden_sha256="gold",
-        describe={"small_model": "s", "threshold": 0.7}, git=lambda: ("abc1234", False), now=lambda: NOW)
+        judge_model="qwen2.5:7b",
+        digest=lambda m: "dig-" + m,
+        golden_sha256="gold",
+        describe={"small_model": "s", "threshold": 0.7},
+        git=lambda: ("abc1234", False),
+        now=lambda: NOW,
+    )
     args.update(over)
     return build_provenance(**args)
 

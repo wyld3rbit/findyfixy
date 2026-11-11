@@ -15,8 +15,8 @@ import math
 
 import pytest
 
-import wyld3rness.eval.metrics as metrics
 from wyld3rness.eval.judge import JudgeError
+import wyld3rness.eval.metrics as metrics
 from wyld3rness.eval.metrics import (
     ACTION_SCORES,
     PROMPT_VERSIONS,
@@ -62,9 +62,7 @@ def verdicts(*flags):
 
 
 def test_faithfulness_two_of_three_supported():
-    judge = FakeJudge(
-        {Claims: [Claims(claims=["a", "b", "c"])], Verdict: verdicts(True, False, True)}
-    )
+    judge = FakeJudge({Claims: [Claims(claims=["a", "b", "c"])], Verdict: verdicts(True, False, True)})
     result = faithfulness(judge, "ans", ["ctx one", "ctx two"])
     assert result.failed is False
     assert result.score == pytest.approx(2 / 3)
@@ -324,7 +322,7 @@ def test_the_splitter_is_part_of_the_context_recall_version():
     """Change how sentences are cut and the report must show the metric changed."""
     import hashlib
 
-    from wyld3rness.eval.metrics import ATTRIBUTION_PROMPT, PROMPT_VERSIONS, _SENTENCE_END
+    from wyld3rness.eval.metrics import _SENTENCE_END, ATTRIBUTION_PROMPT, PROMPT_VERSIONS
 
     expected = hashlib.sha256("\x1f".join([ATTRIBUTION_PROMPT, _SENTENCE_END.pattern]).encode()).hexdigest()
     assert PROMPT_VERSIONS["context_recall"] == expected
@@ -362,4 +360,3 @@ def test_an_unknown_rating_is_rejected_by_the_schema() -> None:
 
 def test_action_scores_cover_every_rating() -> None:
     assert set(ACTION_SCORES) == {"helpful", "partial", "unhelpful"}
-

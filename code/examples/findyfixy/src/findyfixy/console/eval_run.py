@@ -89,9 +89,7 @@ class EvalResult:
 class EvalRun(Protocol):
     """One eval run of the first `n` cases. App events go to `emit`, harness events to `on_event`."""
 
-    def __call__(
-        self, n: int, *, emit: Emit, on_event: EvalEmit, should_stop: Callable[[], bool]
-    ) -> EvalResult:
+    def __call__(self, n: int, *, emit: Emit, on_event: EvalEmit, should_stop: Callable[[], bool]) -> EvalResult:
         """Run the cases and return the report. Writes no file. Raises `EvalStopped` on a stop."""
         ...
 
@@ -181,7 +179,7 @@ def run_and_judge(
     except EvalStopped as err:
         on_event("eval_failed", error_type="EvalStopped", error=str(err), reason="stopped")
         return
-    except Exception as err:  # noqa: BLE001 - the viewer must hear about it
+    except Exception as err:
         on_event("eval_failed", error_type=type(err).__name__, error=str(err), reason="error")
         return
     on_event("eval_finished", summary=score_summary(result.report), gate=problems, subset=result.subset)

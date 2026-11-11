@@ -37,27 +37,26 @@ Test it:  uv run pytest
 """
 
 import asyncio
+from collections.abc import Callable
 import os
 import sys
 import time
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage
-from langgraph.graph.state import CompiledStateGraph
 
+from findyfixy.mcp.client import per_call_tools, persistent_tools
 from findyfixy.tools.direct_run import (
     DEFAULT_RUNS,
     HEADER,
     TASK,
     RunStats,
-    record_run,
     format_row,
+    record_run,
     stats_from,
     summarise,
 )
-from findyfixy.tools.investigate import build_investigator
-from findyfixy.mcp.client import per_call_tools, persistent_tools
+from findyfixy.tools.investigate import Investigator, build_investigator
 
 if TYPE_CHECKING:
     from wyld3rness.trace.command import CommandTrace
@@ -73,7 +72,7 @@ LABELS = {
 
 
 async def arun_once(
-    investigator: CompiledStateGraph,
+    investigator: Investigator,
     question: str = TASK,
     *,
     clock: Callable[[], float] = time.perf_counter,
@@ -95,9 +94,7 @@ async def run_mode(mode: str, runs: int, model_name: str, command: "CommandTrace
     t0 = time.perf_counter()
     async with OPENERS[mode]() as tools:
         startup = time.perf_counter() - t0
-        investigator = build_investigator(
-            ChatOllama(model=model_name).bind_tools(tools), tools
-        )
+        investigator = build_investigator(ChatOllama(model=model_name).bind_tools(tools), tools)
         print(f"model: {model_name}   transport: MCP over stdio, {LABELS[mode]}")
         print(f"task: {TASK}")
         print(f"server startup (spawn, initialize, list tools): {startup:.2f}s, once")
@@ -118,7 +115,7 @@ async def run_mode(mode: str, runs: int, model_name: str, command: "CommandTrace
     )
 
 
-async def _step(command: "CommandTrace", name: str, investigator: CompiledStateGraph) -> RunStats:
+async def _step(command: "CommandTrace", name: str, investigator: Investigator) -> RunStats:
     """One run, as a step of the command's trace (a no-op step with tracing off)."""
     with command.step(name) as step:
         stats = await arun_once(investigator)

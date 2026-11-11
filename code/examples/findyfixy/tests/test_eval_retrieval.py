@@ -51,7 +51,9 @@ def test_each_retriever_is_warmed_up_once_and_the_warm_up_is_not_scored() -> Non
 
 
 def test_the_table_has_a_row_per_retriever_and_group() -> None:
-    results = evaluate_all({"a": lambda t, k: ["1"], "b": lambda t, k: []}, [q("x", "token", "1"), q("y", "meaning", "1")])
+    results = evaluate_all(
+        {"a": lambda t, k: ["1"], "b": lambda t, k: []}, [q("x", "token", "1"), q("y", "meaning", "1")]
+    )
     table = format_table(results)
     assert table.count("\n") + 1 == 2 + 2 * 3
     assert "| a | all | 2 | 1.00 |" in table and "| b | token | 1 | 0.00 |" in table

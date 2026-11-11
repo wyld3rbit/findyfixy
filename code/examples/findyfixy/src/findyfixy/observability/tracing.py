@@ -18,7 +18,7 @@ Why a module of its own, next to `findyfixy.wiring`
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
@@ -26,11 +26,12 @@ from wyld3rness.trace.tracing import EXPORT_TIMEOUT_S
 
 if TYPE_CHECKING:
     from wyld3rness.trace.command import CommandTrace
+    from wyld3rness.trace.spans import Attributes
     from wyld3rness.trace.tracing import Tracing
 
 
 @contextmanager
-def open_tracing(*, export_timeout_s: float = EXPORT_TIMEOUT_S) -> "Iterator[Tracing | None]":
+def open_tracing(*, export_timeout_s: float = EXPORT_TIMEOUT_S) -> Iterator[Tracing | None]:
     """The process's tracer provider from settings, or None when tracing is off; closed at the end.
 
     It loads `code/.env` first, so every entry point honours the same tracing
@@ -54,8 +55,7 @@ def open_tracing(*, export_timeout_s: float = EXPORT_TIMEOUT_S) -> "Iterator[Tra
 
 
 @contextmanager
-def command_trace(name: str, *, input: object = None,
-                  attributes: "Mapping[str, object] | None" = None) -> "Iterator[CommandTrace]":
+def command_trace(name: str, *, input: object = None, attributes: Attributes | None = None) -> Iterator[CommandTrace]:
     """One command as one trace, on a provider of its own. A no-op `CommandTrace` with tracing off."""
     from wyld3rness.trace.command import CommandTrace
 

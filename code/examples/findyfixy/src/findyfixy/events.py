@@ -32,7 +32,7 @@ Failure modes and what changes at scale
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol, TypeVar
+from typing import Any, Literal, Protocol
 
 EventKind = Literal[
     "run_started",
@@ -83,10 +83,7 @@ def no_emit(kind: EventKind, /, **data: Any) -> None:
     """The default `Emit`: report nothing. Lets callers skip the argument."""
 
 
-E = TypeVar("E")
-
-
-def make_stamped_emit(
+def make_stamped_emit[E](
     sink: Callable[[E], None],
     clock: Callable[[], float],
     event: Callable[[Any, float, dict[str, Any]], E],

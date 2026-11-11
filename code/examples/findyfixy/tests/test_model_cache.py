@@ -29,6 +29,7 @@ def test_a_cache_miss_downloads_once() -> None:
 
 def test_any_other_error_stops_the_load() -> None:
     """Only a miss falls back; a bug or a bad file is not retried online."""
+
     def load(local_files_only: bool) -> str:
         """Fail with something that is not a cache miss."""
         raise ValueError("model dimension does not match")

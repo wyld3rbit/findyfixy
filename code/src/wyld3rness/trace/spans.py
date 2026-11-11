@@ -47,7 +47,7 @@ What changes at scale
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 import json
 from typing import TYPE_CHECKING, Any, Literal
@@ -99,10 +99,8 @@ def _restore(token: Any, detach: Any) -> None:
     if var is None:
         detach(token)
         return
-    try:
+    with suppress(ValueError):  # made in a context copy that no longer exists: nothing to restore
         var.reset(token)
-    except ValueError:
-        pass  # made in a context copy that no longer exists: nothing to restore
 
 
 def as_text(value: Any) -> str:
@@ -147,13 +145,15 @@ class _Open:
 class SpanTree:
     """The spans of one run. Build one per run; see the module notes."""
 
+    _root: Span  # declared here: `__init__` reads a parent tree's root before setting its own
+
     def __init__(
         self,
         tracer: Tracer,
         name: str,
         *,
         attributes: Attributes | None = None,
-        input: Any = None,  # noqa: A002 - the backend's word for it
+        input: Any = None,
         parent: SpanTree | None = None,
     ) -> None:
         """Start this tree's top span now.
@@ -165,7 +165,8 @@ class SpanTree:
         joins.
         """
         # Resolved once per run, not per span: the run's thread makes every span.
-        from opentelemetry import context as otel_context, trace
+        from opentelemetry import context as otel_context
+        from opentelemetry import trace
 
         self._attach = otel_context.attach
         self._detach = otel_context.detach
@@ -237,7 +238,7 @@ class SpanTree:
         *,
         kind: SpanKind = "span",
         attributes: Attributes | None = None,
-        input: Any = None,  # noqa: A002
+        input: Any = None,
         under: str | None = None,
         current: bool = False,
     ) -> None:
@@ -334,12 +335,16 @@ class Generation:
         response_model: str | None = None,
     ) -> None:
         """Record the reply and what the server reported about it."""
-        self._span.set_attributes(_clean({
-            LF_OUTPUT: as_text(output),
-            GEN_AI_INPUT_TOKENS: input_tokens,
-            GEN_AI_OUTPUT_TOKENS: output_tokens,
-            GEN_AI_RESPONSE_MODEL: response_model,
-        }))
+        self._span.set_attributes(
+            _clean(
+                {
+                    LF_OUTPUT: as_text(output),
+                    GEN_AI_INPUT_TOKENS: input_tokens,
+                    GEN_AI_OUTPUT_TOKENS: output_tokens,
+                    GEN_AI_RESPONSE_MODEL: response_model,
+                }
+            )
+        )
 
 
 @contextmanager
@@ -350,10 +355,16 @@ def generation(tracer: Tracer, model: str, prompt: Any, *, name: str | None = No
     harness's judge. An exception in the block marks the span as failed and
     is re-raised.
     """
-    span = tracer.start_span(name or f"model {model}", attributes={
-        LF_TYPE: "generation", GEN_AI_OPERATION: "chat",
-        GEN_AI_PROVIDER: "ollama", GEN_AI_REQUEST_MODEL: model, LF_INPUT: as_text(prompt),
-    })
+    span = tracer.start_span(
+        name or f"model {model}",
+        attributes={
+            LF_TYPE: "generation",
+            GEN_AI_OPERATION: "chat",
+            GEN_AI_PROVIDER: "ollama",
+            GEN_AI_REQUEST_MODEL: model,
+            LF_INPUT: as_text(prompt),
+        },
+    )
     try:
         yield Generation(span)
     except BaseException as err:

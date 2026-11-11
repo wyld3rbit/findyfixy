@@ -73,9 +73,11 @@ class TraceConfig:
 
     def __repr__(self) -> str:
         """Everything but the secret."""
-        return (f"TraceConfig(host={self.host!r}, public_key={self.public_key!r}, "
-                f"secret_key='***', service_name={self.service_name!r}, user_id={self.user_id!r}, "
-                f"project_id={self.project_id!r})")
+        return (
+            f"TraceConfig(host={self.host!r}, public_key={self.public_key!r}, "
+            f"secret_key='***', service_name={self.service_name!r}, user_id={self.user_id!r}, "
+            f"project_id={self.project_id!r})"
+        )
 
     def trace_url(self, trace_id: str) -> str | None:
         """Where the backend's web page shows one trace, or None when the project is not known."""
@@ -100,7 +102,7 @@ class TraceConfig:
         data = json.dumps(body).encode() if body is not None else None
         headers = {**self.headers, "Content-Type": "application/json"}
         request = urllib.request.Request(self.host.rstrip("/") + path, data=data, headers=headers, method=method)
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:  # noqa: S310 - our configured host
+        with urllib.request.urlopen(request, timeout=timeout_s) as response:
             raw = response.read()
         return json.loads(raw) if raw else None
 
@@ -125,8 +127,9 @@ class Tracing:
         self.config = config  # what scores (scores.py) are sent with: the same backend and keys
 
     @classmethod
-    def start(cls, config: TraceConfig, exporter: SpanExporter | None = None,
-              export_timeout_s: float = EXPORT_TIMEOUT_S) -> Tracing:
+    def start(
+        cls, config: TraceConfig, exporter: SpanExporter | None = None, export_timeout_s: float = EXPORT_TIMEOUT_S
+    ) -> Tracing:
         """Build the provider and its export thread. `exporter` replaces OTLP in tests.
 
         `export_timeout_s` bounds each export and so the wait in `close`. A
@@ -149,13 +152,15 @@ class Tracing:
             endpoint=config.endpoint, headers=config.headers, timeout=export_timeout_s
         )
         provider.add_span_processor(_trace_user(config.user_id))
-        provider.add_span_processor(BatchSpanProcessor(
-            sender,
-            max_queue_size=MAX_QUEUE,
-            schedule_delay_millis=SCHEDULE_DELAY_MS,
-            max_export_batch_size=MAX_BATCH,
-            export_timeout_millis=export_timeout_s * 1000,
-        ))
+        provider.add_span_processor(
+            BatchSpanProcessor(
+                sender,
+                max_queue_size=MAX_QUEUE,
+                schedule_delay_millis=SCHEDULE_DELAY_MS,
+                max_export_batch_size=MAX_BATCH,
+                export_timeout_millis=export_timeout_s * 1000,
+            )
+        )
         return cls(provider, config)
 
     def tracer(self) -> Tracer:

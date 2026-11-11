@@ -21,12 +21,12 @@ What a staff+ reader should notice
 import json
 from pathlib import Path
 
-import pytest
 from langchain_core.messages import AIMessage
+import pytest
 
+from findyfixy.tools.deploys import make_deploys_tool
 from findyfixy.tools.direct_run import RunStats, is_correct, run_once, summarise
 from findyfixy.tools.investigate import build_investigator
-from findyfixy.tools.deploys import make_deploys_tool
 
 
 @pytest.fixture
@@ -45,8 +45,7 @@ def call(args: dict, id: str = "c1") -> dict:
 
 
 def ai(content: str = "", calls=None, tokens=(10, 5)) -> AIMessage:
-    usage = {"input_tokens": tokens[0], "output_tokens": tokens[1],
-             "total_tokens": sum(tokens)}
+    usage = {"input_tokens": tokens[0], "output_tokens": tokens[1], "total_tokens": sum(tokens)}
     return AIMessage(content=content, tool_calls=calls or [], usage_metadata=usage)
 
 

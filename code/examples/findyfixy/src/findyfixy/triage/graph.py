@@ -46,14 +46,14 @@ Run it:   uv run findyfixy-triage
 Test it:  uv run pytest
 """
 
+from collections.abc import Callable, Mapping, Sequence
+from itertools import pairwise
 import time
-from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Literal, TypedDict
-
-from langgraph.graph import END, StateGraph
-from langgraph.graph.state import CompiledStateGraph
+from typing import TYPE_CHECKING, Literal, Protocol, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from findyfixy.events import Emit, no_emit
 
@@ -61,13 +61,12 @@ if TYPE_CHECKING:
     from contextlib import AbstractContextManager
 
     from findyfixy.observability.adapter import EventSpans
-from findyfixy.tools.investigate import analyse, content_text, format_evidence, investigation_prompt
 from findyfixy.llm import ollama_ask
 from findyfixy.settings import MissingEnvironment, load_env, read_models
+from findyfixy.tools.investigate import Investigator, analyse, content_text, format_evidence, investigation_prompt
 from findyfixy.triage.record import (
     Ask,
     Prior,
-    Reply,
     Triage,
     TriageError,
     ask_validated,
@@ -117,6 +116,16 @@ class S(TypedDict, total=False):
     prior: str
 
 
+class Node(Protocol):
+    """A graph node: state in, state update out. LangGraph matches nodes by the parameter name `state`."""
+
+    def __call__(self, state: S) -> S: ...
+
+
+# The compiled router, typed by its state.
+TriageGraph = CompiledStateGraph[S, None, S, S]
+
+
 def build_graph(
     ask: Ask,
     *,
@@ -124,10 +133,10 @@ def build_graph(
     large_model: str,
     threshold: float = THRESHOLD,
     emit: Emit = no_emit,
-    investigator: CompiledStateGraph | None = None,
+    investigator: Investigator | None = None,
     investigate_model: str | None = None,
     recall: Recall | None = None,
-) -> CompiledStateGraph:
+) -> TriageGraph:
     """Wire the router and return a compiled graph, ready for `.invoke()`.
 
     Nothing runs here. Compiling validates the wiring (every edge points at a
@@ -163,6 +172,7 @@ def build_graph(
         down: a retry here would hide it. The exit event lists the incident IDs
         so the page and the log show what the model was given.
         """
+        assert recall is not None  # wired only when recall is set; this narrows the type
         emit("node_entered", node="recall", model=None)
         items = list(recall(state["question"]))
         emit(
@@ -188,10 +198,9 @@ def build_graph(
         The node's exit event carries the whole step's cost, because this step
         adds model calls to every run, even one that ends with no lookup.
         """
+        assert investigator is not None  # wired only when an investigator is set
         emit("node_entered", node="investigate", model=investigate_model)
-        messages: list[BaseMessage] = [
-            HumanMessage(investigation_prompt(state["question"]))
-        ]
+        messages: list[BaseMessage] = [HumanMessage(investigation_prompt(state["question"]))]
         turn = 1
         emit("model_request", model=investigate_model, attempt=turn)
         updates = investigator.stream({"messages": list(messages)}, stream_mode="updates")
@@ -232,7 +241,7 @@ def build_graph(
         if not isinstance(reply, AIMessage):
             return
         served_by = (reply.response_metadata or {}).get("model")
-        usage = reply.usage_metadata or {}
+        usage: Mapping[str, object] = reply.usage_metadata or {}
         emit(
             "model_reply",
             model=investigate_model,
@@ -246,7 +255,7 @@ def build_graph(
         for call in reply.tool_calls:
             emit("tool_call", name=call["name"], args=call["args"])
 
-    def make_node(name: str, model: str, *, tolerate_invalid: bool) -> Callable[[S], S]:
+    def make_node(name: str, model: str, *, tolerate_invalid: bool) -> Node:
         """Build a node that asks `model` and writes the result into state.
 
         `small` and `large` differ only in which model they call and in what
@@ -303,11 +312,11 @@ def build_graph(
         tooling and for the reader. `tests/test_routing.py` pins it.
         """
         if small_model == large_model:
-            return END
+            return "__end__"  # langgraph's END, spelled out so the Literal holds
         triage = state["triage"]
         if triage is None or triage.confidence < threshold:
             return "large"
-        return END
+        return "__end__"
 
     def decide(state: S) -> Literal["large", "__end__"]:
         """Run `route` and report the decision. Kept apart so `route` stays pure.
@@ -325,7 +334,7 @@ def build_graph(
         )
         return target
 
-    g = StateGraph(S)
+    g: StateGraph[S] = StateGraph(S)
     g.add_node("small", make_node("small", small_model, tolerate_invalid=True))
     g.add_node("large", make_node("large", large_model, tolerate_invalid=False))
     # Steps before the cheap model, in order: recall, then investigate. Each is
@@ -339,7 +348,7 @@ def build_graph(
         before.append("investigate")
     chain = [*before, "small"]
     g.set_entry_point(chain[0])  # without optional steps, the cheap model
-    for here, there in zip(chain, chain[1:]):
+    for here, there in pairwise(chain):
         g.add_edge(here, there)
     g.add_conditional_edges("small", decide)  # the decision point
     g.add_edge("large", END)  # a plain edge: after `large`, always stop
@@ -382,7 +391,7 @@ def main() -> None:
             _triage_one(graph, q, runs.run(q) if runs is not None else nullcontext())
 
 
-def _triage_one(graph: CompiledStateGraph, q: str, run: "AbstractContextManager[EventSpans | None]") -> None:
+def _triage_one(graph: TriageGraph, q: str, run: "AbstractContextManager[EventSpans | None]") -> None:
     """Run one question, end its run trace (when tracing), print the triage and latency."""
     with run as spans:
         start = time.perf_counter()
@@ -393,10 +402,7 @@ def _triage_one(graph: CompiledStateGraph, q: str, run: "AbstractContextManager[
         print(f"Q: {q}")
         t = result["triage"]
         print(f"A: {t.severity} | {t.component} | {t.next_action}")
-        print(
-            f"model: {result['model_used']} | confidence: {t.confidence} "
-            f"| latency: {latency:.1f}s\n"
-        )
+        print(f"model: {result['model_used']} | confidence: {t.confidence} | latency: {latency:.1f}s\n")
 
 
 if __name__ == "__main__":

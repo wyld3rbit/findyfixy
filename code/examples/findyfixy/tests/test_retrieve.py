@@ -16,9 +16,7 @@ from findyfixy.retrieval.retrieve import (
 )
 
 
-def passage(
-    incident: str, section: str, body: str, service: str = "auth", severity: str = "sev2"
-) -> Passage:
+def passage(incident: str, section: str, body: str, service: str = "auth", severity: str = "sev2") -> Passage:
     return Passage(f"{incident}:{section}", incident, section, service, severity, body)
 
 
@@ -59,7 +57,7 @@ def test_rrf_rewards_a_chunk_that_is_high_in_both_lists() -> None:
 
 
 def test_rrf_scores_follow_the_formula() -> None:
-    (item, score), = rrf([["x"], ["x"]], k=60)
+    ((item, score),) = rrf([["x"], ["x"]], k=60)
     assert item == "x" and score == pytest.approx(2 / 61)
 
 
@@ -189,7 +187,6 @@ def test_a_passage_with_an_unknown_severity_stops_loading(bad: str) -> None:
     """The column is plain text. A bad row must fail at load, not reach a prompt."""
     with pytest.raises(ValueError, match="unknown severity"):
         Passage("X:summary", "X", "summary", "auth", bad, "body")  # type: ignore[arg-type]
-
 
 
 def test_each_retrieval_stage_runs_inside_its_named_stage() -> None:
