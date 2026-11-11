@@ -12,6 +12,9 @@ Routes (GET only):
     /                    tracker.html
     /api/progress        record/progress.json, never cached
     /api/lesson/<n>      lesson n as HTML, rendered from its .md file
+    /api/adrs            the decision records: number, title, day (JSON)
+    /api/adr/<n>         record n as HTML, rendered from code/docs/adr/
+    /api/adr-img/<file>  a record's diagram, NNNN-architecture.svg only
     /assets/<path>       media under assets/, for lessons and the record
 
 Security. It binds to 127.0.0.1 only. It checks the Host header, so a web page
@@ -22,11 +25,13 @@ What changes at scale: this is a single-user tool. A shared deployment would
 need auth, TLS and a real web server in front.
 """
 
+import json
 import mimetypes
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import adrs
 from lessons import LESSON_NUMBERS, ROOT, render
 
 DEFAULT_PORT = 8766
@@ -95,6 +100,18 @@ def make_handler(port: int) -> type[BaseHTTPRequestHandler]:
                 if tail.isdecimal() and int(tail) in LESSON_NUMBERS:
                     return self._send(200, render(int(tail)).encode(), "text/html; charset=utf-8")
                 return self._text(404, "no such lesson")
+            if path == "/api/adrs":
+                return self._send(200, json.dumps(adrs.index()).encode(), "application/json")
+            if path.startswith("/api/adr/"):
+                tail = path.removeprefix("/api/adr/")
+                if tail.isdecimal() and int(tail) in adrs.records():
+                    return self._send(200, adrs.render(int(tail)).encode(), "text/html; charset=utf-8")
+                return self._text(404, "no such record")
+            if path.startswith("/api/adr-img/"):
+                found = adrs.image_path(path.removeprefix("/api/adr-img/"))
+                if found:
+                    return self._send(200, found.read_bytes(), "image/svg+xml")
+                return self._text(404, "no such image")
             if path.startswith("/assets/"):
                 found = asset_path(path.removeprefix("/assets/"))
                 if found:
