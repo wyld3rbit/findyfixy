@@ -697,6 +697,7 @@ An independent review of the risky parts (the attestation, paths, mypy-driven ed
 - `code/docs/strategy.md` (new): the engineering strategy drawn from ADRs 0001 to 0007. A diagnosis of how the system works today (self-reported confidence never triggered escalation; four gaps), six guiding policies with their trade-offs and source ADRs, and coherent actions: the invariants as enforcements (3 built, 6 planned), one escalation path, and the transitions in order. Each later ADR reports whether it held.
 - `code/docs/design.md` (new): the target shape the transitions move toward. Two planes (the agent as data plane, the harness as control plane), one request end to end, autonomy set per action class from evidence, and the ports an app plugs into. It links to the strategy for the invariants, so they are listed once.
 - Both linked from the top-level README and `code/docs/README.md`. No code changed.
+- Same day, after a consistency review: the strategy counts 7 modules that create a model client (2 harness, 5 app); each gap is recorded in its phase's ADR; the in-operation check lowers autonomy only once it exists. The design starts destructive actions at Level 2 and reversible ones at Level 3. Lessons 7 to 10 were rewritten from the strategy's transitions; `record/models.md` paths follow the workspace layout.
 
 ### Open items
 

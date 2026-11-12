@@ -540,14 +540,15 @@
       "n": 7,
       "week": 2,
       "date": "2026-11-12",
-      "title": "Security by design",
+      "title": "The trust boundary",
       "file": "lessons/d07.md",
-      "outcome": "Action policy, credential broker, injection suite",
+      "outcome": "Versioned data, a computed escalation signal, a policy checkpoint and scoped per-call tokens",
       "checks": [
-        "0 of 20 attacks succeed",
-        "Wrong-audience or expired token refused",
-        "Injection suite runs in pytest",
-        "Drill under 90s"
+        "Golden v1 scores unchanged",
+        "Escalation signal measured against its bar; rate stated against v1's 0%",
+        "0 unauthorized actions: fooled fake model in CI, and once live",
+        "Wrong-tool, wrong-resource or expired token refused",
+        "Every policy decision traced"
       ],
       "done": [],
       "status": "deck"
@@ -556,14 +557,15 @@
       "n": 8,
       "week": 2,
       "date": "2026-11-13",
-      "title": "Cost and context control",
+      "title": "One path to every model",
       "file": "lessons/d08.md",
-      "outcome": "Gateway budgets; cost per run down with quality held",
+      "outcome": "Every model call through one gateway: budget, routing, pins; cost cut lever by lever",
       "checks": [
-        "Lever table: cost and faithfulness",
-        "Cost per run down at least 30%",
-        "Budget refusal works",
-        "Drill under 90s"
+        "Architecture test: no model client outside the gateway",
+        "Budget refusal works and is traced",
+        "Swapped model behind an alias fails",
+        "Lever table against the baseline",
+        "Cost per run down 30% with the gate passing, or shortfall stated"
       ],
       "done": [],
       "status": "deck"
@@ -572,14 +574,14 @@
       "n": 9,
       "week": 2,
       "date": "2026-11-16",
-      "title": "Deploy and operate",
+      "title": "Operation",
       "file": "lessons/d09.md",
-      "outcome": "API and demo screen in containers, approval gate, drift eval, shadow mode",
+      "outcome": "Service with durable approval for destructive actions and scheduled evaluation in operation",
       "checks": [
-        "compose up; demo screen returns a triage",
-        "Rollback pauses; Approve resumes it",
-        "One nightly report exists",
-        "Shadow runs tagged in Langfuse"
+        "Destructive action waits for approval; approve twice runs once",
+        "Scheduled run below the gate alerts; drift report against the previous run",
+        "compose up; the screen returns a triage",
+        "Shadow runs tagged in traces"
       ],
       "done": [],
       "status": "deck"
@@ -588,14 +590,14 @@
       "n": 10,
       "week": 2,
       "date": "2026-11-17",
-      "title": "Capstone and show and tell",
+      "title": "Autonomy as policy",
       "file": "lessons/d10.md",
-      "outcome": "make demo, 3-minute live demo, 6 slides, one-page ADR",
+      "outcome": "Autonomy per action class from evidence, one-command demo from a fresh clone, the vision",
       "checks": [
-        "Fresh clone runs with make setup and make demo",
-        "3-minute demo rehearsed, backup recorded",
-        "ADR on one page, every claim has a number",
-        "5 drills under 90s each"
+        "Evidence changes the level; no manual raise",
+        "Fresh clone runs make setup and make demo",
+        "Vision on two pages; every enforcement built or deferred",
+        "3-minute demo rehearsed, backup recorded"
       ],
       "done": [],
       "status": "deck"
@@ -638,7 +640,7 @@
       "id": "bootstrap",
       "title": "One-command bootstrap",
       "status": "deck",
-      "note": "Deferred until the course is done. Needs a decision on installing Ollama."
+      "note": "Settled at the start of Day 10 (step 2): how a missing Ollama is handled without a hidden system install."
     },
     {
       "id": "article-rubric",

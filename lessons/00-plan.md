@@ -1,6 +1,6 @@
 # LLM Production Sprint
 
-10 days in a row. 10 sessions of about 2 hours. Sat 17 Oct to Mon 26 Oct 2026.
+10 sessions of about 2 hours, started Sat 17 Oct 2026. Each day's date is on the board.
 
 ## What you get out of it
 
@@ -8,7 +8,7 @@
 2. **A working repo.** A small autonomous event detection, determination and mitigation agent, end to end: design, memory, evals, guardrails, tracing, cost control, deploy.
 3. **A show and tell.** One command starts the whole stack. A demo screen, a 3-minute script and 6 slides, built on Day 10.
 4. **Decisions you can explain.** Each day ends with one drill: explain the day's decision in under 90 seconds, as "what I hold a team to", backed by a number you produced.
-5. **An architecture decision record.** One page: diagnosis, guiding policies, coherent actions.
+5. **A strategy you can act on.** A decision record per phase, an engineering strategy drawn from them (diagnosis, guiding policies, coherent actions), and a one-to-two-page vision.
 
 ## What it is not
 
@@ -28,14 +28,14 @@ Built to production standards, measured on your machine:
 | Cost | Cost per triage tracked; down 30% from baseline by Day 8 |
 | Safety | 0 of 20 injection attacks cause an unauthorised action |
 | Access | No long-lived secrets in the agent; per-call scoped tokens |
-| Operability | Every run traced; nightly regression eval; one-flip rollback |
+| Operability | Every run traced; scheduled evaluation in operation; approval before destructive actions |
 | Deploy | `make demo` starts the whole product from a fresh clone |
 
 ## Self-contained
 
-- **One setup.** Day 1 checks the tools already on your Mac and pulls two models. Nothing else is installed system-wide.
+- **One setup.** Day 1 checks the tools already on your Mac and pulls the models listed in `record/models.md`. Nothing else is installed system-wide.
 - **Everything else lives in `code/`.** Python packages go in its `.venv` through `uv`. Every service (Postgres with pgvector, Langfuse, LiteLLM, the API, the demo screen) runs from compose files inside the repo.
-- **Clean removal.** `make stop`, then delete the folder and `ollama rm` the two models. Nothing is left behind.
+- **Clean removal.** `make stop`, then delete the folder and `ollama rm` the models listed in `record/models.md`. Nothing is left behind.
 
 ## How it runs
 
@@ -57,10 +57,10 @@ Built to production standards, measured on your machine:
 | 5 | Evaluation | Golden set, RAGAS metrics, a CI gate that fails a bad change |
 | **Week 2: Ship** |||
 | 6 | Observability | Langfuse traces; cost, latency and token dashboards; OpenTelemetry GenAI fields |
-| 7 | Security by design | OWASP LLM Top 10 walk-through, injection tests, a scoped short-lived credential broker |
-| 8 | Cost and context control | Gateway budgets, caching, context limits, routing thresholds; before/after cost per run |
-| 9 | Deploy and operate | API and demo screen in containers, human-on-the-loop approval, scheduled regression eval |
-| 10 | Capstone and show and tell | One-command demo, the ADR, slides, a 3-minute live walkthrough |
+| 7 | The trust boundary | Versioned data, a computed escalation signal, a policy checkpoint before any action, scoped per-call tokens, an injection suite |
+| 8 | One path to every model | Every model call through one gateway (budget, routing, pins); cost cut lever by lever against a baseline |
+| 9 | Operation | The service and demo screen in containers, durable human approval for destructive actions, scheduled evaluation in operation |
+| 10 | Autonomy as policy | Autonomy per action class set from evidence, a one-command demo from a fresh clone, the vision, a 3-minute walkthrough |
 
 ## Open-source bill of materials
 
@@ -71,7 +71,7 @@ Everything that ships in the repo is open source. Python packages install into t
 | uv | Python environments, locked with hashes | MIT / Apache-2.0 |
 | Docker Compose | Runs every service from files in the repo | Apache-2.0 |
 | Ollama | Local model runtime | MIT |
-| Qwen2.5 1.5B and 7B | Small and large models | Apache-2.0 |
+| Qwen3 4B-instruct and 8B, Qwen2.5 7B | Answering models (small and large), judge | Apache-2.0 |
 | LangGraph, LangChain | Orchestration | MIT |
 | Postgres, pgvector | Database, vector search | PostgreSQL License |
 | sentence-transformers, BGE models | Embeddings, reranker | Apache-2.0, MIT |
@@ -85,12 +85,13 @@ Everything that ships in the repo is open source. Python packages install into t
 | LiteLLM proxy | Gateway, budgets, routing (open-source tier) | MIT |
 | MCP Python SDK | Tool protocol | MIT |
 | langchain-mcp-adapters | Connects MCP tools to LangChain and LangGraph | MIT |
-| FastAPI, PyJWT | API, credential broker | MIT |
+| FastAPI, uvicorn, PyJWT | API and its server, credential broker | MIT, BSD-3-Clause, MIT |
+| psycopg, langgraph-checkpoint-postgres | Postgres driver, durable run state for approval | LGPL-3.0, MIT |
 | Streamlit | Demo screen | Apache-2.0 |
 
 **Not open source, and not part of the shipped stack:** Claude Code, your build partner. Docker Desktop, if that is your container runtime (free for personal use); the repo runs the same on Colima. A hosted model (Claude or another) is an optional swap on Day 8 to compare cost and quality.
 
-**Two model choices made on purpose.** Qwen2.5 3B and 72B carry a separate Qwen license, so the course uses 1.5B and 7B, which also fit a 16 GB Mac. Llama models carry Meta's community license, so they are left out.
+**Model choices made on purpose.** Every model fits a 16 GB Mac and carries Apache-2.0. Qwen2.5 3B and 72B carry a separate Qwen license, so they are left out. Qwen3 4B-instruct answers, Qwen2.5 7B judges from an older generation, and Qwen3 8B is the large model for the escalation comparison. `record/models.md` holds the pulled IDs. Llama models carry Meta's community license, so they are left out.
 
 ## Install safety
 
@@ -103,7 +104,7 @@ Everything that ships in the repo is open source. Python packages install into t
 
 ## Hardware
 
-Built for your 16 GB Mac. The 7B model takes about 5 GB, the container runtime 6 GB (8 GB on Langfuse days), macOS the rest. Ollama loads one model at a time. Stop Langfuse when you are not using it, and close heavy apps during labs.
+Built for your 16 GB Mac. The largest model takes about 5 GB, the container runtime 6 GB (8 GB on Langfuse days), macOS the rest. Ollama loads one model at a time. Stop Langfuse when you are not using it, and close heavy apps during labs.
 
 ## Library drift
 
