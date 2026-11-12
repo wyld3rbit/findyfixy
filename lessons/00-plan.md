@@ -8,7 +8,7 @@
 2. **A working repo.** A small autonomous event detection, determination and mitigation agent, end to end: design, memory, evals, guardrails, tracing, cost control, deploy.
 3. **A show and tell.** One command starts the whole stack. A demo screen, a 3-minute script and 6 slides, built on Day 10.
 4. **Decisions you can explain.** Each day ends with one drill: explain the day's decision in under 90 seconds, as "what I hold a team to", backed by a number you produced.
-5. **An architecture decision record.** One page in Larson's format: diagnosis, guiding policies, coherent actions.
+5. **An architecture decision record.** One page: diagnosis, guiding policies, coherent actions.
 
 ## What it is not
 
