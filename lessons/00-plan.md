@@ -39,7 +39,7 @@ Built to production standards, measured on your machine:
 
 ## How it runs
 
-- **Read in the tracker.** Run `make ui` and open http://127.0.0.1:8766. Each day opens in place: concept, lab, drill, then the self-check you tick.
+- **Read in the tracker.** Run `make ui` and open http://127.0.0.1:8766. The board shows each day and task as a card in Deck, Doing or Done, with its date. Click a card for its lesson, decisions, decision record and the self-check you tick.
 - **Build in Claude Code.** In a terminal, `cd` into this folder, run `claude`, and say "start day 1". It follows `CLAUDE.md`: one step at a time, code in `code/`. It runs on your Mac, so it reaches your local Ollama and containers.
 - **Concept, then build, then explain.** You read why a component exists, build it, measure it, then say it aloud as a leader would. The number you measured is what makes the answer credible.
 - **Progress.** Claude Code keeps the record in `record/progress.json` as you pass each check, and logs every session. Your browser ticks are a convenience on top.
