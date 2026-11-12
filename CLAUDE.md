@@ -41,7 +41,7 @@ Check the lesson's Results section, `code/CHANGELOG.md` and `git log`, tell him 
 
 He runs the course with you alone. Keep the record true without being asked.
 
-- **Keep the board true.** Each day and each entry in `tasks` has a `status`: `deck`, `doing` or `done`. When work starts, set `doing` and `started`; when it closes, set `done` and `finished` (YYYY-MM-DD from `date`). New open work that is not a day goes in `tasks` with an `id`, `title`, optional `due` and a one-line `note`. Self-checks never move a card.
+- **Keep the board true.** Each day and each entry in `tasks` has a `status`: `deck`, `doing` or `done`. When work starts, set `doing` and `started`; when it closes, set `done` and `finished` (YYYY-MM-DD from `date`). New open work that is not a day goes in `tasks` with an `id`, `title`, optional `due` and a one-line `note`. Self-checks never move a card. At the end of every working day, unasked, bring every card up to date (status, dates, notes, new tasks, closed ones) and commit it.
 - **When a self-check item passes**, add its index (0-based, in the order listed) to that day's `done` in `record/progress.json`. Only after the evidence is in the lesson's Results section.
 - **At the end of each session**, append one log entry to `record/progress.json`: `{"date": "YYYY-MM-DD", "entry": "<what was done, one or two sentences, with the numbers>"}`. Set `updated` to today. Run `date` for the date; never guess it.
 - **At the close of each day**, write that day's ADR in `code/docs/adr/` in the shape described in `code/docs/adr/README.md`, add its row to the index, add the day to `PHASES` in `tools/adr_snapshot.py`, and run `make adr-snapshot`. `make check` fails if the page and the latest phase disagree.

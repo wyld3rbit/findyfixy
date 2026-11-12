@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-11",
+  "updated": "2026-11-12",
   "plannedStart": "2026-10-17",
   "plannedEnd": "2026-11-17",
   "countdownStart": "2026-10-17T18:51:00",
@@ -180,6 +180,10 @@
     {
       "date": "2026-11-11",
       "entry": "Tracker rebuilt as a board: Deck, Doing and Done columns from an explicit status on each day and on a new tasks list (15 cards: 10 days, 5 tasks), one date per card, details in a side panel. make check validates statuses and dates (12 new tests, 125 in tools)."
+    },
+    {
+      "date": "2026-11-12",
+      "entry": "Part 05 rewritten from a 63-fact sheet and a spine, measured on prose (sentence mean 10.0 to 14.9 words, very short sentences 27% to 10%), flow and accuracy by fresh agents, and the learner's read; scheduled for 2026-11-18. Plan wording reworded; strategy and design drafts await review."
     }
   ],
   "decisions": [
@@ -242,7 +246,7 @@
     {
       "date": "2026-10-26",
       "day": 5,
-      "decision": "README.md is written for recruiters and hiring managers: product first, measured numbers with their limits, built versus planned, decisions with rejected alternatives.",
+      "decision": "README.md is written for readers evaluating the work: product first, measured numbers with their limits, built versus planned, decisions with rejected alternatives.",
       "rejected": "README as course instructions",
       "why": "It is the proof of technical depth. Every claim must trace to a run in notes/ or to code."
     },
@@ -609,17 +613,20 @@
     {
       "id": "walkthrough",
       "title": "Walkthrough of Days 1 to 6",
-      "status": "doing",
+      "status": "done",
       "due": "2026-11-12",
-      "note": "Step by step through everything built since Day 1, with the reason for each decision. Days 1 to 5 covered; Day 6 next.",
-      "started": "2026-11-11"
+      "note": "Step by step through everything built on Days 1 to 6, with the reason for each decision.",
+      "started": "2026-11-11",
+      "finished": "2026-11-11"
     },
     {
       "id": "part05",
       "title": "Post part 05",
-      "status": "deck",
-      "due": "2026-11-24",
-      "note": "Ready: part 04's link filled, preview rebuilt, privacy check clean. Post on 2026-11-24 at 10:30 PT."
+      "status": "done",
+      "due": "2026-11-18",
+      "note": "Rewritten from a fact sheet and spine, measured on prose, flow, accuracy and the learner's read; scheduled on LinkedIn for Wed 2026-11-18 4:00 PM PT.",
+      "started": "2026-11-12",
+      "finished": "2026-11-12"
     },
     {
       "id": "lesson-review",
@@ -632,6 +639,18 @@
       "title": "One-command bootstrap",
       "status": "deck",
       "note": "Deferred until the course is done. Needs a decision on installing Ollama."
+    },
+    {
+      "id": "article-rubric",
+      "title": "Article quality rubric",
+      "status": "deck",
+      "note": "Script in blogs/_gen and bars in STYLE.md: flow, prose, accuracy, readability measured before each article. After Day 6 closes, before part 06."
+    },
+    {
+      "id": "vale",
+      "title": "Vale prose linter for articles",
+      "status": "deck",
+      "note": "Official Vale image pinned by digest and Grype-scanned; STYLE.md rules as YAML in blogs/styles; measure.py folds in its JSON. After part 05 is approved and Day 6 is reworked."
     }
   ]
 }
