@@ -16,7 +16,7 @@ The CI gate carries that verdict into pull requests. The eval gate needs live mo
 
 Tracing makes every run observable. Each run, eval case and command becomes an OpenTelemetry trace in a self-hosted Langfuse, with a span per step, the eval scores on their case, and a cost on every model call from a committed reference price table. Tracing never slows a run and never changes an answer or a score.
 
-The dashed boxes in the visualizer are the controls still to come: guardrails, a model gateway and human approval. `code/docs/adr/` holds one decision record per phase with the reasoning behind each choice.
+The dashed boxes in the visualizer are the controls still to come: guardrails, a model gateway and human approval. [`code/docs/strategy.md`](code/docs/strategy.md) is the engineering strategy behind them: a diagnosis of today, the guiding policies, and the invariants each control enforces. [`code/docs/design.md`](code/docs/design.md) is the target shape: the harness as a control plane, with autonomy set per action class from measured evidence. `code/docs/adr/` holds one decision record per phase with the reasoning behind each choice.
 
 ## The example app
 
