@@ -35,7 +35,7 @@ These are the invariants the harness holds for every request. A control counts a
 |---|---|---|---|
 | No change that can alter an answer ships without a passing, attested eval | 2, 3 | CI rehashes every answer-affecting file and fails a change no passing run covered | built |
 | Every request, model call, tool call and decision is a trace, with its eval scores attached | 3, 6 | Tests read the spans a run emits; a run with the backend down keeps its speed | built |
-| The harness never imports the app | 4 | An architecture test fails on any app import under the harness | built |
+| The harness never imports the app | 4 | A test fails if the harness imports anything but the standard library, its declared dependencies and itself | built |
 | Retrieved and user text is data, never instructions: no model output acts until deterministic policy approves it | 1 | An injection suite of attack prompts and poisoned incidents, with 0 unauthorized actions, in CI | planned |
 | No credential outlives one call or reaches beyond one tool and resource | 1, 3 | A token used on the wrong tool, resource or after expiry is refused | planned |
 | No model call bypasses the gateway, which enforces budget, routing and the model pins | 3, 5 | An architecture test fails if any module other than the gateway imports a model client | planned |
