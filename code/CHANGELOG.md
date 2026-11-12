@@ -692,6 +692,12 @@ An independent review of the risky parts (the attestation, paths, mypy-driven ed
 - `make audit` checks that the two allowed `.pth` files hold exactly their one `src/` line.
 - The compose file explains the one-time move from the old project `code`: `docker compose -p code down`, then `make up` and `make ingest`.
 
+### Strategy and target design (2026-11-12)
+
+- `code/docs/strategy.md` (new): the engineering strategy drawn from ADRs 0001 to 0007. A diagnosis of how the system works today (self-reported confidence never triggered escalation; four gaps), six guiding policies with their trade-offs and source ADRs, and coherent actions: the invariants as enforcements (3 built, 6 planned), one escalation path, and the transitions in order. Each later ADR reports whether it held.
+- `code/docs/design.md` (new): the target shape the transitions move toward. Two planes (the agent as data plane, the harness as control plane), one request end to end, autonomy set per action class from evidence, and the ports an app plugs into. It links to the strategy for the invariants, so they are listed once.
+- Both linked from the top-level README and `code/docs/README.md`. No code changed.
+
 ### Open items
 
 - Day 7 (decided 2026-11-10): harder incident data, versioned. Corpus v2 and golden v2 next to v1 (v1 frozen as a regression set), with no-precedent alerts, conflicting signals, cascades and raw noisy alert text; escalation gains a computed signal. Reason: 0 of 35 runs escalated on step 7, because the small model never reported a confidence below 0.7.
