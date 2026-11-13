@@ -53,6 +53,23 @@ make help             # everything else
 
 To try FindyFixy's two-model route, set `LARGE_MODEL` in `code/examples/findyfixy/.env` to a different model than `SMALL_MODEL`, for example `qwen3:8b`. With the same name on both, there is one model and no escalation. Secrets, if you add any, go in `code/examples/findyfixy/.env`, which is git-ignored.
 
+## Documentation
+
+How the system is designed and why:
+
+- [Engineering strategy](code/docs/strategy.md): the diagnosis, the guiding policies, the invariants each control enforces, and the order of the remaining work.
+- [Target design](code/docs/design.md): the harness as a control plane around the app, one request end to end, and autonomy per action class.
+- [Decision records](code/docs/adr/README.md): one per phase, each with the architecture as it stood.
+- [Architecture page](code/examples/findyfixy/src/findyfixy/console/static/architecture.html): built and planned components, and a live run (`make console`).
+- [Changelog](code/CHANGELOG.md): what changed in the code, step by step, and what is open.
+
+How the code is laid out:
+
+- [Workspace](code/README.md), [the harness package](code/src/wyld3rness/README.md) and [its tests](code/tests/README.md).
+- [FindyFixy](code/examples/findyfixy/README.md), with its [data](code/examples/findyfixy/data/README.md), [evaluation files](code/examples/findyfixy/evals/README.md) and [tests](code/examples/findyfixy/tests/README.md).
+- [Infrastructure](code/infra/README.md), [repository checks](tools/README.md), [git hooks](.githooks/README.md) and the [docs index](code/docs/README.md).
+- [Contributing](CONTRIBUTING.md).
+
 ## Disclaimer
 
 This software and its documentation are provided "AS IS", without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, accuracy and non-infringement. It is a research prototype and is not intended for production use or for decisions about real systems, incidents, safety or finances. Model outputs can be wrong, and the measurements here describe one setup on synthetic data.
