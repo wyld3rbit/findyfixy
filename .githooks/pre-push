@@ -2,15 +2,16 @@
 # Blocks a push whose commits contain PII or secrets, in files or in metadata,
 # or whose tree fails the project checks. Catches a commit made with --no-verify.
 # git passes the refs being pushed on stdin; the scanner reads them.
-# It also refuses any push whose commits touch blogs/, which is local only.
+# It also refuses any push whose commits add or change anything under internal/,
+# or a CLAUDE.md, which are local only. (Removing them, as was done once, is allowed.)
 set -e
 root=$(git rev-parse --show-toplevel)
 refs=$(cat)
 printf '%s\n' "$refs" | while read -r _ local_sha _ remote_sha; do
     case "$local_sha" in *[!0]*) ;; *) continue ;; esac
     case "$remote_sha" in *[!0]*) range="$remote_sha..$local_sha" ;; *) range="$local_sha --not --remotes" ;; esac
-    if git log --name-only --format= $range | grep -q '^blogs/'; then
-        echo "blocked: a commit in this push touches blogs/, which is local only and must never be pushed." >&2
+    if git log --diff-filter=AMR --name-only --format= $range | grep -q -E '^(internal/|CLAUDE\.md$)'; then
+        echo "blocked: a commit in this push adds or changes internal/ or CLAUDE.md, which are local only." >&2
         exit 1
     fi
 done
