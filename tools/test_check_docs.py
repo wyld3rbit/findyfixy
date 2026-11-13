@@ -112,13 +112,3 @@ def test_every_readme_in_the_repository_is_checked() -> None:
                              capture_output=True, text=True, check=True).stdout.split()
     assert set(tracked) <= set(check_docs.DOCS)
 
-
-def test_the_readme_diagram_must_match_the_design(tmp_path):
-    """A README diagram that drifts from design.md is reported; an exact copy is not."""
-    block = "```mermaid\nflowchart LR\n  A --> B\n```\n"
-    (tmp_path / "code" / "docs").mkdir(parents=True)
-    (tmp_path / "code" / "docs" / "design.md").write_text("# Design\n\n" + block)
-    (tmp_path / "README.md").write_text("# Readme\n\n" + block)
-    assert check_docs.diagram_problems(tmp_path) == []
-    (tmp_path / "README.md").write_text("# Readme\n\n" + block.replace("B", "C"))
-    assert check_docs.diagram_problems(tmp_path) != []

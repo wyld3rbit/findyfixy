@@ -12,30 +12,9 @@ wyld3rness is a harness that measures an LLM app's answers before a change ships
 
 ## Target design
 
-```mermaid
-flowchart LR
-  subgraph CP[Control plane: wyld3rness]
-    ID[Identity broker]
-    POL[Policy]
-    GW[Gateway]
-    APR[Approval]
-    TR[Tracing]
-    EV[Evaluation]
-    AU[Autonomy policy]
-  end
-  subgraph DP[Data plane: the app]
-    R[Recall] --> M[Model reasoning] --> P[Proposed action]
-  end
-  U[Engineer or alert] --> ID --> R
-  M -- every model call --> GW
-  P --> POL --> APR --> X[Tools and systems]
-  ID -. scoped token per call .-> X
-  DP -. every step .-> TR
-  TR --> EV --> AU
-  AU -. sets the level per action class .-> APR
-```
+![Target design: the agent as the data plane, with the harness's checkpoints on every path in and out. Solid is built, dashed is planned.](code/docs/target-design.svg)
 
-Tracing and Evaluation are built; the other checkpoints are planned. Details: [design](code/docs/design.md), [strategy](code/docs/strategy.md).
+Details: [design](code/docs/design.md), [strategy](code/docs/strategy.md).
 
 ## Run it
 

@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 570" width="800" height="570" role="img" aria-label="The two planes. The data plane is the agent: recall, model reasoning and a proposed action. The control plane is the harness, a checkpoint on every path in and out of it. An identity broker issues a scoped token per call. Every model call goes through a gateway. A proposed action passes policy, then approval, before it reaches tools and systems. Every step is traced, traces feed evaluation, and evaluation sets the autonomy level of each action class, which approval applies. Tracing and evaluation are built; the other checkpoints are planned.">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,1 L10,5 L0,9 z" fill="#16181D"/></marker><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,1 L10,5 L0,9 z" fill="#B4381E"/></marker></defs>
+<rect width="800" height="570" fill="#FFFFFF"/>
+<text x="40" y="30" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="700" text-anchor="start" letter-spacing="1.5">CONTROL PLANE: THE HARNESS</text>
+<rect x="270" y="176" width="300" height="126" rx="4" fill="#FBEAE5" stroke="#B4381E" stroke-width="2"/>
+<text x="284" y="288" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#B4381E" font-weight="700" text-anchor="start" letter-spacing="1.5">DATA PLANE: THE AGENT</text>
+<rect x="284" y="186" width="82" height="66" rx="2" fill="#FFFFFF" stroke="#16181D" stroke-width="1.4"/>
+<g transform="translate(315.0,193) scale(0.833)" fill="none" stroke="#16181D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></g>
+<text x="325.0" y="242" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" fill="#16181D" font-weight="700" text-anchor="middle" >Recall</text>
+<rect x="379" y="186" width="82" height="66" rx="2" fill="#FFFFFF" stroke="#16181D" stroke-width="1.4"/>
+<g transform="translate(410.0,193) scale(0.833)" fill="none" stroke="#16181D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></g>
+<text x="420.0" y="242" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" fill="#16181D" font-weight="700" text-anchor="middle" >Model</text>
+<rect x="474" y="186" width="84" height="66" rx="2" fill="#FFFFFF" stroke="#16181D" stroke-width="1.4"/>
+<g transform="translate(506.0,193) scale(0.833)" fill="none" stroke="#16181D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></g>
+<text x="516.0" y="242" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" fill="#16181D" font-weight="700" text-anchor="middle" >Proposal</text>
+<path d="M366,222 L377,222" fill="none" stroke="#16181D" stroke-width="1.6" marker-end="url(#ah)"/>
+<path d="M461,222 L472,222" fill="none" stroke="#16181D" stroke-width="1.6" marker-end="url(#ah)"/>
+<g transform="translate(52,180) scale(1.083)" fill="none" stroke="#16181D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></g>
+<text x="40" y="230" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="15" fill="#16181D" font-weight="700" text-anchor="start" >Engineer</text>
+<text x="40" y="250" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="15" fill="#16181D" font-weight="700" text-anchor="start" >or alert</text>
+<path d="M120,222 L138,222" fill="none" stroke="#16181D" stroke-width="1.6" marker-end="url(#ah)"/>
+<rect x="140" y="186" width="116" height="74" rx="2" fill="#FFFFFF" stroke="#16181D" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="198.0" y="210" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" letter-spacing="1.2"></text>
+<text x="198.0" y="238" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="21" fill="#16181D" font-weight="700" text-anchor="middle" ></text>
+<text x="198.0" y="262" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" ></text>
+<g transform="translate(187.0,194) scale(0.917)" fill="none" stroke="#5C616B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/></g>
+<text x="198.0" y="234" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" fill="#5C616B" font-weight="700" text-anchor="middle" >Identity</text>
+<text x="198.0" y="251" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" >scoped token</text>
+<path d="M256,222 L282,222" fill="none" stroke="#16181D" stroke-width="1.6" marker-end="url(#ah)"/>
+<rect x="360" y="46" width="120" height="74" rx="2" fill="#FFFFFF" stroke="#16181D" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="420.0" y="70" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" letter-spacing="1.2"></text>
+<text x="420.0" y="98" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="21" fill="#16181D" font-weight="700" text-anchor="middle" ></text>
+<text x="420.0" y="122" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" ></text>
+<g transform="translate(409.0,54) scale(0.917)" fill="none" stroke="#5C616B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6.01 18H6"/><path d="M10.01 18H10"/><path d="M15 10v4"/><path d="M17.84 7.17a4 4 0 0 0-5.66 0"/><path d="M20.66 4.34a8 8 0 0 0-11.31 0"/></g>
+<text x="420.0" y="94" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" fill="#5C616B" font-weight="700" text-anchor="middle" >Gateway</text>
+<text x="420.0" y="111" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" >budget, route</text>
+<path d="M420,186 L420,122" fill="none" stroke="#16181D" stroke-width="1.6" marker-end="url(#ah)"/>
+<text x="430" y="160" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="start" >every model call</text>
+<rect x="626" y="172" width="140" height="74" rx="2" fill="#FFFFFF" stroke="#16181D" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="696.0" y="196" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" letter-spacing="1.2"></text>
+<text x="696.0" y="224" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="21" fill="#16181D" font-weight="700" text-anchor="middle" ></text>
+<text x="696.0" y="248" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" ></text>
+<g transform="translate(685.0,180) scale(0.917)" fill="none" stroke="#5C616B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></g>
+<text x="696.0" y="220" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" fill="#5C616B" font-weight="700" text-anchor="middle" >Policy</text>
+<text x="696.0" y="237" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" >allow-list</text>
+<rect x="626" y="274" width="140" height="74" rx="2" fill="#FFFFFF" stroke="#16181D" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="696.0" y="298" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" letter-spacing="1.2"></text>
+<text x="696.0" y="326" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="21" fill="#16181D" font-weight="700" text-anchor="middle" ></text>
+<text x="696.0" y="350" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" ></text>
+<g transform="translate(685.0,282) scale(0.917)" fill="none" stroke="#5C616B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></g>
+<text x="696.0" y="322" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" fill="#5C616B" font-weight="700" text-anchor="middle" >Approval</text>
+<text x="696.0" y="339" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" >human or earned</text>
+<path d="M558,219 L624,209" fill="none" stroke="#16181D" stroke-width="1.6" marker-end="url(#ah)"/>
+<path d="M696,248 L696,274" fill="none" stroke="#16181D" stroke-width="1.6" marker-end="url(#ah)"/>
+<path d="M696,348 L696,384" fill="none" stroke="#16181D" stroke-width="1.6" marker-end="url(#ah)"/>
+<g transform="translate(685,388) scale(0.917)" fill="none" stroke="#16181D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></g>
+<text x="696" y="430" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="15" fill="#16181D" font-weight="700" text-anchor="middle" >Tools and systems</text>
+<path d="M420,302 L420,336" fill="none" stroke="#16181D" stroke-width="1.6" marker-end="url(#ah)" stroke-dasharray="4 4"/>
+<text x="432" y="322" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="start" >every step</text>
+<rect x="300" y="338" width="120" height="74" rx="2" fill="#FFFFFF" stroke="#16181D" stroke-width="1.4"/>
+<text x="360.0" y="362" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" letter-spacing="1.2"></text>
+<text x="360.0" y="390" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="21" fill="#16181D" font-weight="700" text-anchor="middle" ></text>
+<text x="360.0" y="414" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" ></text>
+<g transform="translate(349.0,346) scale(0.917)" fill="none" stroke="#B4381E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></g>
+<text x="360.0" y="386" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" fill="#16181D" font-weight="700" text-anchor="middle" >Tracing</text>
+<text x="360.0" y="403" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" >every run</text>
+<rect x="300" y="452" width="120" height="74" rx="2" fill="#FFFFFF" stroke="#16181D" stroke-width="1.4"/>
+<text x="360.0" y="476" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" letter-spacing="1.2"></text>
+<text x="360.0" y="504" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="21" fill="#16181D" font-weight="700" text-anchor="middle" ></text>
+<text x="360.0" y="528" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" ></text>
+<g transform="translate(349.0,460) scale(0.917)" fill="none" stroke="#B4381E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></g>
+<text x="360.0" y="500" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" fill="#16181D" font-weight="700" text-anchor="middle" >Evaluation</text>
+<text x="360.0" y="517" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" >gate, CI</text>
+<rect x="470" y="452" width="140" height="74" rx="2" fill="#FFFFFF" stroke="#16181D" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="540.0" y="476" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" letter-spacing="1.2"></text>
+<text x="540.0" y="504" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="21" fill="#16181D" font-weight="700" text-anchor="middle" ></text>
+<text x="540.0" y="528" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" ></text>
+<g transform="translate(529.0,460) scale(0.917)" fill="none" stroke="#5C616B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></g>
+<text x="540.0" y="500" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" fill="#5C616B" font-weight="700" text-anchor="middle" >Autonomy</text>
+<text x="540.0" y="517" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#5C616B" font-weight="400" text-anchor="middle" >level per action</text>
+<path d="M360,412 L360,450" fill="none" stroke="#16181D" stroke-width="1.6" marker-end="url(#ah)"/>
+<path d="M420,489 L468,489" fill="none" stroke="#16181D" stroke-width="1.6" marker-end="url(#ah)"/>
+<path d="M610,489 L784,489 L784,311 L768,311" fill="none" stroke="#B4381E" stroke-width="2" marker-end="url(#ar)"/>
+<text x="626" y="478" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="13" fill="#B4381E" font-weight="700" text-anchor="start" >sets the level</text>
+<text x="40" y="558" font-family="Menlo, 'SF Mono', Consolas, monospace" font-size="14" fill="#5C616B" font-weight="400" text-anchor="start" >Solid: built. Dashed: planned.</text>
+</svg>
