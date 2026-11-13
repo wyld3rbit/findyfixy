@@ -1,6 +1,6 @@
 # Two jobs. `attestation` is the CI gate for answer quality and runs first.
-# `check` runs what the pre-commit hook runs (tracker data, tracker server
-# tests, the privacy scan, the product tests) and starts only after it.
+# `check` runs what the pre-commit hook runs (the docs drift check, the
+# repository tools' tests, the privacy scan, the product tests) and starts only after it.
 # `main` requires both to pass.
 #
 # Safe for a public repository: the trigger is `pull_request` (never
@@ -53,7 +53,7 @@ jobs:
           python-version: "3.13"
       - run: pip install uv==0.13.1
       # make check runs uv offline first, so fill the cache once with what it needs.
-      - run: uv run --no-project --with markdown --with pytest python -c "pass"
+      - run: uv run --no-project --with pytest python -c "pass"
       - run: make check
 
       # The product tests, which until Day 5 ran only in the local hook. --locked

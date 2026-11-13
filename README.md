@@ -1,26 +1,16 @@
-# wyld3rness
+# Release and runtime controls for LLM applications
 
-wyld3rness is a harness for LLM applications: the controls around a model that decide whether its answers can be trusted before they ship. It is tested on FindyFixy, an incident-triage agent that lives in this repository as its example app. Everything runs on one machine with open-source models and synthetic data.
+wyld3rness is a harness that measures an LLM app's answers before a change ships and records every run, without relying on the model to behave. It is tested on FindyFixy, an event detection, determination and mitigation agent in this repository. Everything runs on one machine with open-source models and synthetic data.
 
 ![The visualizer on a live eval run: two golden cases move through FindyFixy while the harness scores them](code/docs/demo.gif)
 
-*A live eval run of 2 golden cases in the visualizer (`make console`). Qwen3 4B-instruct answers through Ollama and Qwen2.5 7B judges. The top lane is the harness and the bottom lane is FindyFixy. Two cases are a subset, so the gate is not applied. The waiting stretches are sped up.*
+## Built
 
-## What the harness does
+- **Eval gate and CI gate.** The app answers golden test cases, and the gate fails on a measured regression against a frozen baseline. A passing local run writes an attestation, and CI refuses any change to an answer-affecting file that no passing run covers.
+- **Tracing.** Every run is an OpenTelemetry trace in a self-hosted Langfuse, with scores and a cost on each model call. A slow or stopped backend does not slow a run, and runs with tracing on scored identically.
+- **One interface.** An app plugs in through three methods, and a test fails if the harness imports it.
 
-The harness is the Python package in `code/src/wyld3rness/`. An app plugs in through one small interface: it describes itself, answers a case and summarises its run. The harness never imports the app, and its own tests run with no app installed. Three controls are built.
-
-The eval gate runs the app on golden cases with known answers and scores each answer: exact labels such as severity, and judged measures for faithfulness to the retrieved context, relevance, recall and the quality of the first action. It compares the scores against a frozen baseline and blocks a release that makes answers worse.
-
-The CI gate carries that verdict into pull requests. The eval gate needs live models, which CI does not have, so a passing local run on a clean tree writes an attestation: the hash of every file that can change an answer, found by following the app's imports into the harness. CI recomputes those hashes and fails any change to an answer-affecting file that no passing run has covered.
-
-Tracing makes every run observable. Each run, eval case and command becomes an OpenTelemetry trace in a self-hosted Langfuse, with a span per step, the eval scores on their case, and a cost on every model call from a committed reference price table. Tracing never slows a run and never changes an answer or a score.
-
-The dashed boxes in the visualizer are the controls still to come: guardrails, a model gateway and human approval. [`code/docs/strategy.md`](code/docs/strategy.md) is the engineering strategy behind them: a diagnosis of today, the guiding policies, and the invariants each control enforces. [`code/docs/design.md`](code/docs/design.md) is the target shape: the harness as a control plane, with autonomy set per action class from measured evidence. `code/docs/adr/` holds one decision record per phase with the reasoning behind each choice.
-
-## The example app
-
-FindyFixy, in `code/examples/findyfixy/`, is what the harness is tested on. You paste in an incident report and it returns a severity, the likely component and a first action, along with the most similar past incidents and what fixed them. It answers with a small model first and escalates to a larger one when the answer is invalid or its confidence is low. Its adapter to the harness is `code/examples/findyfixy/src/findyfixy/evals/adapter.py`, and its 30 golden cases, baseline and attestation sit beside it.
+Planned, in this order: harder test data, a policy checkpoint before any action, per-call credentials, one model gateway, and human approval. See the [strategy](code/docs/strategy.md) and the [design](code/docs/design.md).
 
 ## Run it
 
@@ -36,9 +26,7 @@ make down                         # when you are done
 
 `make setup` is safe to run again.
 
-## Try it
-
-In the page, pick Triage run to answer one incident, or Eval run to score FindyFixy on golden cases with known answers. Pick Live mode and press Run. Fake mode needs no model and no database.
+Then, in the page, pick Triage run or Eval run and press Run. Fake mode needs no model.
 
 ```bash
 make triage           # triage five fixed questions in the terminal
@@ -51,13 +39,18 @@ make obs-prices       # once per stack: reference prices, so every model call ca
 make help             # everything else
 ```
 
-To try FindyFixy's two-model route, set `LARGE_MODEL` in `code/examples/findyfixy/.env` to a different model than `SMALL_MODEL`, for example `qwen3:8b`. With the same name on both, there is one model and no escalation. Secrets, if you add any, go in `code/examples/findyfixy/.env`, which is git-ignored.
+## Docs
 
-## Disclaimer
+[Strategy](code/docs/strategy.md) · [Design](code/docs/design.md) · [Decision records](code/docs/adr/README.md) · [Changelog](code/CHANGELOG.md) · [Harness](code/src/wyld3rness/README.md) · [FindyFixy](code/examples/findyfixy/README.md) · [Workspace](code/README.md) · [Infrastructure](code/infra/README.md) · [Checks](tools/README.md) · [Hooks](.githooks/README.md) · [Contributing](CONTRIBUTING.md)
+
+<details>
+<summary>Disclaimer</summary>
 
 This software and its documentation are provided "AS IS", without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, accuracy and non-infringement. It is a research prototype and is not intended for production use or for decisions about real systems, incidents, safety or finances. Model outputs can be wrong, and the measurements here describe one setup on synthetic data.
 
 To the maximum extent permitted by law, the author and contributors are not liable for any claim, damages or other liability, whether in contract, tort or otherwise, arising from or in connection with the software, its use or its documentation, including direct, indirect, incidental, special, consequential or other loss. You use it at your own risk and are responsible for reviewing, testing and securing anything you run. This section does not replace the warranty disclaimer and limitation of liability in sections 7 and 8 of `LICENSE`, which govern.
+
+</details>
 
 ## License
 

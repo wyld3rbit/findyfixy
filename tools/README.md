@@ -1,12 +1,8 @@
 # Tools
 
-Scripts that serve and check the repository. Run them through `make ui` and `make check`, which supply the packages they need.
+Scripts that check the repository. Run them through `make check`, which supplies the packages they need.
 
-- `tools/serve.py`: the local tracker server.
-- `tools/lessons.py`: renders a lesson's markdown for the tracker.
-- `tools/adrs.py`: lists the decision records in `code/docs/adr/` with the day each belongs to (from its Phase line), and renders one, with its diagram, for the tracker.
-- `tools/check.py`: validates `record/progress.json`, runs the docs drift check and renders every lesson.
-- `tools/check_docs.py`: fails when a README or `CLAUDE.md` names a file or make target that does not exist.
+- `tools/check_docs.py`: fails when a README names a file or make target that does not exist.
 - `tools/scan_private.py`: blocks PII and secrets in commits, pushes and the working tree. The hooks in `.githooks/` call it.
 - `tools/adr_snapshot.py`: draws the architecture at the close of each phase from `code/examples/findyfixy/src/findyfixy/console/static/architecture.html`, for the ADRs (`make adr-snapshot`). Pictures drawn from an older page layout are frozen and checked by hash.
-- `tools/test_check.py`, `tools/test_check_docs.py`, `tools/test_serve.py` and `tools/test_adr_snapshot.py`: tests for the record checker, the docs checker, the server and the snapshot generator.
+- `tools/test_check_docs.py`, `tools/test_scan_private.py` and `tools/test_adr_snapshot.py`: tests for the docs checker, the privacy scanner and the snapshot generator.

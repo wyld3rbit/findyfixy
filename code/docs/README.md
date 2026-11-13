@@ -1,6 +1,6 @@
 # Docs
 
-The interactive architecture page lives with the console that serves it, `code/examples/findyfixy/src/findyfixy/console/static/architecture.html`. It has two lanes: the harness on top (the product) and FindyFixy below (the app under test). It shows what is built and what is planned, and it follows a live run from the console's event stream: a triage run of one question, or an eval run of the first N golden cases, where each case moves through the app lane and its scores land on the eval gate. Start the console with `make console`, or run `make ui` for the tracker and the console together.
+The interactive architecture page lives with the console that serves it, `code/examples/findyfixy/src/findyfixy/console/static/architecture.html`. It has two lanes: the harness on top (the product) and FindyFixy below (the app under test). It shows what is built and what is planned, and it follows a live run from the console's event stream: a triage run of one question, or an eval run of the first N golden cases, where each case moves through the app lane and its scores land on the eval gate. Start the console with `make console`.
 
 `code/docs/strategy.md` is the engineering strategy drawn from the decision records, and `code/docs/design.md` is the target shape its transitions move toward.
 

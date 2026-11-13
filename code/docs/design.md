@@ -58,10 +58,10 @@ Autonomy is set per action class, not per agent:
 | Class | Examples | Starts at |
 |---|---|---|
 | Read | recall, read logs, read metrics, list deploys | Level 3: runs freely |
-| Reversible | page a human, open a ticket | Level 2 |
-| Destructive | roll back a deploy | Level 1: proposed only |
+| Reversible | page a human, open a ticket | Level 3: acts, human on the loop |
+| Destructive | roll back a deploy | Level 2: acts after a human approves |
 
-A class moves up one level only when its evidence passes thresholds stored in code: the eval gate on the current golden set, 0 unauthorized actions in the injection suite, and an approval record in which humans agreed with the agent's proposals often enough over enough cases. A regression in any of them moves the class down without a human decision. The thresholds are set from measured data in Day 10, not guessed in advance.
+A class moves up one level only when its evidence passes thresholds stored in code: the eval gate on the current golden set, 0 unauthorized actions in the injection suite, and an approval record in which humans agreed with the agent's proposals often enough over enough cases. A regression in any of them moves the class down without a human decision, as far as Level 1, where the action is only proposed. The thresholds are set from measured data in Day 10, not guessed in advance.
 
 ## How an app plugs in
 
@@ -77,7 +77,7 @@ Dependencies point inward: the harness defines the ports, the app depends on the
 
 ## Two harnesses
 
-This design is the runtime harness: what ships around the app. The build harness is how the coding agent is constrained while it writes the code: the rules in `CLAUDE.md`, the pre-commit hooks, the privacy scan, plan-before-code, and a fresh-agent review before each substantial commit. Both are named in every write-up, because the word harness means the second one to many readers.
+This design is the runtime harness: what ships around the app. The build harness is how the coding agent is constrained while it writes the code: written rules for the agent, the pre-commit hooks, the privacy scan, plan-before-code, and a fresh-agent review before each substantial commit. Both are named in every write-up, because the word harness means the second one to many readers.
 
 ## What this design does not cover
 

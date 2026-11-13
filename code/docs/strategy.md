@@ -10,7 +10,7 @@ The routing design assumed the small model would flag its own weak answers, so t
 
 Three controls work today: the eval gate, the CI gate that refuses an unmeasured answer-affecting change, and a trace for every run (ADRs 0005 to 0007). What they share is that each choice was made against a number set in advance, including the choices to say no. An evaluation library was turned down although it would have saved writing the metrics, because it brought 31 new packages and a vulnerability with no fix (ADR 0005). Batching the judge's verdicts would have cut about a third of the judge's calls per case, derived from the per-case counts in ADR 0006. It was rejected, because its agreement came in 6 points under a 0.9 bar set before the run. The cheaper path was available both times, and the measurement said no. Where the measurement said yes, the gain was taken: running every answer before any judging cut the gate's wall time by 22% with no score changed (ADR 0007).
 
-Four gaps remain. First, the agent only proposes: its next action is free text, and no step in the graph acts on it. That is safe today only because nothing is connected, so there is no policy yet between a proposal and a system. Second, model clients are created in 8 modules, 2 in the harness and 6 in the app. So there is no single place that could enforce a budget, a route or a model pin. Third, the golden set is 30 synthetic cases, two thirds of them built around a near-duplicate in memory. It never exercised the escalation path, so it cannot tell a better router from a worse one. Fourth, every control trusts one developer: the attestation is a process control, and the model names come from an untracked `.env` file (ADR 0006).
+Four gaps remain. First, the agent only proposes: its next action is free text, and no step in the graph acts on it. That is safe today only because nothing is connected, so there is no policy yet between a proposal and a system. Second, model clients are created in 7 modules, 2 in the harness and 5 in the app. So there is no single place that could enforce a budget, a route or a model pin. Third, the golden set is 30 synthetic cases, two thirds of them built around a near-duplicate in memory. It never exercised the escalation path, so it cannot tell a better router from a worse one. Fourth, every control trusts one developer: the attestation is a process control, and the model names come from an untracked `.env` file (ADR 0006).
 
 ## Guiding policies
 
@@ -40,16 +40,16 @@ These are the invariants the harness holds for every request. A control counts a
 | No credential outlives one call or reaches beyond one tool and resource | 1, 3 | A token used on the wrong tool, resource or after expiry is refused | planned |
 | No model call bypasses the gateway, which enforces budget, routing and the model pins | 3, 5 | An architecture test fails if any module other than the gateway imports a model client | planned |
 | No destructive action runs without a human, unless autonomy for that class was earned on evidence | 1, 2 | A destructive action pauses until an approval record exists | planned |
-| Quality is measured in operation, not only before release | 2 | A scheduled run below the gate raises an alert and lowers autonomy | planned |
+| Quality is measured in operation, not only before release | 2 | A scheduled run below the gate raises an alert, and once autonomy exists, lowers it | planned |
 | The authority of each action class is a function of evidence, in code | 1, 2 | Changing the evidence changes the level; no setting raises a level by hand | planned |
 
 ### Escalations
 
-A policy can be challenged, and the challenge has one path. An exception needs the project owner's approval and an entry in the decision log (`record/progress.json`) that names the policy, the reason and what was rejected. The release cooldown of policy 5 has been overridden this way. Postgres 17.11 was taken for the tracing stack 3 days into its cooldown, as a named exception recorded on 2026-11-09. An exception that recurs is a signal to change the policy, not to keep granting it.
+A policy can be challenged, and the challenge has one path. An exception needs the project owner's approval and an entry in the decision log that names the policy, the reason and what was rejected. The release cooldown of policy 5 has been overridden this way. Postgres 17.11 was taken for the tracing stack 3 days into its cooldown, as a named exception recorded on 2026-11-09. An exception that recurs is a signal to change the policy, not to keep granting it.
 
 ### Transitions
 
-The gaps in the diagnosis close in this order, each as a migration with its own decision record:
+The gaps in the diagnosis close in this order, each recorded in the decision record of the phase that builds it:
 
 1. **Harder data and a computed escalation signal.** A versioned corpus and golden set with no-precedent alerts, conflicting signals, cascades and noisy alert text, with the current set frozen for regression. Escalation moves to a signal the system computes. Closes the third gap and applies policy 1.
 2. **A trust boundary.** A policy checkpoint between a proposed action and any system, and short-lived scoped credentials per tool call. Closes the first gap.
