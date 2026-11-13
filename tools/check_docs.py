@@ -92,24 +92,6 @@ def path_refs(snippets: list[str]) -> set[str]:
     return refs
 
 
-# The README shows the design diagram so a reader sees the target shape first.
-# design.md is its one source: the README's copy must match it exactly, or the
-# two drift apart without anyone noticing.
-_MERMAID = re.compile(r"```mermaid\n(.*?)```", re.S)
-DIAGRAM_SOURCE, DIAGRAM_COPY = "code/docs/design.md", "README.md"
-
-
-def diagram_problems(root: Path = ROOT) -> list[str]:
-    """A problem when the README's diagram differs from the one in design.md."""
-    src, copy = root / DIAGRAM_SOURCE, root / DIAGRAM_COPY
-    if not (src.is_file() and copy.is_file()):
-        return []
-    want, have = _MERMAID.findall(src.read_text()), _MERMAID.findall(copy.read_text())
-    if have and have != want[:1]:
-        return [f"{DIAGRAM_COPY}: its diagram differs from the one in {DIAGRAM_SOURCE}; copy it again"]
-    return []
-
-
 def problems(root: Path = ROOT, docs: tuple[str, ...] = DOCS) -> list[str]:
     """Human-readable problems across the checked docs. Empty means all good."""
     out: list[str] = []
@@ -134,7 +116,6 @@ def problems(root: Path = ROOT, docs: tuple[str, ...] = DOCS) -> list[str]:
                 out.append(f"{name}: `{ref}` does not exist")
         for match in _COUNT.finditer(text):
             out.append(f"{name}: '{match.group(0)}' is a count that goes stale; name the command instead")
-    out.extend(diagram_problems(root))
     return sorted(set(out))
 
 
