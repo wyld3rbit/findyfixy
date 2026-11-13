@@ -6,7 +6,9 @@
 # 1. The privacy scan of the staged content. Always runs. See tools/scan_private.py.
 # 2. `make check` (docs drift, the repository tools' tests, privacy scan of the tree),
 #    then `make -C internal check` where that local folder exists.
-# 3. `make test` (the product tests), only when files under code/ are staged.
+# 3. `make verify-attestation`, `make lint` and `make test`, only when files under
+#    code/ are staged. The attestation check catches an edit to an attested file,
+#    even a comment, before CI does.
 # Steps 2 and 3 run only where a Makefile exists, so a bare repository that
 # borrows this hook (the scanner's own tests do) is not asked for a project.
 # There is no bypass variable on purpose. `git commit --no-verify` still skips
@@ -24,6 +26,7 @@ if [ -f "$root/Makefile" ]; then
         make -C "$root/internal" --no-print-directory check
     fi
     if git diff --cached --name-only | grep -q '^code/'; then
+        make -C "$root" --no-print-directory verify-attestation
         make -C "$root" --no-print-directory lint
         make -C "$root" --no-print-directory test
     fi

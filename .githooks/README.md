@@ -3,5 +3,5 @@
 Two shell hooks that enforce the project's checks. Install them once per clone with the `hooks` target in `code/Makefile`.
 
 - Both hooks first refuse anything under `internal/` and any `CLAUDE.md`, which are local only and never committed.
-- `.githooks/pre-commit` scans the staged content for PII and secrets with `tools/scan_private.py`, then runs `make check`, and `make lint` and `make test` when files under `code/` are staged.
+- `.githooks/pre-commit` scans the staged content for PII and secrets with `tools/scan_private.py`, then runs `make check`, and `make verify-attestation`, `make lint` and `make test` when files under `code/` are staged.
 - `.githooks/pre-push` scans every commit about to be pushed, including its metadata, and runs the checks again, which catches a commit made with `--no-verify`.

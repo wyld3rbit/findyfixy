@@ -9,4 +9,4 @@ A uv workspace: the wyld3rness harness at the root, and the example app it is te
 - `code/docs/` holds the decision records and the README images. `code/docs/README.md` lists them.
 - `code/pyproject.toml` declares the harness, the workspace, and the settings for pytest, Ruff and mypy.
 - `code/Makefile` holds the commands. Run `make help` from the folder above to list them.
-- `code/CHANGELOG.md` records what was done in each step, what differs from the lessons, and what is open.
+- `code/CHANGELOG.md` lists notable changes by area and the known issues, and links the earlier build log.
