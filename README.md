@@ -10,7 +10,32 @@ wyld3rness is a harness that measures an LLM app's answers before a change ships
 - **Tracing.** Every run is an OpenTelemetry trace in a self-hosted Langfuse, with scores and a cost on each model call. A slow or stopped backend does not slow a run, and runs with tracing on scored identically.
 - **One interface.** An app plugs in through three methods, and a test fails if the harness imports it.
 
-Planned, in this order: harder test data, a policy checkpoint before any action, per-call credentials, one model gateway, and human approval. See the [strategy](code/docs/strategy.md) and the [design](code/docs/design.md).
+## Target design
+
+```mermaid
+flowchart LR
+  subgraph CP[Control plane: wyld3rness]
+    ID[Identity broker]
+    POL[Policy]
+    GW[Gateway]
+    APR[Approval]
+    TR[Tracing]
+    EV[Evaluation]
+    AU[Autonomy policy]
+  end
+  subgraph DP[Data plane: the app]
+    R[Recall] --> M[Model reasoning] --> P[Proposed action]
+  end
+  U[Engineer or alert] --> ID --> R
+  M -- every model call --> GW
+  P --> POL --> APR --> X[Tools and systems]
+  ID -. scoped token per call .-> X
+  DP -. every step .-> TR
+  TR --> EV --> AU
+  AU -. sets the level per action class .-> APR
+```
+
+Tracing and Evaluation are built; the other checkpoints are planned. Details: [design](code/docs/design.md), [strategy](code/docs/strategy.md).
 
 ## Run it
 
