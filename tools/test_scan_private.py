@@ -13,8 +13,8 @@ Why the fake data is built at run time
 
 What a staff+ reader should notice
     - A scanner that never fails proves nothing. Every rule has a test that
-      makes it fire, and the mutation record in CHANGELOG.md says each was broken
-      once to confirm a test noticed.
+      makes it fire, and the build log linked from CHANGELOG.md records each one
+      broken once to confirm a test noticed.
     - The "does not print the match" test is the one that stops a leak from
       being copied into terminals and logs.
     - The hook test runs the committed hook script in a scratch repo. A scanner

@@ -7,8 +7,8 @@
 # Supply chain. Both images are pinned by digest, not by tag. A tag can be moved
 # to different bytes after we scanned it. A digest cannot. The digest below is the
 # multi-arch index, so the same line works on Apple silicon and on x86 CI.
-# Both were scanned with Grype v0.120.1 before first use. Results are in
-# CHANGELOG.md. To move a digest: pick a build older than 7 days, rescan, update.
+# Both were scanned with Grype v0.120.1 before first use. Results are in the
+# build log linked from CHANGELOG.md. To move a digest: pick a build older than 7 days, rescan, update.
 #
 # Network. Both ports bind to 127.0.0.1. Without that prefix Docker publishes on
 # every interface, so anything on your Wi-Fi could reach a database with the
