@@ -39,7 +39,7 @@ DOCS = (
 # Paths a doc may name that are absent from a fresh clone on purpose: secrets
 # the user creates, and generated output that is git-ignored.
 ALLOWED_MISSING = ("code/examples/findyfixy/.env", "code/infra/langfuse/.env", "code/.venv", ".audit-req.txt", "reports/",
-                   "code/examples/findyfixy/reports/")
+                   "code/examples/findyfixy/reports/", "internal/", "CLAUDE.md")
 
 # Targets the docs name before they exist, on purpose. Remove an entry when the
 # target is built; the check then covers it like any other.
